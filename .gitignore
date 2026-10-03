@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.part
+
+# Data is versioned with DVC, never git.
+data/
+*.egg-info/
+
+# Ignore all docx files. Every relevant information should be in markdown and/or Latex files. If you need to include a docx file, please add it to the .gitignore file.
+*.docx

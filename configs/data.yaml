@@ -1,0 +1,110 @@
+# Data sources pulled by src/ingest/. Paths are relative to the repo root.
+raw_dir: data/raw
+
+sites:
+  melbourne:
+    # lon_min, lat_min, lon_max, lat_max (WGS84). City of Melbourne LGA (portal bbox) + ~500 m buffer.
+    bbox: [144.892, -37.856, 144.997, -37.770]
+    center: [144.9631, -37.8136]
+    timezone: Australia/Melbourne
+
+melbourne_portal:
+  base_url: https://data.melbourne.vic.gov.au/api/explore/v2.1
+  # dataset_id -> export format. Geo layers as geojson, tables as parquet.
+  datasets:
+    # Pedestrian counts (target)
+    pedestrian-counting-system-monthly-counts-per-hour: parquet
+    pedestrian-counting-system-sensor-locations: geojson
+    # Network and footpaths
+    pedestrian-network: geojson
+    footpaths: geojson
+    footpath-steepness: geojson
+    road-segment: geojson
+    # Built form
+    2023-building-footprints: geojson
+    buildings-with-name-age-size-accessibility-and-bicycle-facilities: parquet
+    blocks-for-census-of-land-use-and-employment-clue: geojson
+    # Shade / greenery
+    tree-canopies-2021-urban-forest: geojson
+    trees-with-species-and-dimensions-urban-forest: geojson
+    # Destinations / POIs
+    landmarks-and-places-of-interest-including-schools-theatres-health-services-spor: geojson
+    cafes-and-restaurants-with-seating-capacity: parquet
+    business-establishments-with-address-and-industry-classification: parquet
+    employment-by-block-by-clue-industry: parquet
+    street-furniture-including-bollards-bicycle-rails-bins-drinking-fountains-horse-: geojson
+    public-toilets: geojson
+    drinking-fountains: geojson
+    # Transit
+    bus-stops: geojson
+    tram-tracks: geojson
+    # Events
+    venues-for-event-bookings: geojson
+    event-permits-2014-2018-including-film-shoots-photo-shoots-weddings-christmas-pa: parquet
+    # Weather / microclimate
+    bom-weather-at-olympic-park: parquet
+    microclimate-sensors-data: parquet
+  # Files attached to datasets (not available through the records export). kind defaults to attachments.
+  attachments:
+    - dataset: pedestrian-counting-system-monthly-counts-per-hour
+      id: pedestrian_counting_system_monthly_counts_per_hour_may_2009_to_14_dec_2022_csv_zip
+      filename: counts_per_hour_2009-05_to_2022-12-14.csv.zip
+    - dataset: digital-surface-model
+      id: dsm_tile_index_kml
+      filename: dsm_tile_index.kml
+    - dataset: city-of-melbourne-3d-point-cloud-2018
+      id: tile_index_kml
+      filename: point_cloud_tile_index.kml
+    - dataset: pedestrian-network
+      id: pedestrian_network_metadata_pdf
+      filename: pedestrian_network_metadata.pdf
+    # Full-attribute network (TYPE, COST, MCCIDs, open/close times); the records export drops these.
+    - dataset: pedestrian-network
+      id: pedestrian_network_zip
+      kind: alternative_exports
+      filename: pedestrian_network_full.zip
+  # Large bulk downloads, fetched only with --large.
+  large:
+    dsm_2018_0p1m: https://s3-ap-southeast-2.amazonaws.com/gis-opendata-com/2018-DSM/CoM_DSM_2018.zip
+    point_cloud_2018: https://opendatasoft-s3.s3.ap-southeast-2.amazonaws.com/attachments/CoM_Point_Cloud_2018_LAS.zip
+
+osm:
+  # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.
+  extracts:
+    melbourne: https://download.bbbike.org/osm/bbbike/Melbourne/Melbourne.osm.pbf
+
+worldcover:
+  # ESA WorldCover 10 m v200 (2021); 3x3 degree tiles named by lower-left corner.
+  url_template: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif
+  tiles:
+    melbourne: [S39E144]
+
+dem:
+  # Geoscience Australia 5 m LiDAR-derived DEM (bare earth, CC BY 4.0). WCS needs native EPSG:4283 + resx/resy.
+  ga_5m_wcs: https://services.ga.gov.au/gis/services/DEM_LiDAR_5m_2025/MapServer/WCSServer
+  ga_5m_res_deg: 0.00005
+  # 30 m global comparisons. GLO-30 is a surface model (includes buildings/trees); SRTM is public domain.
+  global_tiles:
+    melbourne:
+      copernicus_glo30: https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S38_00_E144_00_DEM/Copernicus_DSM_COG_10_S38_00_E144_00_DEM.tif
+      srtm_1arcsec: https://elevation-tiles-prod.s3.amazonaws.com/skadi/S38/S38E144.hgt.gz
+
+weather:
+  # ERA5-based reanalysis via Open-Meteo archive API (hourly, local time).
+  url: https://archive-api.open-meteo.com/v1/archive
+  start_date: "2009-01-01"
+  hourly:
+    - temperature_2m
+    - apparent_temperature
+    - relative_humidity_2m
+    - precipitation
+    - rain
+    - cloud_cover
+    - wind_speed_10m
+    - shortwave_radiation
+    - is_day
+
+events:
+  # AFL fixtures/results (MCG and Marvel Stadium are inside/adjacent to the study area).
+  squiggle_url: https://api.squiggle.com.au/
+  start_year: 2009

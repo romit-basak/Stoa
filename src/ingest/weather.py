@@ -23,7 +23,7 @@ def main() -> None:
     site = cfg["sites"][args.site]
     out = raw_dir(cfg, SOURCE)
 
-    start = date.fromisoformat(w["start_date"])
+    start = date.fromisoformat(site.get("weather_start", w["start_date"]))
     # The archive lags real time by a few days.
     end = datetime.now(UTC).date() - timedelta(days=7)
     for year in range(start.year, end.year + 1):

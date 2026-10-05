@@ -1,0 +1,25 @@
+# Northeastern University (Boston) academic calendar, full-semester undergraduate dates
+# (hand-maintained facts, inclusive). For the NEU campus demonstration's academic-term feature.
+# Source: https://registrar.northeastern.edu/wp-content/uploads/sites/9/2026-2027-Academic-Calendar.pdf
+# (posted 2026-06-04, "dates subject to change"). Past calendars (2002-03 to 2025-26, PDF):
+# https://registrar.northeastern.edu/article/past-calendars/
+source: https://registrar.northeastern.edu/wp-content/uploads/sites/9/2026-2027-Academic-Calendar.pdf
+semesters:
+  fall_2026:
+    teaching: [2026-09-09, 2026-12-13]
+    no_classes: [2026-10-12, 2026-11-11]
+    break: [2026-11-25, 2026-11-29]
+    exams: [2026-12-14, 2026-12-20]
+  spring_2027:
+    teaching: [2027-01-13, 2027-04-25]
+    # Patriots' Day (2027-04-19) is a no-class day for Boston only.
+    no_classes: [2027-01-18, 2027-02-15, 2027-04-19]
+    break: [2027-03-08, 2027-03-14]
+    exams: [2027-04-26, 2027-05-02]
+  summer_2027:
+    teaching: [2027-05-12, 2027-08-22]
+# Boston-only (Suffolk County) observances missing from the `holidays` package; add if the demo
+# needs them.
+suffolk_county_observances:
+  - {name: Evacuation Day, date_rule: March 17}
+  - {name: Bunker Hill Day, date_rule: June 17}

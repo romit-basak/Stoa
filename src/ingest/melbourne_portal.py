@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
+import pandas as pd
 import requests
 
 from src.ingest.common import USER_AGENT, download, load_config, raw_dir, record
@@ -23,6 +25,24 @@ def dataset_meta(base_url: str, dataset_id: str) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+def merge_rolling(existing: Path, fresh: Path, key: str) -> int:
+    """Union a fresh rolling-window export into the rows already held; returns total rows.
+
+    The portal keeps only a recent window of some tables, so overwriting would silently drop
+    the oldest rows we hold. Fresh rows win on key collisions (late corrections).
+    """
+    old = pd.read_parquet(existing)
+    new = pd.read_parquet(fresh)
+    merged = (
+        pd.concat([old, new], ignore_index=True)
+        .drop_duplicates(subset=key, keep="last")
+        .sort_values(key, ignore_index=True)
+    )
+    merged.to_parquet(existing, index=False)
+    fresh.unlink()
+    return len(merged)
 
 
 def main() -> None:
@@ -48,7 +68,13 @@ def main() -> None:
         url = f"{base}/catalog/datasets/{ds}/exports/{fmt}"
         dest = out / f"{ds}.{fmt}"
         print(f"-> {ds} ({fmt})", flush=True)
-        download(url, dest)
+        rolling_key = pc.get("rolling_window", {}).get(ds)
+        if rolling_key and dest.exists():
+            fresh = download(url, dest.with_name(f"{dest.stem}.fresh.{fmt}"))
+            rows = merge_rolling(dest, fresh, rolling_key)
+            print(f"   merged rolling window: {rows} rows held", flush=True)
+        else:
+            download(url, dest)
         (out / f"{ds}.meta.json").write_text(json.dumps(meta, indent=2) + "\n")
         record(
             out,

@@ -1,0 +1,105 @@
+# Victorian government school terms, 2009-2026 (hand-maintained facts; CLAUDE.md rule 3: every row
+# carries its source). Dates are inclusive. `start` is the first day of term; `students_start` is
+# given where students start later than teachers.
+# Sources:
+#   2013-2026: https://www.vic.gov.au/school-term-dates-and-holidays-victoria (CC BY 4.0,
+#              "(c) Copyright State Government of Victoria")
+#   2009-2012: Wayback copies of the former DEECD term dates page:
+#              http://web.archive.org/web/20090601/http://www.education.vic.gov.au/about/keydates/termdates.htm
+#              https://web.archive.org/web/20121118033948/http://www.education.vic.gov.au/about/department/pages/datesterm.aspx
+#   2019-2026 are cross-checked against the Vic Important Dates CSV by tests/ingest/test_calendars.py.
+# 2020: term 1 ended early (COVID); remote-learning periods are not terms and belong in a lockdown
+# feature, not here.
+source_current: https://www.vic.gov.au/school-term-dates-and-holidays-victoria
+source_2009_2012: http://web.archive.org/web/20090601/http://www.education.vic.gov.au/about/keydates/termdates.htm
+terms:
+  2009:
+    - {start: 2009-01-28, students_start: 2009-02-02, end: 2009-04-03}
+    - {start: 2009-04-20, end: 2009-06-26}
+    - {start: 2009-07-13, end: 2009-09-18}
+    - {start: 2009-10-05, end: 2009-12-18}
+  2010:
+    - {start: 2010-01-27, students_start: 2010-02-01, end: 2010-03-26}
+    - {start: 2010-04-12, end: 2010-06-25}
+    - {start: 2010-07-12, end: 2010-09-17}
+    - {start: 2010-10-04, end: 2010-12-17}
+  2011:
+    - {start: 2011-02-01, end: 2011-04-08}
+    - {start: 2011-04-27, end: 2011-07-01}
+    - {start: 2011-07-18, end: 2011-09-23}
+    - {start: 2011-10-10, end: 2011-12-22}
+  2012:
+    - {start: 2012-02-01, end: 2012-03-30}
+    - {start: 2012-04-16, end: 2012-06-29}
+    - {start: 2012-07-16, end: 2012-09-21}
+    - {start: 2012-10-08, end: 2012-12-21}
+  2013:
+    - {start: 2013-01-29, end: 2013-03-28}
+    - {start: 2013-04-15, end: 2013-06-28}
+    - {start: 2013-07-15, end: 2013-09-20}
+    - {start: 2013-10-07, end: 2013-12-20}
+  2014:
+    - {start: 2014-01-28, end: 2014-04-04}
+    - {start: 2014-04-22, end: 2014-06-27}
+    - {start: 2014-07-14, end: 2014-09-19}
+    - {start: 2014-10-06, end: 2014-12-19}
+  2015:
+    - {start: 2015-01-28, end: 2015-03-27}
+    - {start: 2015-04-13, end: 2015-06-26}
+    - {start: 2015-07-13, end: 2015-09-18}
+    - {start: 2015-10-05, end: 2015-12-18}
+  2016:
+    - {start: 2016-01-27, end: 2016-03-24}
+    - {start: 2016-04-11, end: 2016-06-24}
+    - {start: 2016-07-11, end: 2016-09-16}
+    - {start: 2016-10-03, end: 2016-12-20}
+  2017:
+    - {start: 2017-01-30, end: 2017-03-31}
+    - {start: 2017-04-18, end: 2017-06-30}
+    - {start: 2017-07-17, end: 2017-09-22}
+    - {start: 2017-10-09, end: 2017-12-22}
+  2018:
+    - {start: 2018-01-29, students_start: 2018-01-30, end: 2018-03-29}
+    - {start: 2018-04-16, end: 2018-06-29}
+    - {start: 2018-07-16, end: 2018-09-21}
+    - {start: 2018-10-08, end: 2018-12-21}
+  2019:
+    - {start: 2019-01-29, students_start: 2019-01-30, end: 2019-04-05}
+    - {start: 2019-04-23, end: 2019-06-28}
+    - {start: 2019-07-15, end: 2019-09-20}
+    - {start: 2019-10-07, end: 2019-12-20}
+  2020:
+    - {start: 2020-01-28, students_start: 2020-01-29, end: 2020-03-24}
+    - {start: 2020-04-14, students_start: 2020-04-15, end: 2020-06-26}
+    - {start: 2020-07-13, end: 2020-09-18}
+    - {start: 2020-10-05, end: 2020-12-18}
+  2021:
+    - {start: 2021-01-27, students_start: 2021-01-28, end: 2021-04-01}
+    - {start: 2021-04-19, end: 2021-06-25}
+    - {start: 2021-07-12, end: 2021-09-17}
+    - {start: 2021-10-04, end: 2021-12-17}
+  2022:
+    - {start: 2022-01-28, students_start: 2022-01-31, end: 2022-04-08}
+    - {start: 2022-04-26, end: 2022-06-24}
+    - {start: 2022-07-11, end: 2022-09-16}
+    - {start: 2022-10-03, end: 2022-12-20}
+  2023:
+    - {start: 2023-01-27, students_start: 2023-01-30, end: 2023-04-06}
+    - {start: 2023-04-24, end: 2023-06-23}
+    - {start: 2023-07-10, end: 2023-09-15}
+    - {start: 2023-10-02, end: 2023-12-20}
+  2024:
+    - {start: 2024-01-29, students_start: 2024-01-30, end: 2024-03-28}
+    - {start: 2024-04-15, end: 2024-06-28}
+    - {start: 2024-07-15, end: 2024-09-20}
+    - {start: 2024-10-07, end: 2024-12-20}
+  2025:
+    - {start: 2025-01-28, students_start: 2025-01-29, end: 2025-04-04}
+    - {start: 2025-04-22, end: 2025-07-04}
+    - {start: 2025-07-21, end: 2025-09-19}
+    - {start: 2025-10-06, end: 2025-12-19}
+  2026:
+    - {start: 2026-01-27, students_start: 2026-01-28, end: 2026-04-02}
+    - {start: 2026-04-20, end: 2026-06-26}
+    - {start: 2026-07-13, end: 2026-09-18}
+    - {start: 2026-10-05, end: 2026-12-18}

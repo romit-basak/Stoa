@@ -8,5 +8,23 @@ __pycache__/
 data/
 *.egg-info/
 
-# Ignore all docx files. Every relevant information should be in markdown and/or Latex files. If you need to include a docx file, please add it to the .gitignore file.
+# Documentation lives in Markdown or LaTeX (tracked). Binary documents are build
+# outputs or reference copies and are never tracked.
 *.docx
+*.doc
+*.pdf
+*.pptx
+*.xlsx
+
+# LaTeX build output (compile with -outdir=build)
+build/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# macOS
+.DS_Store

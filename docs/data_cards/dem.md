@@ -46,8 +46,6 @@ The 30 m products read 20–27 m high in the CBD because they measure rooftops. 
 - **Sub-metre ground:** classify ground points in the CoM 2018 point cloud (CC BY, 7.5 cm) with PDAL SMRF and rasterise to 0.5–1 m. Multi-GB download; only worth it if the viewshed engine needs kerb-level detail.
 - **DSM for viewshed:** CoM 2018 DSM 0.1 m (12 GB, CC BY) gives roofs and trees directly, but extruded CoM footprints plus tree points are lighter and newer (2023).
 
-## Boston / NEU (not pulled yet)
+## Boston / NEU
 
-- USGS 3DEP 1 m, project `MA_CentralEastern_2021_B21`, tiles `x32y469` and `x32y470` (~410 MB each, public domain).
-- City of Boston "Buildings with Roof Breaks" (ground/roof elevation, PDDL).
-- MassGIS 2-D structures have no height field.
+Pulled 2026-10-04: a 1 m USGS 3DEP clip from the ImageServer (`data/raw/dem/neu_boston_usgs_3dep_1m.tif`), avoiding the ~410 MB staged tiles. Details in `neu_boston.md`.

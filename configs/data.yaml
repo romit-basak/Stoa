@@ -7,6 +7,19 @@ sites:
     bbox: [144.892, -37.856, 144.997, -37.770]
     center: [144.9631, -37.8136]
     timezone: Australia/Melbourne
+  neu_boston:
+    # Northeastern Boston campus (~lon -71.095 to -71.082, lat 42.333 to 42.345) + ~400 m buffer.
+    bbox: [-71.100, 42.329, -71.077, 42.349]
+    center: [-71.0892, 42.3398]
+    timezone: America/New_York
+    utm_epsg: 26919
+  nyc:
+    # Extent of the 114 NYC DOT bi-annual count locations (transfer test only).
+    bbox: [-74.170, 40.565, -73.745, 40.885]
+    center: [-73.9855, 40.7580]
+    timezone: America/New_York
+    # Bi-annual counts start May 2007.
+    weather_start: "2007-01-01"
 
 melbourne_portal:
   base_url: https://data.melbourne.vic.gov.au/api/explore/v2.1
@@ -44,6 +57,10 @@ melbourne_portal:
     # Weather / microclimate
     bom-weather-at-olympic-park: parquet
     microclimate-sensors-data: parquet
+  # Tables the portal keeps only as a rolling window (counts: ~2 years). Re-pulls are merged into
+  # the rows already held, keyed on this column, never overwritten. dataset_id -> key column.
+  rolling_window:
+    pedestrian-counting-system-monthly-counts-per-hour: id
   # Files attached to datasets (not available through the records export). kind defaults to attachments.
   attachments:
     - dataset: pedestrian-counting-system-monthly-counts-per-hour
@@ -72,12 +89,17 @@ osm:
   # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.
   extracts:
     melbourne: https://download.bbbike.org/osm/bbbike/Melbourne/Melbourne.osm.pbf
+    # BBBike has no Boston extract; CambridgeMa (lat 42.18-42.59, lon -71.30 to -70.82) covers NEU.
+    neu_boston: https://download.bbbike.org/osm/bbbike/CambridgeMa/CambridgeMa.osm.pbf
+    nyc: https://download.bbbike.org/osm/bbbike/NewYork/NewYork.osm.pbf
 
 worldcover:
   # ESA WorldCover 10 m v200 (2021); 3x3 degree tiles named by lower-left corner.
   url_template: https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif
   tiles:
     melbourne: [S39E144]
+    neu_boston: [N42W072]
+    nyc: [N39W075]
 
 dem:
   # Geoscience Australia 5 m LiDAR-derived DEM (bare earth, CC BY 4.0). WCS needs native EPSG:4283 + resx/resy.
@@ -88,6 +110,11 @@ dem:
     melbourne:
       copernicus_glo30: https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_S38_00_E144_00_DEM/Copernicus_DSM_COG_10_S38_00_E144_00_DEM.tif
       srtm_1arcsec: https://elevation-tiles-prod.s3.amazonaws.com/skadi/S38/S38E144.hgt.gz
+  # USGS 3DEP (public domain). The ImageServer returns a 1 m clip, avoiding ~410 MB staged tiles
+  # (MA_CentralEastern_2021_B21 x32y469/x32y470). It is a dynamic mosaic: source project per pixel
+  # is not reported.
+  usgs_3dep_imageserver: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage
+  usgs_3dep_res_m: 1.0
 
 weather:
   # ERA5-based reanalysis via Open-Meteo archive API (hourly, local time).
@@ -108,3 +135,54 @@ events:
   # AFL fixtures/results (MCG and Marvel Stadium are inside/adjacent to the study area).
   squiggle_url: https://api.squiggle.com.au/
   start_year: 2009
+  # Crowd figures (Squiggle has none). No licence or robots.txt published; fetch politely.
+  afltables_season_url: https://afltables.com/afl/seas/{year}.html
+  polite_delay_s: 2
+
+nyc_open_data:
+  # Cross-city transfer test only: never training data (CLAUDE.md "Generalization").
+  base_url: https://data.cityofnewyork.us/resource
+  page_size: 500000
+  datasets:
+    # NYC DOT Bi-Annual Pedestrian Counts: 114 locations, period totals, May/Sept since 2007.
+    bi_annual_pedestrian_counts:
+      id: cqsj-cfgu
+      format: geojson
+    # Continuous 15-minute automated counters; filtered to pedestrian flows (bike rows are ~20M).
+    automated_pedestrian_counts:
+      id: ct66-47at
+      format: csv
+      where: travelmode='pedestrian'
+      order: timestamp, flowid
+    automated_counter_sensors:
+      id: 6up2-gnw8
+      format: csv
+  methodology: https://www.nyc.gov/html/dot/downloads/pdf/bi-annual-ped-count-readme.pdf
+
+boston_buildings:
+  # Boston Buildings with Roof Breaks (PDDL). Heights are a 2010 survey, in US feet (EPSG:6492 source).
+  feature_server: https://gis.bostonplans.org/hosting/rest/services/Boston_Buildings/FeatureServer/9
+  page_size: 500
+  dataset_page: https://data.boston.gov/dataset/boston-buildings-with-roof-breaks
+
+imagery:
+  # Path segmentation inputs for the NEU campus.
+  naip:
+    # Planetary Computer STAC; COG read by window (full quarter-quad is ~1.8 GB).
+    stac_search: https://planetarycomputer.microsoft.com/api/stac/v1/search
+    sas_token: https://planetarycomputer.microsoft.com/api/sas/v1/token/naip
+  massgis:
+    # Spring 2025 leaf-off, 15 cm, 4-band; 1500 m JPEG 2000 tiles listed in the index shapefile.
+    index: https://s3.us-east-1.amazonaws.com/download.massgis.digital.mass.gov/images/coq2025_jp2/COQ2025INDEX_POLY.zip
+
+calendars:
+  # Public holidays come from the `holidays` package (MIT, pinned in pyproject.toml), written out
+  # per site so the exact dates used are versioned with the data.
+  holidays:
+    melbourne: {country: AU, subdiv: VIC}
+    neu_boston: {country: US, subdiv: MA}
+    nyc: {country: US, subdiv: NY}
+  years: [2007, 2027]
+  # Vic Government "Important Dates" (CC BY 4.0): public holidays 2019-2027, school terms 2019-2030.
+  # Cross-check for the package and for configs/calendars/vic_school_terms.yaml.
+  vic_important_dates: https://discover.data.vic.gov.au/dataset/a8bc540d-181b-4fb5-8110-5fe52a04f6a7/resource/caaa47de-8626-46a6-aa28-3d948c15c5d9/download/important-dates-august-2026.csv

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -41,21 +42,32 @@ def download(
     method: str = "GET",
     data: Any = None,
     timeout: int = 600,
+    retries: int = 5,
+    backoff: float = 10.0,
 ) -> Path:
-    """Stream url to dest via a .part file so an interrupted download never looks complete."""
+    """Stream url to dest via a .part file so an interrupted download never looks complete.
+
+    Rate limits (429) and server errors (5xx) are retried with exponential backoff.
+    """
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with requests.request(
-        method,
-        url,
-        params=params,
-        data=data,
-        stream=True,
-        timeout=timeout,
-        headers={"User-Agent": USER_AGENT},
-    ) as r:
-        r.raise_for_status()
-        with open(tmp, "wb") as f:
-            f.writelines(r.iter_content(1 << 20))
+    for attempt in range(retries + 1):
+        with requests.request(
+            method,
+            url,
+            params=params,
+            data=data,
+            stream=True,
+            timeout=timeout,
+            headers={"User-Agent": USER_AGENT},
+        ) as r:
+            if (r.status_code == 429 or r.status_code >= 500) and attempt < retries:
+                wait = int(r.headers.get("Retry-After", 0)) or backoff * 2**attempt
+                time.sleep(wait)
+                continue
+            r.raise_for_status()
+            with open(tmp, "wb") as f:
+                f.writelines(r.iter_content(1 << 20))
+        break
     tmp.replace(dest)
     return dest
 

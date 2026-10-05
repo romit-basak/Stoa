@@ -35,3 +35,30 @@ def test_config_sources_are_well_formed():
         "geojson",
         "csv",
     }
+
+
+class _Resp:
+    def __init__(self, status, body=b"ok", headers=None):
+        self.status_code, self._body, self.headers = status, body, headers or {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
+    def iter_content(self, n):
+        yield self._body
+
+
+def test_download_retries_rate_limits(tmp_path, monkeypatch):
+    responses = iter([_Resp(429, headers={"Retry-After": "0"}), _Resp(503), _Resp(200)])
+    monkeypatch.setattr(common.requests, "request", lambda *a, **k: next(responses))
+    monkeypatch.setattr(common.time, "sleep", lambda s: None)
+    dest = common.download("https://example.org/x", tmp_path / "x.bin")
+    assert dest.read_bytes() == b"ok"
+    assert not (tmp_path / "x.bin.part").exists()

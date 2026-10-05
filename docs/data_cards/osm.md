@@ -7,6 +7,7 @@
 | **License** | ODbL 1.0. Attribution: "© OpenStreetMap contributors". Share-alike applies if we *distribute* a derived database (e.g. a published graph). Model outputs (produced works) need attribution only. |
 | **Access** | `python -m src.ingest.osm --site melbourne` → `data/raw/osm/melbourne.osm.pbf` (89 MB) |
 | **Snapshot** | Extract `Last-Modified` 2026-09-26 (see `MANIFEST.json`) |
+| **Other sites** | `--site neu_boston` → BBBike `CambridgeMa` (no Boston extract exists; covers lon −71.30 to −70.82, lat 42.18 to 42.59). `--site nyc` → BBBike `NewYork` (153 MB; covers all 114 NYC DOT count points). Both snapshot 2026-10-02. |
 | **Coverage** | lon 144.68–145.30, lat -38.02 to -37.53 (Melbourne metro, much wider than the study bbox). Clip to `sites.melbourne.bbox` in `src/features`. |
 
 ## Contents (counts from 2026-09-26 extract)

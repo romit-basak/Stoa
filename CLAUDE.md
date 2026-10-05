@@ -10,8 +10,9 @@ Users: city planners (primary), campus planners, event organizers (outdoor appro
 
 Case studies:
 - **Melbourne**: training and validation. All accuracy claims rest here.
-- **NEU Boston campus**: demonstration (no local ground truth).
+- **NEU Boston campus**: demonstration (no local ground truth). Not validated; any claim beyond Melbourne rests on the transfer tests (see "Generalization").
 - **Event scenario** (stadium or campus event): demonstration.
+- **Transfer tests:** held-out Melbourne precincts (within-city) and NYC DOT counts (cross-city). See "Generalization".
 
 ## Core rules (do not violate)
 
@@ -19,10 +20,12 @@ Case studies:
 2. **Split by location, not by time.** Never evaluate on sensors, areas, or image tiles that appear in training. Event days are evaluated separately.
 3. **No invented inputs.** When parsing user input, missing values are asked for or filled with a visibly labeled default. Every field records its source: user text, default, or public data.
 4. **Never guess a location silently.** Ambiguous places go to the map for the user to confirm.
-5. **Licenses matter.** Non-commercial datasets (e.g., Stanford Drone) are for validation only and must never enter training data for the product model. Check `docs/data_licenses.md` before adding any dataset.
+5. **Licenses matter.** Non-commercial datasets (e.g., Stanford Drone, CC BY-NC-SA 3.0) are for validation, plus fine-tuning for a demonstration that is never shipped. They must never enter a shipped model's training data, and nothing derived from share-alike NC data (including demo weights) is distributed. A mirror can't relicense data: the original licence applies. Check `docs/data_licenses.md` before adding any dataset.
 6. **No personal data.** No phone tracking, no individual-level data. Customer-uploaded data stays scoped to that customer's site.
 7. **Planning guidance, not safety certification.** UI text and agent output must never present forecasts as crowd-safety guarantees.
 8. **Amenity what-ifs are rough guidance.** Scenarios that add or remove shops, cafés, or other amenities must be labeled as such (see "Destinations and amenities").
+9. **Features must transfer.** No sensor IDs, location IDs, or raw coordinates as features. No calendar month or day of year: use physical quantities (temperature, sun elevation, daylight) instead, because Melbourne's seasons are reversed from Boston's.
+10. **Don't present what wasn't learned as learned.** Melbourne never freezes, so any ice effect is a hand-set rule labeled as an assumption (or omitted). Campus predictions don't capture class-change surges; say so. Never claim the model generalizes globally.
 
 ## Architecture
 
@@ -37,7 +40,7 @@ Public data ──> ingest ──> validate ──> features ──> models ─�
 
 | Module | Path | Purpose | Fallback if it underperforms |
 |---|---|---|---|
-| Ingestion | `src/ingest/` | Pull and version Melbourne counts, OSM, terrain, imagery, weather, events, POIs | Cached last-good snapshot |
+| Ingestion | `src/ingest/` | Pull and version counts (Melbourne; NYC for testing), OSM, terrain, imagery, buildings, weather, events, calendars, POIs | Cached last-good snapshot |
 | Features | `src/features/` | Network metrics (Space Syntax-style), slope, shade, POIs + opening hours, weather, time, event proximity | — |
 | Flow model | `src/models/flow/` | Predict hourly pedestrian volume per segment | Space Syntax metrics + calibration |
 | Path segmentation | `src/models/segmentation/` | Detect informal paths in aerial imagery, add to graph | OSM paths only |
@@ -60,14 +63,17 @@ See `docs/data_cards/` for one card per dataset and `docs/data_licenses.md` for 
 
 | Dataset | Role | License notes |
 |---|---|---|
-| City of Melbourne Pedestrian Counting System | Train + validate | **Verify license before use** |
+| City of Melbourne Pedestrian Counting System | Train + validate | CC BY 4.0 (portal-wide terms; dataset field empty). Live table is a **rolling ~2-year window**: ingest merges, never overwrites |
 | OpenStreetMap | Network, paths, amenities, opening hours | ODbL: share-alike applies to distributed derived databases |
 | USGS 3DEP | Terrain (US) | Public domain |
-| NAIP / MassGIS imagery | Path segmentation | NAIP public domain; **verify MassGIS** |
+| NAIP / MassGIS imagery | Path segmentation | Public domain; credit MassGIS |
 | Sentinel-2, ESA WorldCover, Dynamic World | Surface, vegetation | Free/open; attribution required for CC BY layers |
-| Weather (Melbourne) | Hourly features | **TBD source** |
-| Event calendars | Event features | Public schedules |
-| Stanford Drone Dataset | Route-choice validation only | Non-commercial: **never train on it** |
+| City of Boston buildings | NEU building heights | PDDL |
+| Weather (all sites) | Hourly features | ERA5 via Open-Meteo (proposed default, pulled). CC BY 4.0; free API non-commercial |
+| Events | Event features | AFL fixtures (Squiggle) and crowds (AFL Tables): facts, credit the source. Other events hand-curated with a source per row |
+| Calendars | Holidays, school terms, university terms | `holidays` package (MIT); `configs/calendars/` (hand-maintained; never scrape unimelb.edu.au) |
+| Stanford Drone Dataset | Route-choice validation; demo-only fine-tuning, never shipped | CC BY-NC-SA 3.0: **never in a shipped model** |
+| NYC DOT pedestrian counts | Cross-city transfer test only | NYC Open Data Law: no use restrictions. **Never train on it** (it would void the test) |
 
 Data is versioned with DVC. Do not commit raw data to git.
 
@@ -75,18 +81,31 @@ Data is versioned with DVC. Do not commit raw data to git.
 
 People walk toward things, not just along pleasant routes. Amenities are attributes on the graph, not changes to its structure.
 
-- **Sources:** OSM (shops, restaurants/cafés, public toilets, drinking water, benches, `opening_hours`); Melbourne open data business/toilet/fountain datasets (**verify availability**); Advan visit counts via Dewey if NEU has access (visit-weighted attraction; US/Canada; academic terms, so validation/research only, never product training data).
-- **Segment features:** counts of each amenity type within short *network* walking distances (not straight-line); an "open now" variant per hour from `opening_hours`; interactions with weather (fountains, shade, and toilets weighted more on hot days).
+- **Sources:** OSM (shops, restaurants/cafés, public toilets, drinking water, benches, `opening_hours`); Melbourne open data business, café, toilet and fountain datasets (pulled; no opening hours); Advan visit counts via Dewey if NEU has access (visit-weighted attraction; US/Canada; academic terms, so validation/research only, never product training data).
+- **Segment features:** counts of each amenity type within short *network* walking distances (not straight-line); an "open now" variant per hour from `opening_hours` (only ~12% of OSM amenities/shops carry it, so model it with explicit missingness); interactions with weather (fountains, shade, and toilets weighted more on hot days).
 - **Walker simulation:** amenities act as destinations; simulated walkers pick destinations weighted by attraction and whether they're open.
 - **Caveat (must be shown in the UI):** shops locate where foot traffic already is, so amenity features partly reflect traffic rather than cause it. Fine for predicting current flows; what-if scenarios that add or remove amenities ("add a café here") may overstate the effect and must be labeled as rough guidance.
 
 ## Evaluation
 
 - **Baselines to beat:** shortest-path betweenness; Space Syntax metrics + calibration.
-- **Flow model:** error on held-out sensors; improvement over baselines; event-day error reported separately; calibration curve (accuracy vs. number of local sensors used).
+- **Flow model:** error on held-out sensors; improvement over baselines; calibration curve (accuracy vs. number of local sensors used).
+- **Event days:** reported separately. AFL event days rest on **Marvel Stadium** (7 sensors within 500 m); the MCG has no sensor within 500 m, so MCG results are weak evidence.
 - **Sanity scenarios** (must pass before deploy): e.g., closing a path lowers its predicted flow and raises flow on alternatives.
 - **Segmentation:** accuracy on held-out tiles; recall of known paths.
 - **Intake agent:** field-level extraction accuracy and location placement accuracy on `tests/agent_eval/`.
+- **Transfer (Tier 1):** see "Generalization" below.
+
+### Generalization
+
+Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
+- **Shape vs. scale:** the general model learns relative patterns; per-site calibration from local counts sets absolute volume. Calibration is the core of the generalization strategy, and the calibration curve is expected to be the strongest result.
+- **Portable vs. Melbourne-rich model:** CoM-only layers (footpath-steepness survey, CLUE, business establishments, canopy polygons, CoM network) don't exist in NYC or Boston. Train a Melbourne-rich model for Melbourne accuracy and a **portable** model on features any city has; the portable one is used for NYC and Boston. Report the gap.
+- **Within-Melbourne transfer:** train on the CBD; hold out whole precincts of a different character: University of Melbourne edge (sensors 42-44 on Swanston St, campus-like but not interior campus paths), Carlton (Lygon St), North Melbourne. They have only 3, 5 and 6 sensors, so report uncalibrated and calibrated on 1–2 sensors; the full calibration curve runs on Melbourne overall and NYC.
+- **Cross-city transfer:** train on Melbourne, test on NYC DOT's bi-annual counts (114 locations; period totals from two days a year, not hourly; compare with summed predicted hours). Evaluation only, never training. Report rank correlation separately from absolute error. Details in `docs/data_cards/nyc_dot_pedestrian_counts.md`.
+- **Academic-term feature:** in-semester flag near universities from `configs/calendars/`. The UniMelb-edge sensors swing from ~0.45x their mean (Jan/Dec) to ~1.6x (March); CBD sensors don't. This covers semester rhythm, not class-change surges.
+- **Structural break:** the Metro Tunnel opened 2025-11-30 (stations near Swanston St and the UniMelb edge). Split results at that date or include a station-access feature.
+- **Claim to make:** learns patterns in Melbourne; the within-city test shows unfamiliar areas; the cross-city test shows a new city; a few local counts close much of the gap.
 
 ## MLOps lifecycle
 
@@ -106,23 +125,26 @@ People walk toward things, not just along pleasant routes. Amenities are attribu
 
 ## Conventions
 
-- Python 3.11 **(TBD)**. Format with `ruff format`; lint with `ruff`. Type hints on public functions.
+- Python ≥ 3.11 (`pyproject.toml`; exact version **TBD**). Environments via `uv`. Format with `ruff format`; lint with `ruff`. Type hints on public functions.
 - Tests in `tests/`, mirroring `src/`. New features need tests; model changes need an eval run.
 - Config in YAML under `configs/`; no hard-coded paths, credentials, or API keys. Secrets via environment variables / Secret Manager.
 - Small, focused PRs. Each PR states which module and interface it touches.
+- **Documentation is Markdown or LaTeX, tracked in git.** Binary documents (`.pdf`, `.docx`, `.pptx`, `.xlsx`) are never tracked: PDFs are build outputs of the LaTeX sources, and any reference copies stay local. New write-ups go in `.md`; formatted deliverables go in `.tex` under `docs/`.
+- Scoping document: `docs/scoping/project_scoping.tex`. Build: `cd docs/scoping && latexmk -pdf -outdir=build project_scoping.tex && cp build/project_scoping.pdf .`
 - Commands (fill in as they exist):
-  - Setup: **TBD**
-  - Run tests: **TBD**
+  - Setup: `uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"`
+  - Run tests: `.venv/bin/python -m pytest`; lint: `.venv/bin/ruff check src tests && .venv/bin/ruff format src tests`
+  - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
   - Run pipeline: **TBD**
   - Run app locally: **TBD**
 
 ## Scope guardrails
 
 Scope is tiered; the full lists are in `docs/PROJECT_CONTEXT.md` section 11.
-- **Tier 1 (deliverables):** Melbourne pipeline, features, flow model with baseline ladder, campus path segmentation, at least one agent, event days, web app with what-ifs on NEU Boston, full MLOps loop, data/model cards.
-- **Tier 2 (stretch):** only after Tier 1 is solid. Walking-view visualization, second agent, document intake, calibration upload, Fenway, transfer tests, global-resolution tier, Fall Fest, and others.
+- **Tier 1 (deliverables):** Melbourne pipeline, features, flow model with baseline ladder, transfer evaluation (within-Melbourne precincts + small cross-city test), campus path segmentation, at least one agent, event days, web app with what-ifs on NEU Boston, full MLOps loop, data/model cards.
+- **Tier 2 (stretch):** only after Tier 1 is solid. Walking-view visualization, second agent, document intake, calibration upload UI, Fenway, NEU Oakland demonstration, global-resolution tier, Fall Fest, and others.
 - **Tier 3 (future work):** IRL, microsimulation, venue interiors, safety certification, real-time streaming, native apps. Do not start these without a team decision.
-- **Never:** phone tracking, training on non-commercial data, LLM-computed numbers, manual people-counting.
+- **Never:** phone tracking, non-commercial data in a shipped model, LLM-computed numbers, manual people-counting.
 
 Before working on anything, check which tier it's in. Don't let Tier 2 work delay Tier 1.
 
@@ -135,5 +157,5 @@ Checkpoint around weeks 5-6: if the learned model does not beat the Space Syntax
 - Which agents: LLM intake/planning assistant, walker simulation, or both
 - Graph and feature-table formats
 - Orchestration tool
-- Weather data source
-- Melbourne and MassGIS license confirmation
+- Weather data source (proposed: ERA5 via Open-Meteo, already pulled for all sites)
+- Ice handling for Boston: labeled hand-set rule, or omit

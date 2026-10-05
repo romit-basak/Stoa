@@ -5,6 +5,7 @@ description = "Pedestrian flow prediction and scenario planning (IE7374)"
 requires-python = ">=3.11"
 dependencies = [
     "geopandas>=1.0",
+    "holidays==0.105",  # pinned: holiday rules change between releases
     "osmium>=4.0",
     "pandas>=2.2",
     "pyarrow>=15",

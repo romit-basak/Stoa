@@ -10,6 +10,14 @@
 | **Location** | Request at CBD centre (-37.8136, 144.9631); API snapped to grid cell (-37.786, 144.940), elevation 19 m |
 | **Time zone** | `Australia/Melbourne` local time, so it joins directly on (sensing_date, hourday) |
 
+## Other sites
+
+Same variables, local time America/New_York, no nulls or duplicate timestamps:
+- `neu_boston_openmeteo_YYYY.json`: 2009-01-01 → 2026-09-28 (155,520 h).
+- `nyc_openmeteo_YYYY.json`: 2007-01-01 → 2026-09-28 (173,064 h), starting early to cover the NYC bi-annual counts. Point at Midtown; one point for all five boroughs is coarse but fine for period-level evaluation.
+
+The API rate-limits bursts (HTTP 429); `common.download` retries with backoff.
+
 ## Variables
 
 `temperature_2m` (°C), `apparent_temperature` (°C), `relative_humidity_2m` (%), `precipitation` / `rain` (mm), `cloud_cover` (%), `wind_speed_10m` (km/h), `shortwave_radiation` (W/m²), `is_day` (0/1)

@@ -21,6 +21,11 @@
 | Herbaceous wetland | 90 | 0.6% |
 | Cropland | 40 | 0.1% |
 
+## Other sites
+
+- `neu_boston` (tile N42W072): built-up 78.4%, tree cover 18.3%, grass 2.2%.
+- `nyc` (tile N39W075, count-location extent): built-up 52.1%, water 24.1%, tree cover 15.5%, grass 5.0%.
+
 ## Known issues
 
 - At 10 m the data is too coarse for street-level shade. Street trees in the CBD mostly show as built-up. For Melbourne, prefer CoM tree canopies 2021 (polygons) and trees-with-dimensions. WorldCover is the portable fallback for sites without such data (e.g. Boston, together with MassGIS).

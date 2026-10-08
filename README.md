@@ -1,6 +1,6 @@
 # Stoa
 
-Predicts where people walk, how many, and when, on every path of a site, and lets planners test changes ("close this path", "add an entrance", "it's game day") before building them.
+Predicts where people walk, how many, and when, on every path of a site, and lets planners test changes ("close this path", "add an entrance", "it's game day") before building them. It simulates crowds in limited outdoor areas and shows store owners the hourly pass-by at a candidate storefront and how many passersby can see it.
 
 IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 
@@ -15,6 +15,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | New York City | Cross-city transfer test on NYC DOT's open counts (evaluation only, never training) |
 | NEU Boston campus | Demonstration (no local ground truth) |
 | Event scenario | Demonstration. Melbourne event days (centred on Marvel Stadium) are evaluated separately. |
+| Marathons (stretch) | Melbourne Marathon (validation) and Boston Marathon (demonstration) |
 
 ## Status
 
@@ -22,11 +23,12 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 |---|---|---|
 | Ingestion | `src/ingest/` | ✅ Melbourne: counts, City of Melbourne layers, OSM, DEM, WorldCover, weather, AFL fixtures and crowds, calendars. ✅ NEU Boston: terrain, buildings, imagery, OSM, land cover, weather. ✅ NYC: test counts, OSM, land cover, weather |
 | Features | `src/features/` | Planned |
-| Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting → learned models) |
+| Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting; spatio-temporal GNN is a stretch goal) |
 | Path segmentation | `src/models/segmentation/` | Planned (NEU campus) |
-| Agents | `src/agents/` | Planned; which agents is still TBD |
+| Agents | `src/agents/` | Planned: LLM intake agent with local-knowledge adjustments (planning assistant is a stretch goal) |
+| Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
-| API / web app | `src/api/`, `app/` | Planned |
+| API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
 | MLOps (DVC, MLflow, CI/CD, Cloud Run) | — | Planned |
 
 ## Setup
@@ -86,13 +88,16 @@ Options:
 ```
 configs/data.yaml        data sources and site bounding boxes
 configs/calendars/       hand-maintained school terms and university teaching periods
+configs/analysis.yaml    parameters for src/analysis/
 data/                    raw/ and processed/ (git-ignored; versioned with DVC, planned)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues
+  analysis/              write-ups of one-off analyses
   data_licenses.md       license register; check before adding any dataset
   PROJECT_CONTEXT.md     reasoning behind decisions, scope tiers, validation plan
   scoping/               project scoping document (LaTeX source; the PDF is built, not tracked)
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
+src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
 tests/                   mirrors src/
 CLAUDE.md                project rules and conventions
 ```
@@ -111,7 +116,7 @@ CLAUDE.md                project rules and conventions
 | Holidays and calendars | 2007–2027 holidays; Vic school terms 2009–2026; UniMelb 2015–2026; NEU 2026–27 | `holidays` (MIT); Vic Gov CC BY 4.0; facts |
 | NEU Boston: USGS 3DEP 1 m, Boston buildings, NAIP 2023, MassGIS 2025 orthos | Campus + ~400 m | Public domain; buildings PDDL |
 | NYC DOT pedestrian counts | 114 locations, 2007 → May 2026, period totals | NYC Open Data Law (no use restrictions). **Evaluation only** |
-| Stanford Drone Dataset (not pulled) | 8 scenes, 60 videos | CC BY-NC-SA 3.0: validation and demo-only fine-tuning, never shipped |
+| Stanford Drone Dataset (not pulled) | 8 scenes, 60 videos | CC BY-NC-SA 3.0: validation and academic demonstration only; no model fine-tuned on it is shipped or distributed |
 
 Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/data_licenses.md`](docs/data_licenses.md).
 
@@ -124,9 +129,9 @@ The full list is in [`CLAUDE.md`](CLAUDE.md). The short version:
 - Numbers come from models; the LLM only parses input and narrates results.
 - Split by location, not by time. Never evaluate on sensors, areas or tiles seen in training.
 - No personal data, no phone tracking, no manual people-counting.
-- Non-commercial datasets are for validation (and demo-only fine-tuning), never in a shipped model.
+- Non-commercial datasets are for validation and academic demonstration only; no model fine-tuned on them is shipped or distributed.
 - Features must transfer: no location IDs, no calendar month. Effects not learnable from Melbourne (ice, class-change surges) are labeled assumptions or left out.
-- Outputs are planning guidance, not crowd-safety certification. Amenity what-ifs are labeled as rough guidance.
+- Outputs, including crowd simulations, are planning guidance, not crowd-safety certification. Amenity what-ifs and user-entered local knowledge are labeled as assumptions.
 
 ## Contributing
 

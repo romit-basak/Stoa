@@ -1,6 +1,6 @@
 # Data licenses
 
-Check this file before adding any dataset (CLAUDE.md rule 5). **Train** = may feed product model training/features. **Validate** = evaluation only. **Validate + demo** = evaluation, plus fine-tuning for a demonstration that is never shipped (nothing derived from it is distributed). **Excluded** = do not download into the pipeline. A mirror can't relicense data: record the original licence.
+Check this file before adding any dataset (CLAUDE.md rule 5). **Train** = may feed product model training/features. **Validate** = evaluation only. **Validate + demo** = evaluation and academic demonstration only; no model fine-tuned on it appears in shipped or distributed artifacts. **Excluded** = do not download into the pipeline. A mirror can't relicense data: record the original licence.
 
 | Dataset | License | Status | Attribution / obligations |
 |---|---|---|---|
@@ -29,5 +29,6 @@ Check this file before adding any dataset (CLAUDE.md rule 5). **Train** = may fe
 | **FABDEM** | **CC BY-NC-SA 4.0** | **Excluded** | Non-commercial |
 | **Vicmap Elevation 1 m / Greater Melbourne LiDAR 2017–18** | Restricted / CC BY-NC (ELVIS) | **Excluded** (validation only after a team decision) | — |
 | **Vicmap Buildings** | Restricted (DALA) | **Excluded** | — |
-| **Stanford Drone Dataset** | **CC BY-NC-SA 3.0** (official page). Applies to any copy: the Kaggle mirrors' CC BY-SA / CC0 labels are wrong and can't relicense it | **Validate + demo** (never in a shipped model; NC + share-alike, so don't distribute demo weights) | Cite Robicquet et al., ECCV 2016. Mirrors checked 2026-10-04: Kaggle `aryashah2k/stanford-drone-dataset` and `brendanalvey/stanford-drone-dataset` both complete (8 scenes, 60 videos, identical annotation files) |
+| **Stanford Drone Dataset** | **CC BY-NC-SA 3.0** (official page). Applies to any copy: the Kaggle mirrors' CC BY-SA / CC0 labels are wrong and can't relicense it | **Validate + demo** (no model fine-tuned on it is shipped or distributed) | Cite Robicquet et al., ECCV 2016. Mirrors checked 2026-10-04: Kaggle `aryashah2k/stanford-drone-dataset` and `brendanalvey/stanford-drone-dataset` both complete (8 scenes, 60 videos, identical annotation files) |
 | NYC DOT pedestrian counts (bi-annual `cqsj-cfgu`; automated `ct66-47at`) | NYC Open Data Law (Admin Code §23-502(d)): published "without any registration requirement, license requirement or restrictions on their use"; source and version must be named and changes described if required | **Validate only** (cross-city transfer test; training on it would void the test) | Credit "NYC Department of Transportation, via NYC Open Data" |
+| Controlled pedestrian experiments (e.g., Jülich pedestrian dynamics data archive) | **Verify** | Validate (microsimulation) | Check terms before download |

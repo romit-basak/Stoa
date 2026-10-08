@@ -10,12 +10,13 @@ Full background for the project: what it is, why decisions were made, and what's
 
 **Problem:** cities, campuses, and event organizers change public spaces (new buildings, closed paths, event layouts) while guessing how people on foot will react. They find out afterward: worn dirt shortcuts across lawns, bottleneck sidewalks, ignored entrances or booths. Counting people is expensive, so most places have little data.
 
-**What it does:** predicts where people walk, how many, and when, on every path of a site, and lets a planner test changes before making them. It accounts for slope, shade and heat, what people can see ahead, nearby destinations and whether they're open, events, and informal shortcuts missing from maps. Ice is handled by an explicit, labeled assumption rather than learned (see section 7.1).
+**What it does:** predicts where people walk, how many, and when, on every path of a site, and lets a planner test changes before making them. It accounts for slope, shade and heat, what people can see ahead, nearby destinations and whether they're open, events, and informal shortcuts missing from maps. It simulates crowds (route-sampling walkers everywhere; microsimulation in limited outdoor areas) and answers store-siting questions (hourly pass-by at a candidate storefront). Ice is handled by an explicit, labeled assumption rather than learned (see section 7.1).
 
 **Users:**
 - **City planners and transportation agencies (primary market).** Need network-wide pedestrian volumes for safety and investment decisions; already pay for pedestrian data.
 - **Campus planners.** Wedge market and case study; small on its own.
 - **Event organizers.** Only the outdoor approach network around a venue (streets, transit links). Venue interiors belong to crowd-simulation incumbents.
+- **Store owners choosing a site.** "If I open my store here, how many people pass by, and when?" That is the model's target (hourly pass-by per segment), so it needs no new modeling (section 6.6).
 - **Researchers and heritage-site teams.** A generic research mode with standard GIS outputs (e.g., archaeologists studying movement through ancient sites). Adoption and validation, not revenue.
 
 ---
@@ -26,6 +27,8 @@ Full background for the project: what it is, why decisions were made, and what's
 |---|---|---|---|
 | Crowd microsimulation | MassMotion (Oasys), Legion, PTV Viswalk, Pathfinder, AnyLogic, STEPS, Pedestrian Dynamics, SimWalk; open source SUMO, GAMA | Agent-based simulation of stadiums, stations, airports, events | Specialist-run, built around venue geometry, behavior hand-calibrated |
 | Pedestrian data vendors | StreetLight, Replica, Placer.ai, Strava Metro | Estimate existing volumes, mostly from phone location data | Can't evaluate unbuilt designs; StreetLight's link-level pedestrian data was disrupted by 2022 smartphone privacy changes; Strava Metro limited to annual totals by privacy masking |
+| Retail location analytics | Placer.ai, FootfallCam (location analysis app), GrowthFactor | Foot traffic at candidate store sites | Mostly phone data or installed counters; priced for chains. Our angle: privacy-safe, works without sensors, affordable for independent owners |
+| Outdoor-advertising audience measurement | Geopath (US) | Audience and visibility-adjusted impressions for billboards and signs | Mostly vehicle audiences. Our angle: pedestrian-focused, 3D, works for planned placements before anything is installed. **VERIFY** what these systems already cover before claiming a gap |
 | Configurational analysis | Space Syntax (consultancy), depthmapX | Predict movement potential from street-network structure | Fixed metrics, not learned; consultancy delivery; static (no time, weather, events) |
 
 **Our differentiation:**
@@ -51,6 +54,8 @@ Full background for the project: what it is, why decisions were made, and what's
 | **New York City** (NYC DOT bi-annual counts) | Cross-city transfer test | Train on Melbourne, predict NYC's 114 count locations. The only evidence for any claim beyond Melbourne. Data checked; see 4.3 |
 | **NEU Boston campus** | Demonstration (no local ground truth) | Dense, mostly flat; desire paths across quads. Not validated: Boston outputs rest on the transfer tests above, not on Boston data |
 | **Event scenario** | Demonstration | Melbourne event days for validation; a stadium or campus event for the demo |
+| Melbourne Marathon | Tier 2: validation | Course as closed edges with limited crossings. See 7.2 |
+| Boston Marathon | Tier 2: demonstration | Course as a barrier; spectator hotspots; leapfrogging spectators. See 7.2 |
 | NEU Oakland campus | Stretch: transfer demonstration | Hilly. No local counts, so it's a demonstration, not a test |
 | Fenway game day | Stretch: partial real check | See section 6 |
 | NEU Fall Fest | Stretch: booth-exposure analysis | See section 9 |
@@ -109,7 +114,8 @@ id;location_id;sensing_date;hourday;direction_1;direction_2;pedestriancount;sens
 | Event calendars | Event features | AFL fixtures (Squiggle) + crowds (AFL Tables, facts); other events hand-curated with a source per row |
 | Holidays and academic calendars | Time features | `holidays` package (MIT); Vic school terms (CC BY 4.0); UniMelb and NEU dates entered by hand (UniMelb terms forbid scraping) |
 | Melbourne amenity datasets | Destinations | Available (pulled, CC BY 4.0): businesses and cafés 2002–2024, 74 toilets, 338 fountains. **None has opening hours** |
-| Stanford Drone Dataset | Route-choice validation; fine-tuning for demonstration only, never shipped | **CC BY-NC-SA 3.0** (applies to any mirror). Never in a shipped model's training data; don't distribute demo weights fine-tuned on it |
+| Stanford Drone Dataset | Route-choice validation; academic calibration demonstration | **CC BY-NC-SA 3.0** (applies to any mirror). Validation and demonstration only: no model fine-tuned on it appears in shipped or distributed artifacts |
+| Controlled pedestrian experiments (e.g., Jülich pedestrian dynamics data archive) | Microsimulation validation (speed–density, bottleneck flow) | **VERIFY** availability and licence |
 | ETH/UCY, DUT, HC | Route-choice validation only | Treat as validation-only unless explicit commercial permission found |
 
 ### 4.3 Possible additional sources (stretch)
@@ -124,7 +130,7 @@ id;location_id;sensing_date;hourday;direction_1;direction_2;pedestriancount;sens
 - **MBTA gated station entries** (`https://mbta-massdot.opendata.arcgis.com/`): **VERIFY** existence, time resolution, and license.
 
 ### 4.4 Licensing rules
-- Non-commercial data: validation, plus fine-tuning for a demonstration that is never shipped. Never in a shipped model's training data. Share-alike NC data (e.g., Stanford Drone): don't distribute anything derived from it, including demo weights.
+- Non-commercial data: validation and academic demonstration only. No model fine-tuned on it appears in shipped or distributed artifacts.
 - A mirror can't relicense a dataset: the original licence applies to every copy, whatever the mirror's label says.
 - CC BY-SA / ODbL: share-alike obligations; get advice before distributing derived databases or models trained on share-alike data.
 - No personal data, no phone tracking. Customer-uploaded data stays private to that customer's site.
@@ -135,7 +141,7 @@ id;location_id;sensing_date;hourday;direction_1;direction_2;pedestriancount;sens
 
 All features are per path segment (and per hour where time-varying). The model never sees pixels.
 
-**Portable vs. Melbourne-only features.** Several of the strongest Melbourne inputs exist only there: CoM footpath-steepness survey, CLUE jobs and floor space, business establishments, canopy polygons, the CoM pedestrian network. A model trained on them can't run in NYC or Boston. So train two variants: a **Melbourne-rich** model (headline Melbourne accuracy) and a **portable** model on features any city has (OSM network and amenities, terrain, land cover, weather, building heights, calendars). The portable model is the one used for the cross-city test and the Boston demo; report the accuracy gap between them in Melbourne.
+**Portable vs. Melbourne-only features.** Several of the strongest Melbourne inputs exist only there: CoM footpath-steepness survey, CLUE jobs and floor space, business establishments, canopy polygons, the CoM pedestrian network. A model trained on them can't run in NYC or Boston. So train two variants: a **Melbourne-rich** model (headline Melbourne accuracy) and a **portable** model on features any city has (OSM network and amenities, terrain, land cover, weather, building heights, calendars). The portable model is the one used for the cross-city test and the Boston demo; report the accuracy gap between them in Melbourne. **Train the portable model on an OSM-derived Melbourne graph**, not the CoM network, so the NYC test measures city differences rather than graph-source differences.
 
 **Transferability rule:** every feature must mean the same thing in Boston as in Melbourne. Use physical quantities (temperature, sun elevation, daylight hours) instead of calendar month, because Melbourne's summer is December to February, so "January = hot" is wrong in Boston. Never use sensor IDs, location IDs, or raw coordinates as features: they let the model memorize places instead of learning patterns, and they mean nothing at a new site. Section 7.1 has the full reasoning.
 
@@ -150,6 +156,8 @@ All features are per path segment (and per hour where time-varying). The model n
 - **Weather:** temperature, rain, etc.
 - **Events:** distance to and timing of events; crowd size where known (AFL attendance).
 - **Transit access:** distance to stations and stops, with opening dates (Metro Tunnel stations from 2025-11-30).
+
+**Feature toggles are scenario edits.** A user toggle such as "no shops here" sets the amenity features to absent (zero) and edits related features together (e.g., land use) so the scenario stays coherent, with caveats shown: extrapolation (out-of-range flag) and reverse causality. Models **trained without** a feature are internal only: for sites lacking that data (the portable model) and for ablations. Ablations understate total effects, because correlated features absorb part of them. Never describe a toggle as switching to a model trained without the feature.
 
 **Amenity caveat:** shops locate where foot traffic already is (reverse causality). Fine for predicting current flows; what-ifs that add/remove amenities may overstate effects and must be labeled rough guidance.
 
@@ -172,7 +180,7 @@ All features are per path segment (and per hour where time-varying). The model n
 
 ### 6.1 Flow model (core)
 - Predicts hourly pedestrian volume per segment, with uncertainty bounds.
-- Start with gradient boosting or regularized regression; GNNs must prove themselves against it. Data is dozens to low hundreds of sensors, not thousands.
+- **Gradient boosting is the Tier 1 learned model.** The spatio-temporal GNN is Tier 2 and is adopted only if it beats the gradient-boosted model on held-out sensors. Data is dozens to low hundreds of sensors, not thousands.
 - **Baseline ladder** (each rung shows what the next adds): (1) shortest-path betweenness, (2) Space Syntax metrics + calibration, (3) hand-weighted costs, (4) learned model with all features.
 - **Why learning is needed at all:** static metrics can't express time variation, interactions (heat at noon in summer; rain with no shelter), or events.
 - **Shape vs. scale:** the general model learns relative patterns (which segments and hours are busier than others); per-site calibration sets the absolute scale from local counts. Calibration is the core of the generalization strategy, not an add-on (see 7.1).
@@ -183,10 +191,18 @@ All features are per path segment (and per hour where time-varying). The model n
 - Justified on product grounds: OSM misses informal paths.
 
 ### 6.3 Agents
-**Which agents are built is TBD; at least one is required.**
+**Decided:** simulated walkers (6.5) count as agents. The **LLM intake agent is Tier 1**; the planning assistant moves to Tier 2 if time is short. Every LLM-narrated result also has a deterministic, non-LLM path that produces it.
 - **LLM intake agent:** turns a planner's natural-language description (or an uploaded event/traffic plan) into a structured event spec. Asks about missing or ambiguous fields; labeled defaults otherwise; every field records its source. Ambiguous places go to the map for click-to-confirm, never silently guessed.
 - **LLM planning assistant:** tool-calling over deterministic functions (edit graph, rerun model, compare scenarios) and narrates the differences. Never computes numbers.
-- **Simulated walkers:** sample routes from the model's route probabilities over the graph and aggregate per segment and time step to show congestion and animate crowds. Amenities act as destinations, weighted by attraction and opening hours. Not a social-force microsimulator.
+- **Simulated walkers:** see 6.5.
+
+**Local knowledge as model adjustments.** The learned model always produces the base prediction. Plain-language knowledge ("people avoid this corridor at night") is parsed by the intake agent into a structured adjustment: segments, conditions, direction.
+- The **user chooses the strength** from fixed levels (slight / moderate / strong). The LLM never sets the value.
+- Strength levels are **grounded in data**: typical effect sizes derived from Melbourne (closures, new station entrances, event days).
+- Adjustments are **priors**: later counts update them through calibration.
+- Shown as **labeled assumptions**, with a with/without comparison.
+- **Evaluation:** enter the Metro Tunnel opening as a planner statement and check whether post-opening predictions improve; compare workflows (technical decisions and time to first scenario vs. Space Syntax); optional small usability test with non-experts (observing software use, not counting people; check whether research ethics review is needed if published).
+- **Demos:** Stanford Drone for data-based calibration (academic demonstration and validation only; no model fine-tuned on it is shipped or distributed); an NEU person describing the campus for the knowledge-based path.
 
 Example intake:
 > "Saturday's game at 7:10, gates open 90 minutes before. Sellout expected. Most fans come by the Green Line to Kenmore; Jersey Street closed to cars; food trucks on Lansdowne."
@@ -198,6 +214,31 @@ becomes a spec with date, start, gates_open, attendance ("sellout" needs venue c
 - Uses: visibility as a model feature; sequential "what you see as you walk" views along routes ("serial vision" in urban design); booth/table visibility for event layouts.
 - Heavy at city scale: limit to demo areas, precompute, cache.
 
+### 6.5 Crowd simulation (Tier 1)
+The team prioritized crowd simulation (October 2026). Build in two stages:
+1. **Route-sampling walkers (first):** sample routes from the flow model's route probabilities over the graph; aggregate per segment and time step for congestion and crowd animation. Amenities act as destinations, weighted by attraction and opening hours. Cheap, and reuses the model.
+2. **Microsimulation (second):** physics-style pedestrian dynamics (social-force family) for **limited areas only**: event egress zones, course crossing points, station approaches. Not city-wide.
+- Use an **existing open-source simulator** (e.g., JuPedSim, Vadere) rather than writing one. **VERIFY** licences before adopting.
+- **Validation needs its own ground truth.** Melbourne counts validate flows, not crowd dynamics. Use public controlled pedestrian-experiment data with speed–density measurements (e.g., the Jülich pedestrian dynamics data archive, **VERIFY**). Report microsimulation validation separately from flow-model validation.
+- **Scope rules still apply:** outdoor approach areas only, never venue interiors; planning guidance only, never safety certification. Microsimulation invites safety readings, so the UI wording rules matter more here.
+
+### 6.6 Store siting and exposure (Tier 1)
+- Click a storefront location; show hourly and weekly pass-by curves; compare candidate locations side by side.
+- **Exposure score:** predicted foot traffic combined with visibility into one score: how many passersby can see the storefront, and from how far. Built once and reused for storefronts, Fall Fest booths (section 9) and signs (6.8). The viewshed is already a precomputed Tier 1 feature, so this mostly combines existing outputs.
+- **Direction of travel:** walkers mostly see what's ahead of them, so a storefront facing the main direction of travel gets more exposure. Melbourne's directional counts give each segment's split, but only from 2024-10-04 (the archive has totals only), and directions are compass labels per sensor (N/S or E/W), so compare the storefront's orientation with those labels.
+- **Caveats shown in the UI:** exposure is **visible impressions, not predicted customers**: Melbourne's sensors count passersby, not store visits, so "visibility increases customers" can't be validated with this data. Pass-by is not walk-in (capture rate depends on the store). A store changes the traffic around it (the same reverse-causality caveat as amenities).
+
+### 6.7 Research mode and terrain-grid graph builder (Tier 2)
+- **Terrain-grid builder:** DEM + building footprints into a walkable grid graph; buildings as obstacles, doorways as connections; direction-dependent slope cost (Tobler's hiking function by default); surface costs. For sites without street networks (parks, plazas, heritage sites).
+- **Research mode workflow:** private or local deployment (nothing uploaded to shared storage or pooled); competing cost hypotheses with explicit weights; user-defined origins and destinations; route ensembles and concentration points; visibility along routes; comparison of hypotheses against evidence (known paths, null models); sensitivity analysis over weights; exports with a reproducibility record (input hashes, hypotheses, weights, seeds).
+- Optional per-site fine-tuning of path segmentation on a user's own labeled imagery, kept in their private project.
+- Build these as general features; don't name or design around any specific research team.
+
+### 6.8 Signage and billboard placement (Tier 2)
+- The same exposure calculation, plus sign height and size, viewing angle, occlusion by trees and buildings, and readability at distance (text size against viewing distance). Walking speed sets how long someone has to read it.
+- **Pedestrians only.** Billboards are mostly bought for drivers, and vehicle exposure is outside Stoa's scope. Pitch it for street-level signage and pedestrian areas.
+- Established measurement exists (Geopath in the US, with visibility-adjusted impressions; section 2). Check what it covers before claiming a gap.
+
 ---
 
 ## 7. Validation
@@ -206,7 +247,10 @@ becomes a spec with date, start, gates_open, attendance ("sellout" needs venue c
 - **Macro (flow volume):** held-out Melbourne sensors; must beat the Space Syntax baseline (which typically correlates ~60-80% with observed movement). Headline result: "Space Syntax explains X; adding climate, visibility, and destinations gets Y more."
 - **Event days:** evaluated separately. **Marvel Stadium carries the AFL event-day evaluation**: 7 sensors within 500 m, reporting on every game day. The MCG has no sensor within 500 m; its four nearest (0.7–1 km) include two of the least complete sensors, and in the archive only 93 of 655 MCG game days have one reporting. Other major events (White Night, NYE, Moomba, Grand Final parade, Australian Open) go in a hand-curated list with a source per row.
 - **Calibration curve:** calibrate on k sensors (3, 5, 10, 20), predict the rest, plot accuracy vs. k. Demonstrates "calibrate with a few counts" without manual counting, and exercises the retrain loop. The full curve runs on Melbourne overall and on NYC's 114 locations; the transfer precincts are too small for it (3, 5 and 6 sensors), so there calibrate on 1–2 sensors and test the rest. This is expected to be the project's strongest result.
-- **Micro (route choice):** held-out Stanford Drone scenes; displacement and route-overlap metrics. Validation (and demo-only fine-tuning, never shipped). Needs only the trajectory annotations (~450 MB), not the videos.
+- **Micro (route choice):** held-out Stanford Drone scenes; displacement and route-overlap metrics. Validation and academic demonstration only. Needs only the trajectory annotations (~450 MB), not the videos.
+- **Microsimulation:** against controlled pedestrian-experiment data (speed–density, bottleneck flow); reported separately from flow-model validation (6.5).
+- **Equity:** report error by urban-density tier.
+- **Knowledge adjustments and workflow:** see 6.3.
 - **Synthetic parameter recovery:** plant a known preference in simulated walkers and check the model recovers it. Tests the method, not real behavior; say so.
 - **Sanity scenarios:** e.g., closing a path lowers its flow and raises flow on alternatives.
 - **Segmentation:** held-out tiles; recall of known paths.
@@ -238,7 +282,7 @@ Boston is demonstration only, so held-out Melbourne sensors alone can't tell us 
    - **Carlton:** Lygon St (31, 37, 50), Pelham St (46), Lincoln-Swanston (54).
    - **North Melbourne / Kensington:** Errol St (70, 87), Queensberry-Errol (86), Macaulay Rd (76, 85, 180).
    Report each precinct's error uncalibrated and after calibrating on 1–2 of its sensors (the precincts are too small for the full curve). The UniMelb-edge sensors also sit in the Metro Tunnel's Parkville catchment, so split their results at 2025-11-30.
-4. **Cross-city transfer test (Tier 1, even if small).** Train on Melbourne; predict NYC DOT's bi-annual counts (section 4.3), comparing each period total with the summed predicted hours. Never train on them. This is the only evidence for any claim beyond Melbourne. Report rank correlation (does it get *which* places are busy right?) separately from absolute error (does it get *how many*?), before and after calibrating on a few local counts.
+4. **Cross-city transfer test (Tier 1, even if small).** Train the portable model on the OSM-derived Melbourne graph; predict NYC DOT's bi-annual counts (section 4.3), comparing each period total with the summed predicted hours. Never train on them. Acceptance is "reported, not assumed"; rank correlation ≥ 0.6 is a goal, not a pass/fail criterion. This is the only evidence for any claim beyond Melbourne. Report rank correlation (does it get *which* places are busy right?) separately from absolute error (does it get *how many*?), before and after calibrating on a few local counts.
 5. **Ice: rule or omit.** Either apply an explicit, hand-set rule (e.g., a penalty on unsheltered, sloped segments below freezing with recent precipitation) labeled in the UI as an assumption, or leave ice out of Boston predictions. Never present it as learned. Team decision pending.
 6. **Name the campus gap.** For this semester, campus predictions don't capture class-change surges; class schedules would need their own data source. The UI and any write-up say so plainly.
 
@@ -247,6 +291,28 @@ Boston is demonstration only, so held-out Melbourne sensors alone can't tell us 
 - the within-Melbourne transfer test shows how well it handles unfamiliar kinds of areas;
 - the cross-city test shows what happens in a new city;
 - calibration with a small number of local counts closes much of the remaining gap (the calibration curve).
+
+### 7.2 Marathon case studies (Tier 2)
+
+**Melbourne Marathon (validation):**
+- **VERIFY:** route vs. sensor locations; which race years fall in data coverage (the archive ends Oct 2022; the live window starts Oct 2024).
+- Baseline: same weekday and time in nearby weeks.
+- Model the closed course as a graph edit: closed edges, limited crossing points.
+- **Measurement caveat:** sensors count crossings, not crowd size. Standing spectators register few crossings. Validate arrivals, the in-race lull, and post-race departures, never crowd size.
+
+**Boston Marathon (demonstration):**
+- Course as a barrier with limited crossings; spectator hotspots as destinations (town centers, Wellesley, Heartbreak Hill, Boston College, Kenmore, Hereford/Boylston turns).
+- Leapfrogging spectators in the walker simulation, timed from leaders' public splits, moving by walking or Green Line.
+- Kenmore as a combined event (Red Sox game letting out onto the course).
+- Optional MBTA check against other holiday Mondays. **VERIFY** gated-entry data and time resolution; many Green Line surface stops are ungated, and some stations may close on race day.
+- Runner timing: use only what's needed from public splits; don't redistribute B.A.A. results.
+
+### 7.3 New-store before/after study (Tier 2, case-study scale)
+Tests the amenity what-if and the reverse-causality question directly. Full feasibility check: `docs/analysis/new_store_openings_feasibility.md` (`python -m src.analysis.new_openings`).
+- **Method:** difference-in-differences. Compare the change at sensors near an opening with sensors farther away over the same period, so citywide trends (post-COVID recovery) aren't credited to the store. Then add the opening as a scenario edit and check whether the model predicted that change. A match is evidence that amenity what-ifs work; overprediction is the reverse-causality caveat measured rather than assumed. Either result is reported.
+- **Feasibility (checked 2026-10-06):** 133 large openings found in CLUE (2002–2024). Only 7 have a sensor within 100 m with counts before and after, and none is clean (seat-only jumps, upper-floor tenancies, a COVID window). The one strong case is **Emporium Melbourne (2014, +193 attractor establishments)**, with sensors 1, 2 and 3 at 164–191 m; its exact opening date must come from news (**VERIFY**). The largest earlier openings (South Wharf 2011, Docklands 2009) have no sensor within 200 m.
+- **Constraints:** CLUE is annual, so it gives the year, not the day; openings must avoid the 2022–2024 gap; CLUE ends in 2024, so later openings need news reports; small shops are invisible against daily noise.
+- **Scope:** run it as one or two case studies (Emporium first), not a statistical study. The Metro Tunnel stations are the stronger large-attractor test of the same near-vs-far method.
 
 **Fenway (stretch):** game-day MBTA Kenmore entry surge minus same-weekday baseline approximates the walking crowd from the ballpark to the station (some bus-transfer leakage). Public attendance gives total departures; the Kenmore share is one exit stream; the remainder went to other stops, commuter rail, rideshare, or walking. Mass conservation gives a partial check on simulated exit splits. **VERIFY** MBTA data first.
 
@@ -260,7 +326,8 @@ Boston is demonstration only, so held-out Melbourne sensors alone can't tell us 
 - **Deploy:** Cloud Run API + web app; canary with automatic rollback; per-site calibrated variants stored separately.
 - **Monitor:** accuracy against each month's new Melbourne counts (real delayed ground truth); input drift (unusual weather, new event types); prediction drift; new OSM path edits as segmentation labels; agent correction rates, grounding violations, and cost per conversation; resolution tier of each deployment.
 - **Retrain:** monthly on new counts; triggered by accuracy drop or drift; per site on new customer counts; all retrained models re-run the gates.
-- **Expo:** a small in-app panel showing model version, last retrain, latest accuracy on new Melbourne data, and drift status.
+- **Expo:** a small in-app panel showing model version, last retrain, latest accuracy on new Melbourne data, and drift status. **Cached replay mode:** record real runs and replay them, so the demo never depends on live model or LLM calls.
+- **Patterns adopted from GoogleCloudPlatform/race-condition** (Apache 2.0): cached replay for demos; a deterministic baseline alongside LLM agents (consistent with the golden rule). Not a validation source (its crowds are simulated). Don't copy its infrastructure (about $91/month fixed cost).
 
 **Infrastructure:** GCP Cloud Run, Cloud Storage, Artifact Registry; GitHub Actions CI/CD. Orchestration TBD: Cloud Composer is likely too expensive for the budget; prefer Cloud Scheduler + Cloud Run jobs or Airflow on a small VM. Segmentation training on free/university GPUs (Colab, Kaggle, NEU cluster), not the GCP budget. Keep one Cloud Run instance warm during the expo.
 
@@ -273,15 +340,22 @@ Boston is demonstration only, so held-out Melbourne sensors alone can't tell us 
 ### Event planner (stadium)
 1. **Mark the site** on a map (venue + surrounding blocks). Network, terrain, buildings, transit stops, amenities, imagery (path detection), and the weather forecast load automatically.
 2. **Describe the event in natural language** (intake agent). Required: date, gate-opening and start/end times, expected attendance, gates/exits. Optional: arrival mode split, parking and rideshare locations, closures and barriers, fan zones, food trucks, merchandise.
-3. **Add existing data (optional):** ticket scan timestamps from past events (most valuable), turnstile counts, transit ridership on past event days.
-4. **Review and test:** predicted flows through arrival, mid-event, and post-event surge; hotspots; what-ifs (close a street, open an exit, move trucks, stagger release); assistant explains differences.
-5. **After the event:** upload actual gate scans; recalibrates for next time.
+3. **Add local knowledge (optional):** plain-language statements ("fans avoid the underpass after dark") become labeled adjustments; the planner picks each one's strength (6.3).
+4. **Add existing data (optional):** ticket scan timestamps from past events (most valuable), turnstile counts, transit ridership on past event days.
+5. **Review and test:** predicted flows through arrival, mid-event, and post-event surge; hotspots; what-ifs (close a street, open an exit, move trucks, stagger release); assistant explains differences.
+6. **After the event:** upload actual gate scans; recalibrates for next time.
+
+### Store owner (site selection)
+1. Click one or more candidate storefronts on the map.
+2. See hourly and weekly pass-by curves and storefront visibility, side by side.
+3. Optionally add local knowledge as labeled adjustments.
+4. Caveats on screen: pass-by is not walk-in; a store changes the traffic around it.
 
 Caveats shown to the user: the post-event surge is the hardest to predict; this is planning guidance, not safety certification.
 
 ### Fall Fest booth exposure (stretch case study)
 - Data on hand: 564 table placements across 11 zones (Robinson Quad 47, Sculpture Park 11, Library Quad 47, World Series Way 45, Cabot Pathway and Quad 52, Krentzman Quad 46, Egan Pathway 29, Centennial Common 52, JDOAAI Quad 43, West Village Quad 87, West Campus 105). Zones and table numbers only, no coordinates.
-- Output: exposure score per table = predicted passersby x visibility from approach paths.
+- Output: exposure score per table = predicted passersby x visibility from approach paths (the same exposure score as storefronts, section 6.6).
 - Needs: physical table layout from the Center for Student Involvement (request it, along with stage/food/entrance locations, timing, and any aggregate attendance; offer a post-event layout analysis in return). Fallback: assume table numbers run in physical sequence, stated as an assumption.
 - Placement is themed (e.g., Greek life in Robinson Quad), confounding location with club type; compare positions **within** zones.
 - No outcome data yet; any club sign-up counts must be voluntarily shared.
@@ -297,9 +371,9 @@ Caveats shown to the user: the post-event surge is the hardest to predict; this 
 3. **Segment IDs changing.** Stable IDs; add edges rather than renumber; versioned graph referenced by every artifact.
 4. **Single integrator.** One person owns integration and the viewshed engine; document interfaces early and pair someone on integration.
 
-**Other:** noisy segmentation labels; time alignment (time zones, Melbourne daylight saving: use one timezone-aware convention); event calendar curation; shade and viewshed compute at scale; agent eval set takes time; place-name ambiguity; data/graph module blocks everyone; Cloud Run cold starts; live demo failure (precompute, recorded fallback).
+**Other:** live demo failure (cached replay mode); noisy segmentation labels; time alignment (time zones, Melbourne daylight saving: use one timezone-aware convention); event calendar curation; shade and viewshed compute at scale; agent eval set takes time; place-name ambiguity; data/graph module blocks everyone; Cloud Run cold starts; live demo failure (precompute, recorded fallback).
 
-**Project risks:** learned model may not beat Space Syntax (checkpoint below); only one city of dense ground truth (partly addressed by the within-Melbourne and NYC transfer tests, section 7.1); model transfers patterns but not volumes (calibration addresses this); the portable model may be much weaker than the Melbourne-rich one; Metro Tunnel break in the most recent counts; losing count history to the rolling window (mitigated by merge-only ingest and DVC); scope creep.
+**Project risks:** learned model may not beat Space Syntax (checkpoint below); microsimulation adds Tier 1 load (mitigated by two stages, an existing simulator, and moving the GNN to Tier 2); microsimulation read as a safety assessment; no crowd-dynamics ground truth in Melbourne; only one city of dense ground truth (partly addressed by the within-Melbourne and NYC transfer tests, section 7.1); model transfers patterns but not volumes (calibration addresses this); the portable model may be much weaker than the Melbourne-rich one; Metro Tunnel break in the most recent counts; losing count history to the rolling window (mitigated by merge-only ingest and DVC); scope creep.
 
 **Checkpoint (weeks 5-6):** if the learned model doesn't beat the Space Syntax baseline, stop investing in the model and pitch the product as Space Syntax made interactive, 3D, and climate-aware. The what-if tool, walking viewshed, and climate-aware routing stand on their own.
 
@@ -310,32 +384,38 @@ Caveats shown to the user: the post-event surge is the hardest to predict; this 
 ### Tier 1: Immediate scope (absolute deliverables)
 1. Melbourne data pipeline: counts (with direction), merge-only ingest of the rolling live table, sensor locations, outage masking, sensor active periods, OSM graph, hand-checked sensor-to-edge matching; DVC versioning.
 2. Feature pipeline: network metrics, slope, shade, surface/greenery, amenities with opening hours, weather, time (holidays, academic terms), events, transit access; visibility as a precomputed per-segment feature. Marks each feature as portable or Melbourne-only.
-3. Flow model: gradient boosting baseline-ladder comparison, location-based splits, event-day evaluation, calibration curve; transferable features only; Melbourne-rich and portable variants (section 5).
+3. Flow model: gradient boosting as the learned model (fully evaluated by week 4), baseline-ladder comparison, location-based splits, event-day evaluation, calibration curve; transferable features only; Melbourne-rich and portable variants, the portable one on an OSM-derived Melbourne graph (section 5).
 4. Transfer evaluation (section 7.1): within-Melbourne precinct holdout (University of Melbourne edge, Carlton, North Melbourne; calibrate on 1–2 sensors) and a cross-city test on NYC DOT's bi-annual counts with the portable model and a full calibration curve. Moved up from Tier 2 because it's the only evidence behind any claim beyond Melbourne.
 5. Aerial path segmentation at NEU campus scale, feeding detected paths into the graph (fallback: OSM paths only).
-6. Agents: at least one, type TBD (LLM intake/planning assistant and/or walker sampling), with its evaluation set.
-7. Event days: Melbourne event calendar (AFL fixtures and crowds, hand-curated major events), event features, separate evaluation centred on Marvel Stadium.
-8. Web app: map, predicted flows, one or more what-if interactions; NEU Boston campus demonstration.
-9. Full MLOps loop: tracking, registry, validation gates, CI/CD, Cloud Run deployment, monitoring against new monthly counts, scheduled and triggered retraining, expo status panel.
-10. Data cards, license documentation, model cards.
+6. Agents: LLM intake agent (event specs and local-knowledge adjustments) with its evaluation set; route-sampling walkers.
+7. Crowd simulation (section 6.5): route-sampling walkers first, then microsimulation for limited outdoor areas on an existing open-source simulator, validated separately on controlled-experiment data.
+8. Event days: Melbourne event calendar (AFL fixtures and crowds, hand-curated major events), event features, separate evaluation centred on Marvel Stadium.
+9. Web app: map, predicted flows, one or more what-if interactions, store-siting view with the storefront exposure score, cached replay mode; NEU Boston campus demonstration. (3D walk views are Tier 2.)
+10. Full MLOps loop: tracking, registry, validation gates, CI/CD, Cloud Run deployment, monitoring against new monthly counts, scheduled and triggered retraining, expo status panel.
+11. Data cards, license documentation, model cards.
 
 ### Tier 2: Stretch goals (if time and budget allow, roughly in priority order)
-1. Sequential "what you see as you walk" viewshed visualization along routes.
-2. Second agent type (whichever wasn't chosen in Tier 1).
-3. Document upload for intake (event plans, traffic management PDFs).
-4. Per-site calibration upload flow in the UI (customer counts, ticket scans).
-5. Fenway game-day case study (MBTA surge + attendance check).
-6. Synthetic parameter-recovery test.
-7. Global-tier support: degraded-resolution training and the measured accuracy gap.
-8. NEU Oakland campus transfer demonstration.
-9. Fall Fest booth-exposure analysis (needs CSI table map).
-10. Advan visit-weighted amenity attraction (if NEU has Dewey access).
-11. Strava Metro validation (if the application is accepted).
-12. Street-level surface/shade classification from open street-level imagery (e.g., Mapillary; CC BY-SA, so share-alike caution).
+1. Spatio-temporal GNN (adopted only if it beats the gradient-boosted model).
+2. LLM planning assistant (if time is short in Tier 1).
+3. Sequential "what you see as you walk" viewshed visualization along routes (3D walk views).
+4. Marathon case studies: Melbourne (validation) and Boston (demonstration) (section 7.2).
+5. Research mode and terrain-grid graph builder, with optional per-site segmentation fine-tuning (section 6.7).
+6. Signage and billboard placement, pedestrians only (section 6.8).
+7. New-store before/after study at case-study scale, Emporium first (section 7.3).
+8. Document upload for intake (event plans, traffic management PDFs).
+9. Per-site calibration upload flow in the UI (customer counts, ticket scans).
+10. Fenway game-day case study (MBTA surge + attendance check).
+11. Synthetic parameter-recovery test.
+12. Global-tier support: degraded-resolution training and the measured accuracy gap.
+13. NEU Oakland campus transfer demonstration.
+14. Fall Fest booth-exposure analysis (needs CSI table map).
+15. Advan visit-weighted amenity attraction (if NEU has Dewey access).
+16. Strava Metro validation (if the application is accepted).
+17. Street-level surface/shade classification from open street-level imagery (e.g., Mapillary; CC BY-SA, so share-alike caution).
 
 ### Tier 3: Out of scope (future work; do not start without a team decision)
 - Inverse reinforcement learning for route preferences (the upgrade path once the GBM baseline exists).
-- Social-force or full microsimulation.
+- City-wide microsimulation (microsimulation stays limited to small areas; section 6.5).
 - Venue interiors.
 - Crowd-safety certification or guarantees of any kind.
 - Real-time streaming predictions.
@@ -347,7 +427,7 @@ Caveats shown to the user: the post-event surge is the hardest to predict; this 
 
 ### Explicitly rejected (never)
 - Phone or individual-level tracking.
-- Training a shipped model on non-commercial datasets (demo-only fine-tuning that is never shipped is allowed).
+- Shipping or distributing any model fine-tuned on non-commercial datasets.
 - LLM-computed or LLM-estimated numbers, routes, or locations.
 - Manual counting of people by the team.
 
@@ -355,18 +435,18 @@ Caveats shown to the user: the post-event surge is the hardest to predict; this 
 
 ## 12. Business model
 
-- **Tiers:** campus/site license (one site, a few seats); city license (whole network, scenario builder, API); research mode (free or discounted, open GIS exports).
+- **Tiers:** campus/site license (one site, a few seats); city license (whole network, scenario builder, API); store-siting plan for independent owners (a few candidate locations); research mode (free or discounted, open GIS exports).
 - **Unit economics:** cost per scenario stays low by design (precomputation, cheap inference, LLM only narrates finished results), so no per-query cost can outgrow the subscription price.
 
 ---
 
 ## 13. Open decisions and verification to-dos
 
-**Decisions:** which agents; graph and feature-table formats; orchestration tool; weather source (proposed: ERA5 via Open-Meteo, already pulled); expo date and timeline; ice handling for Boston (labeled hand-set rule vs. omit); exact boundaries of the within-Melbourne transfer precincts.
+**Decisions:** open-source microsimulator (after the licence check); graph and feature-table formats; orchestration tool; weather source (proposed: ERA5 via Open-Meteo, already pulled); expo date and timeline; ice handling for Boston (labeled hand-set rule vs. omit); exact boundaries of the within-Melbourne transfer precincts.
 
 **Decided (success criteria, reviewed by the team, Oct 2026):** flow model ≥15% lower MAE on log counts than Space Syntax + calibration on held-out sensors; 80% intervals cover 75–85%; NYC rank correlation ≥0.6 uncalibrated, and error on log totals halved after calibrating on 5 locations; segmentation recall ≥0.7 on known informal paths; intake agent ≥90% field-level accuracy with zero grounding violations reaching the user; p95 latency ≤2 s for precomputed scenarios. Full list in the scoping document, section 11.
 
-**Verify:** Metro Tunnel station entrance locations and opening dates (for the graph); newest NEU buildings' heights in the Boston buildings data; MBTA gated entries; NEU Dewey access; Cloud Composer pricing; competitor feature claims (do microsimulation tools support outdoor/climate features?) before stating them in a pitch.
+**Verify:** JuPedSim / Vadere licences; what Geopath and similar outdoor-advertising measurement already cover; Emporium Melbourne's exact opening date (news); controlled pedestrian-experiment data (Jülich archive); Melbourne Marathon route vs. sensors and race years in coverage; whether a usability test needs ethics review (if published); Metro Tunnel station entrance locations and opening dates (for the graph); newest NEU buildings' heights in the Boston buildings data; MBTA gated entries; NEU Dewey access; Cloud Composer pricing; competitor feature claims (do microsimulation tools support outdoor/climate features?) before stating them in a pitch.
 
 **Optional:** ask the CoM Open Data team (`opendata@melbourne.vic.gov.au`) for counts from Dec 2022 – Oct 2024, which no public source covers.
 

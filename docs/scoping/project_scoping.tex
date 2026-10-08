@@ -81,7 +81,7 @@
 
 {\LARGE\bfseries\color{heading} Project Scoping Submission: Stoa}\par
 \vspace{2pt}
-\textit{Pedestrian flow prediction and scenario planning. IE7374 MLOps, Northeastern University, Fall 2026. Stoa is a working name.}
+\textit{Pedestrian flow prediction and scenario planning. IE7374 MLOps, Northeastern University, Fall 2026.}
 
 \textbf{Team Members:}
 \begin{itemize}
@@ -99,7 +99,7 @@ Stoa predicts where people walk, how many, and when, across the paths and street
 
 Planners today have pedestrian counts at a handful of fixed sensors and almost nowhere else. Answering a what-if question usually means paying for manual counts and a consultant study, which takes weeks for a single scenario. Stoa learns the relationship between counts and the built environment where sensors exist. That includes network structure, slope, shade, destinations and their opening hours, visibility, weather, time and events. It then generalises to every unsensed segment and to edited versions of the network. How well it carries over to a new city is measured, not assumed (Section~\ref{sec:transfer}).
 
-\textbf{Users:} city planners (primary), campus planners, event organisers (outdoor approach streets around venues only, never venue interiors), and researchers (generic research mode with standard GIS exports).
+\textbf{Users:} city planners (primary), campus planners, event organisers (outdoor approach streets around venues only, never venue interiors), store owners choosing a site (``if I open here, how many people pass by, and when?''), and researchers (generic research mode with standard GIS exports).
 
 \textbf{Case studies:}
 \begin{itemize}
@@ -108,9 +108,10 @@ Planners today have pedestrian counts at a handful of fixed sensors and almost n
   \item \textbf{New York City (cross-city transfer test).} The model is trained on Melbourne and tested on NYC DOT's open pedestrian counts. This is the only evidence for any claim beyond Melbourne.
   \item \textbf{Northeastern University Boston campus (demonstration).} No local ground truth, so the campus is a transfer demonstration, not an accuracy claim.
   \item \textbf{Event scenario (demonstration).} A stadium or campus event on the outdoor approach streets.
+  \item \textbf{Marathons (stretch).} Melbourne Marathon as a validation case (course as closed edges with limited crossings); Boston Marathon as a demonstration (course as a barrier, spectator hotspots, leapfrogging spectators).
 \end{itemize}
 
-\textbf{ML components:} (1) a flow model predicting hourly volume per segment, progressing from baselines to gradient boosting to a spatio-temporal graph neural network with prediction intervals; (2) a path segmentation model that detects informal paths (desire lines) in aerial imagery and adds them to the network; (3) LLM agents that turn natural-language requests into a structured scenario and narrate model outputs. The agents never produce numbers themselves. These sit inside a full MLOps loop: versioned data, tracked experiments, gated deployment, monitoring, and monthly retraining on new counts, with automated drift alerts and automated rollback safeguards.
+\textbf{ML components:} (1) a flow model predicting hourly volume per segment with prediction intervals, progressing from baselines to gradient-boosted trees (the learned model in scope; a spatio-temporal graph neural network is a stretch goal and must beat it to be adopted); (2) a path segmentation model that detects informal paths (desire lines) in aerial imagery and adds them to the network; (3) crowd simulation in two stages: route-sampling walkers driven by the flow model, then physics-style microsimulation for limited areas such as event egress zones and station approaches; (4) an LLM intake agent that turns natural-language requests and local knowledge into a structured scenario and narrates model outputs. The agents never produce numbers themselves. These sit inside a full MLOps loop: versioned data, tracked experiments, gated deployment, monitoring, and monthly retraining on new counts, with automated drift alerts and automated rollback safeguards.
 
 % =====================================================================
 \section{Dataset Information}
@@ -137,7 +138,8 @@ Academic calendars & In-semester flag for segments near a university (University
 NYC DOT Bi-Annual Pedestrian Counts & Cross-city transfer test only; never training & NYC DOT via NYC Open Data \\\hline
 MassGIS 2025 orthos (15\,cm, leaf-off); NAIP 2023 (0.3\,m, leaf-on) & Path segmentation on the NEU campus. Leaf-off MassGIS is the primary input (paths under trees are visible); NAIP is the portable fallback & MassGIS / USDA \\\hline
 USGS 3DEP 1\,m; City of Boston buildings & NEU terrain and building heights (2010 survey, in feet) & USGS / City of Boston \\\hline
-Stanford Drone Dataset (planned) & Route-choice validation; fine-tuning for demonstration only, never shipped & Stanford \\\hline
+Stanford Drone Dataset (planned) & Route-choice validation and an academic calibration demonstration; no model fine-tuned on it is shipped or distributed & Stanford \\\hline
+Controlled pedestrian experiments (planned; e.g.\ the J\"ulich pedestrian dynamics data archive, to verify) & Microsimulation validation: speed--density measurements & Research archives \\\hline
 \end{xltabular}
 
 \subsection{Data Card}
@@ -239,7 +241,7 @@ Every source is pulled by a script in src/ingest/, configured in configs/data.ya
 
 \textbf{Customer data (future).} If a site uploads its own counts, that data stays scoped to that site's calibrated model. It is never pooled into the shared model and is deleted on request. Any account data (names, emails) would fall under GDPR/CCPA if EU/California users sign up, and would need a privacy notice and data processing terms.
 
-\textbf{Licenses.} We check each dataset's license before use, and record the original licence even when data comes from a mirror. Non-commercial data is used for validation and for demonstration-only fine-tuning; it never enters a shipped model, and nothing derived from it is distributed.
+\textbf{Licenses.} We check each dataset's license before use, and record the original licence even when data comes from a mirror. Non-commercial data is used for validation and academic demonstration only; no model fine-tuned on it appears in shipped or distributed artifacts.
 
 \begin{xltabular}{\linewidth}{|L{4.4cm}|L{4.2cm}|Y|}
 \hline\hrow
@@ -256,7 +258,7 @@ Open-Meteo (ERA5) & Data CC BY 4.0; free API non-commercial & OK for the course;
 Squiggle AFL & No published licence (public facts) & Credit; no bulk redistribution \\\hline
 NYC DOT counts (NYC Open Data) & NYC Open Data Law: no use restrictions & Evaluation only; credit NYC DOT \\\hline
 FABDEM; Vicmap 1\,m LiDAR; Vicmap Buildings & CC BY-NC-SA / restricted & Excluded \\\hline
-Stanford Drone Dataset & CC BY-NC-SA 3.0 (applies to every mirror) & Validation; demo-only fine-tuning, never shipped; derived weights not distributed \\\hline
+Stanford Drone Dataset & CC BY-NC-SA 3.0 (applies to every mirror) & Validation and academic demonstration only; no model fine-tuned on it appears in shipped or distributed artifacts \\\hline
 \end{xltabular}
 
 \textbf{Responsible use.} Outputs are planning guidance, not crowd-safety certification. The UI and agent text must never present forecasts as safety guarantees, and they must show uncertainty bands. Models must also be evaluated across different urban density tiers to ensure equity in prediction quality. Effects the model cannot learn from Melbourne (ice, class-change surges on campus) are either labelled as assumptions or left out, never presented as learned.
@@ -278,7 +280,7 @@ Stanford Drone Dataset & CC BY-NC-SA 3.0 (applies to every mirror) & Validation;
   \item \textbf{Missing data:} outages are missing rows and stay missing; never impute them as zero. Flag partial days. Detect level shifts at sensor replacement dates.
   \item \textbf{Sensor metadata:} recover coordinates for 3 retired sensors (IDs 28, 65, 78) or drop them; exclude indoor sensors.
   \item \textbf{Regime flags and breaks:} COVID lockdowns (2020-03 $\rightarrow$ 2021-11; 24\% of archive rows) as a feature or exclusion (report both); public and school holidays; event days; the Metro Tunnel opening (2025-11-30) as a structural break near the new stations.
-  \item \textbf{Graph:} build the walking graph from the CoM Pedestrian Network (Melbourne) or OSM (NEU, NYC); assign stable segment IDs; snap each sensor to its link.
+  \item \textbf{Graph:} build the walking graph from the CoM Pedestrian Network (Melbourne-rich model) and from OSM for every site, including an OSM-derived Melbourne graph for the portable model, so the NYC test measures city differences rather than graph-source differences; assign stable segment IDs; snap each sensor to its link.
   \item \textbf{Features per (segment, hour):} network centrality (Space Syntax-style integration and choice at several radii), slope (CoM survey, else DEM), shade (canopy and building shadow by sun position), destination density by type and opening hours, jobs and floor space, transit proximity, visibility, weather, time (hour, day of week, local holidays, sun elevation, daylight hours), academic term near universities, event proximity.
   \item \textbf{Transferable features only:} no sensor IDs, location IDs or raw coordinates (they let the model memorise places), and no calendar month or day of year. Melbourne's seasons are reversed from Boston's and New York's, so physical quantities (temperature, sun elevation, daylight) stand in for the calendar.
   \item \textbf{Portable and Melbourne-rich feature sets:} several strong Melbourne inputs (surveyed footpath slope, CLUE jobs and floor space, business establishments, canopy polygons) exist only for the City of Melbourne. Each feature is tagged portable or Melbourne-only, so a portable model can run in NYC and Boston.
@@ -293,7 +295,7 @@ Stanford Drone Dataset & CC BY-NC-SA 3.0 (applies to every mirror) & Validation;
 \begin{itemize}
   \item \textbf{Flow model:} spatially blocked grouped K-fold over sensors (5 folds), so neighbouring sensors on the same street never straddle folds. We also keep a final untouched test set of $\sim$20\% of sensors, stratified by area and volume.
   \item \textbf{Within-Melbourne transfer:} train on the CBD and hold out whole precincts of a different character: the University of Melbourne edge (Swanston St sensors 42--44, campus-like but not interior campus paths), Carlton (Lygon St, Pelham St) and North Melbourne / Kensington (Errol St, Macaulay Rd). With 3, 5 and 6 sensors, each precinct is reported uncalibrated and calibrated on 1--2 of its sensors.
-  \item \textbf{Cross-city transfer:} train the portable model on all of Melbourne; test on NYC DOT's 114 count locations, comparing each period total with the summed predicted hours.
+  \item \textbf{Cross-city transfer:} train the portable model on Melbourne's OSM-derived graph; test on NYC DOT's 114 count locations, comparing each period total with the summed predicted hours.
   \item \textbf{Era robustness:} train on the archive era (2009--2022) and test on the live era (2024--2026) for held-out sensors. The 23-month gap becomes a natural test of change over time.
   \item \textbf{Event days:} evaluated and reported separately from ordinary days. AFL event days rest on Marvel Stadium (7 sensors within 500\,m, reporting on every game day); the MCG has no sensor within 500\,m, so MCG results are weak evidence.
   \item \textbf{Calibration curve:} accuracy against the number of local sensors used, to show what a new site gains from installing a few counters. The full curve runs on held-out Melbourne sensors and on NYC's 114 locations. Route-choice validation uses trajectory datasets (Stanford Drone annotations only, $\sim$450\,MB).
@@ -371,12 +373,15 @@ Phone-location analytics & Footfall from mobile devices & Privacy concerns, cost
 
 \subsection{Proposed Solutions}
 \begin{itemize}
-  \item \textbf{Learned flow model:} predicts hourly volume with intervals for every segment, trained on 17 years of Melbourne counts. Progression: shortest-path betweenness and Space Syntax + calibration (baselines) $\rightarrow$ gradient-boosted trees on rich features $\rightarrow$ spatio-temporal GNN over the walking graph. The GNN is trained and tested on held-out sensors, which directly measures generalisation to unsensed paths, with prediction interval bounds provided for uncertainty calibration.
+  \item \textbf{Learned flow model:} predicts hourly volume with intervals for every segment, trained on Melbourne counts from 2009 onward. Usable history is thinner than that span suggests: 24\% of archive rows fall in the 2020--21 COVID period, and 43 sensors have five or more non-COVID years. Progression: shortest-path betweenness and Space Syntax + calibration (baselines) $\rightarrow$ gradient-boosted trees on rich features (the learned model in scope). A spatio-temporal GNN over the walking graph is a stretch goal, adopted only if it beats the gradient-boosted model on held-out sensors.
   \item \textbf{Transfer strategy (shape vs.\ scale):} the general model learns relative patterns (which segments and hours are busier than others); per-site calibration from a few local counts sets the absolute scale. Calibration is the core of how Stoa reaches a new site, not an add-on.
-  \item \textbf{Scenario engine:} edit the graph (close a link, add an entrance, add an event) $\rightarrow$ recompute affected features $\rightarrow$ re-predict in seconds. Sanity scenarios check the model behaves sensibly, e.g.\ closing a path lowers its flow and raises flow on alternatives.
+  \item \textbf{Scenario engine:} edit the graph (close a link, add an entrance, add an event) $\rightarrow$ recompute affected features $\rightarrow$ re-predict in seconds. Sanity scenarios check the model behaves sensibly, e.g.\ closing a path lowers its flow and raises flow on alternatives. User toggles are scenario edits: ``no shops here'' sets the amenity features to absent and edits related features (such as land use) together, with out-of-range and reverse-causality caveats shown. Models trained without a feature are internal only, for sites lacking that data and for ablations.
+  \item \textbf{Crowd simulation:} first, route-sampling walkers draw routes from the flow model's route probabilities and aggregate them per segment and time step for congestion and crowd animation. Second, physics-style microsimulation (social-force family) runs only in limited outdoor areas: event egress zones, course crossing points, station approaches. We adopt an existing open-source simulator (e.g.\ JuPedSim or Vadere; licences to verify) rather than writing one, and validate it against controlled pedestrian-experiment data, reported separately from the flow model.
+  \item \textbf{Store siting view:} click a storefront location to see hourly and weekly pass-by curves and compare candidate locations side by side. This is the model's own target, so it needs no new modelling. An \textbf{exposure score} combines predicted foot traffic with visibility (how many passersby can see the storefront, and from how far), weighted towards the main direction of travel where directional counts exist (from 2024). The same score serves event booths and, as a stretch goal, pedestrian signage. Exposure is reported as visible impressions, not predicted customers, because our sensors count passersby, not store visits.
   \item \textbf{Path segmentation:} a computer vision model detects informal paths in aerial imagery and adds them to the graph.
   \item \textbf{Climate and visibility features:} slope, shade by sun position, weather, and 3D visibility from a viewshed engine.
-  \item \textbf{Grounded LLM agents:} parse a request (``it's game day at the MCG, 7:40pm'') into a structured event spec where every field records its source. Then narrate model results. Every number in agent output must trace to a model output or graph query, or the response is blocked. Ambiguous places go to the map for the user to confirm.
+  \item \textbf{Grounded LLM intake agent:} parse a request (``it's game day at the MCG, 7:40pm'') into a structured event spec where every field records its source. Then narrate model results. Every number in agent output must trace to a model output or graph query, or the response is blocked. Ambiguous places go to the map for the user to confirm. A deterministic, non-LLM path produces every result the agent narrates.
+  \item \textbf{Local knowledge as adjustments:} the learned model always produces the base prediction. Plain-language knowledge (``people avoid this corridor at night'') is parsed into a structured adjustment (segments, conditions, direction); the user picks its strength from fixed levels (slight, moderate, strong) whose effect sizes come from Melbourne data such as closures, new station entrances and event days. The LLM never sets the value. Adjustments are labelled assumptions with a with/without comparison, and later counts update them through calibration.
   \item \textbf{Full MLOps loop:} versioned data, tracked experiments, gated deployment with canary rollout, drift monitoring, and monthly retraining on new counts.
 \end{itemize}
 
@@ -398,7 +403,7 @@ Ice and snow & Melbourne's centre essentially never freezes, so nothing about ic
 Campus rhythms & Class-change surges are minutes long and absent from CBD data & Academic-term feature captures semester swings (UniMelb-edge sensors run at $\sim$0.45$\times$ their mean in Jan/Dec and $\sim$1.6$\times$ in March; CBD sensors barely move). Class-change surges are named as not captured this semester \\\hline
 Sensor placement bias & Sensors sit where traffic matters; quiet paths are rare in training & Within-Melbourne transfer test on quieter precincts; wider intervals and a visible flag outside the training range \\\hline
 Hemisphere & Reversed seasons make calendar month misleading & Physical quantities instead of month \\\hline
-Melbourne-only layers & Surveyed slope, jobs and floor space, business locations and canopy outlines don't exist in the same form elsewhere & A portable model on features any city has (OSM, terrain, land cover, weather, building heights) for NYC and Boston; report its gap to the Melbourne-rich model \\\hline
+Melbourne-only layers & Surveyed slope, jobs and floor space, business locations and canopy outlines don't exist in the same form elsewhere & A portable model on features any city has (OSM, terrain, land cover, weather, building heights), trained on an OSM-derived Melbourne graph, for NYC and Boston; report its gap to the Melbourne-rich model \\\hline
 \end{xltabular}
 
 \textbf{The claim we make:} the model learns pedestrian patterns in Melbourne; the within-Melbourne transfer test shows how it handles unfamiliar kinds of area; the NYC test shows what happens in a new city; and calibration with a small number of local counts closes much of the remaining gap. We do not claim global generalisation.
@@ -431,14 +436,14 @@ Melbourne-only layers & Surveyed slope, jobs and floor space, business locations
   \node[stage=\w] (a3) at (2*\gx,0) {\textbf{Validate}\\ Schema, ranges, duplicates, outages, drift checks};
   \node[stage=\w, bn] (a4) at (3*\gx,0) {\textbf{Graph + features}\\ Network, Space Syntax metrics, slope, shade, POIs, visibility, weather, time, events\bnlabel{VIEWSHED COMPUTE $\rightarrow$ PRECOMPUTE}};
   % Row 2
-  \node[stage=\w, ml] (b1) at (0,-\gy) {\textbf{Flow model}\\ Baselines $\rightarrow$ gradient boosting $\rightarrow$ spatio-temporal GNN; prediction intervals\mllabel{ONLY $\sim$100 LABELLED SITES}};
+  \node[stage=\w, ml] (b1) at (0,-\gy) {\textbf{Flow model}\\ Baselines $\rightarrow$ gradient boosting (GNN stretch); prediction intervals\mllabel{ONLY $\sim$100 LABELLED SITES}};
   \node[stage=\w, ml] (b2) at (\gx,-\gy) {\textbf{Path segmentation}\\ Informal paths from aerial imagery added to the graph};
   \node[stage=\w, gate] (b3) at (2*\gx,-\gy) {\textbf{Validation gates}\\ Held-out sensors, beat baselines + current model, sanity scenarios, transfer tests};
   \node[stage=\w] (b4) at (3*\gx,-\gy) {\textbf{Registry + deploy}\\ MLflow model card, Docker image, canary on Cloud Run};
   % Row 3
   \node[stage=\w] (c1) at (0,-2*\gy) {\textbf{Scenario API}\\ Edit graph $\rightarrow$ re-predict; heavy work precomputed};
-  \node[stage=\w, bn] (c2) at (\gx,-2*\gy) {\textbf{LLM agents}\\ Parse request $\rightarrow$ event spec; narrate model outputs only\bnlabel{GROUNDING, COST, LATENCY}};
-  \node[stage=\w] (c3) at (2*\gx,-2*\gy) {\textbf{Web app}\\ Map, scenario builder, 3D walk views, GIS export};
+  \node[stage=\w, bn] (c2) at (\gx,-2*\gy) {\textbf{Agents + simulation}\\ LLM intake $\rightarrow$ event spec, adjustments; walkers; microsimulation (limited areas)\bnlabel{GROUNDING, COST, SAFETY READINGS}};
+  \node[stage=\w] (c3) at (2*\gx,-2*\gy) {\textbf{Web app}\\ Map, scenario builder, store-siting view, GIS export};
   \node[stage=\w, gate] (c4) at (3*\gx,-2*\gy) {\textbf{Monitor + retrain}\\ Monthly new counts, drift, grounding violations, cost};
   \foreach \r in {a,b,c}{
     \draw[flow] (\r1.east) -- (\r2.west); \draw[flow] (\r2.east) -- (\r3.west); \draw[flow] (\r3.east) -- (\r4.west);}
@@ -461,13 +466,15 @@ Turnaround target: seconds per scenario}
 \hline\hrow
 \textbf{Bottleneck} & \textbf{Why} & \textbf{Improvement} \\\hline
 \endhead
-Few labelled sites ($\sim$100 sensors) & Limits what a model can learn about unsensed paths & Graph model shares information along the network; spatial CV; calibration curve; strong baselines as a floor \\\hline
+Few labelled sites ($\sim$100 sensors) & Limits what a model can learn about unsensed paths & Network features share information along the graph; spatial CV; calibration curve; strong baselines as a floor \\\hline
 Transfer to new sites & Only one city of dense ground truth; volumes, ice, campus rhythms and seasons differ elsewhere & Transferable features; shape vs.\ scale with per-site calibration; within-Melbourne and NYC transfer tests (Section~\ref{sec:transfer}) \\\hline
 23-month count gap & Two separate eras of data & Use as a temporal robustness test; era feature \\\hline
 Viewshed and network-metric compute & Ray-casting and centrality are expensive per scenario & Precompute baseline values; recompute only the affected neighbourhood on edits \\\hline
 LLM cost, latency and grounding & Per-interaction calls are slow and costly; risk of invented numbers & Call the LLM only for intake and final narration; grounding checker blocks untraceable numbers \\\hline
 Source churn (OSM edits, API changes) & Segment IDs and schemas drift & Stable ID mapping; schema validation; last-good snapshot fallback \\\hline
-Model latency on large networks & Real-time graph inference across thousands of nodes can exceed target latency & Sub-graph slicing, aggressive caching, and batch prediction optimization \\\hline
+Model latency on large networks & Re-predicting thousands of segments per edit can exceed target latency & Sub-graph slicing, aggressive caching, and batch prediction optimization \\\hline
+Microsimulation compute and ground truth & Physics-style crowds are expensive, and Melbourne counts validate flows, not crowd dynamics & Limited areas only; existing open-source simulator; controlled-experiment data for validation, reported separately \\\hline
+Live demo failure & Live model and LLM calls can fail in front of an audience & Cached replay mode: record real runs and replay them during the expo \\\hline
 \end{xltabular}
 
 % =====================================================================
@@ -486,7 +493,11 @@ Flow model & Event-day error and peak hour bias, reported separately & AFL match
 Flow model & Calibration curve: error vs number of local sensors & Simulated new-site setting in Melbourne; NYC \\\hline
 Transfer (within city) & Spearman rank correlation and MAE on log counts, uncalibrated and calibrated on 1--2 sensors & Held-out Melbourne precincts (UniMelb edge, Carlton, North Melbourne) \\\hline
 Transfer (cross city) & Spearman rank correlation across locations per period; error on log period totals before and after calibrating on $k$ locations & NYC DOT bi-annual counts \\\hline
+Flow model (equity) & Error by urban-density tier & Held-out sensors grouped by density \\\hline
 Scenarios & Sanity-scenario pass rate & Scenario test suite \\\hline
+Microsimulation & Speed--density relation and flow through bottlenecks vs measured values, reported separately from the flow model & Controlled pedestrian-experiment data \\\hline
+Knowledge adjustments & Change in post-opening error when the Metro Tunnel opening is entered as a planner statement & Melbourne sensors near the new stations \\\hline
+Workflow & Technical decisions and time to first scenario, vs a Space Syntax workflow & Scripted comparison; optional small usability test \\\hline
 Path segmentation & IoU / F1; recall of known paths & Held-out tiles \\\hline
 Intake agent & Field-level extraction accuracy; location placement accuracy; grounding violation rate & tests/agent\_eval/ \\\hline
 System & p95 API latency; error rate; cost per scenario; pipeline success rate & Production monitoring \\\hline
@@ -498,6 +509,8 @@ System & p95 API latency; error rate; cost per scenario; pipeline success rate &
   \item Answer a planning what-if in seconds instead of weeks.
   \item Run as a reproducible MLOps system: versioned data, tracked experiments, gated releases, monitoring and automatic retraining.
   \item Measure how the approach transfers: to unfamiliar areas within Melbourne, to a new city (NYC), and with a few local counts for calibration. Demonstrate it on a site without sensors (NEU campus) and on event days.
+  \item Simulate crowds: route-sampling walkers everywhere, and microsimulation in limited outdoor areas, validated separately against controlled-experiment data.
+  \item Answer store-siting questions: hourly and weekly pass-by at candidate storefronts.
 \end{enumerate}
 
 \subsection{Alignment with Business Goals}
@@ -505,7 +518,9 @@ System & p95 API latency; error rate; cost per scenario; pipeline success rate &
   \item \textbf{Lower cost per decision:} fewer manual counts and consultant studies per scenario.
   \item \textbf{Better decisions:} more options tested, with uncertainty shown, before money is spent on construction.
   \item \textbf{Comfort and access:} slope, shade and climate features show where routes are hard for older people or people with disabilities, or uncomfortable in heat.
-  \item \textbf{Event operations:} approach-street planning for game days.
+  \item \textbf{Event operations:} approach-street planning for game days, with crowd simulation at egress zones and station approaches.
+  \item \textbf{Store siting:} independent owners ask how many people pass a candidate storefront, and when. Existing tools (Placer.ai, FootfallCam's location analysis app, GrowthFactor) mostly rely on phone data or installed counters and are priced for chains; Stoa is privacy-safe, works without sensors and is affordable for independent owners. The UI states that pass-by is not walk-in, that exposure is visible impressions rather than customers, and that a store changes the traffic around it.
+  \item \textbf{Signage (stretch):} street-level signs and billboards for pedestrians, using the same exposure score plus sign size, height, viewing angle, occlusion and readability. Outdoor-advertising audiences are already measured for vehicles (e.g.\ Geopath in the US); our angle is pedestrian, 3D, and before installation.
   \item \textbf{Market \& Business Model:} city and campus planners and event organisers; per-site calibration is the path to new customers via a B2B SaaS model offering tiered subscriptions based on site area and API usage. The calibration curve tells a customer how many counters they need.
 \end{itemize}
 
@@ -518,7 +533,7 @@ System & p95 API latency; error rate; cost per scenario; pipeline success rate &
 \hline\hrow
 \textbf{Risk} & \textbf{Likelihood} & \textbf{Mitigation} \\\hline
 \endhead
-Learned model does not beat the Space Syntax baseline & Medium & Checkpoint in weeks 5--6. Gradient-boosted model as an intermediate learned model; feature ablations; fall back to hybrid ensembling if GNN gains stall; report honestly \\\hline
+Learned model does not beat the Space Syntax baseline & Medium & Gradient-boosted model fully evaluated by week 4; checkpoint in week 6; feature ablations; report honestly. The GNN is a stretch goal adopted only if it beats the gradient-boosted model \\\hline
 Counts licence field empty on the portal & Low & Portal-wide terms put all CoM open data under CC BY 4.0; credit the City of Melbourne \\\hline
 Overfitting to sensor locations & Medium & Spatially blocked CV; untouched final test sensors; no location identifiers as features \\\hline
 Model ranks well but misses volumes in a new city & High & Report rank and scale separately; per-site calibration; show the calibration curve rather than claim zero-shot accuracy \\\hline
@@ -526,7 +541,9 @@ Effects absent from Melbourne (ice, class-change surges) & Certain & Labelled ha
 Portable model much weaker than the Melbourne-rich one & Medium & Report the gap honestly; calibration on local counts; keep Melbourne-only layers for Melbourne accuracy \\\hline
 Metro Tunnel opening (2025-11-30) shifts recent counts near the new stations & Certain & Station entrances with opening dates in the graph; split results at the opening or add a station-access feature \\\hline
 Losing count history (the portal keeps only $\sim$2 years) & Certain without action & Merge-only ingest; dated snapshot; DVC versions of every pull \\\hline
-Scope creep (3D, agents, segmentation) & High & Scope guardrails; integrate the viewshed as precomputed features first \\\hline
+Scope creep (3D, agents, segmentation, microsimulation) & High & Scope guardrails; GNN, 3D walk views and the planning assistant moved to stretch; microsimulation in two stages on an existing simulator; integrate the viewshed as precomputed features first \\\hline
+Microsimulation read as a safety assessment & Medium & Outdoor approach areas only, never venue interiors; planning-guidance wording enforced in the UI and agent text \\\hline
+No crowd-dynamics ground truth in Melbourne & Certain & Validate microsimulation on controlled-experiment data and report it separately from the flow model \\\hline
 No ground truth at NEU & Certain & Present NEU as a demonstration only; accuracy claims rest on Melbourne; transfer claims rest on the Melbourne and NYC tests \\\hline
 Cloud budget overrun & Medium & Cloud Run scale-to-zero; budget alerts; precompute; no per-click LLM calls \\\hline
 \end{xltabular}
@@ -549,7 +566,7 @@ Agents & Invented numbers, wrong place, prompt injection & Grounding checker blo
 \subsection{Risks After Deployment}
 \begin{itemize}
   \item \textbf{Drift:} new developments, construction closures, or behaviour change after events like COVID. Detect through monthly accuracy on new counts and input drift; retrain.
-  \item \textbf{Misuse:} forecasts read as safety guarantees. Mitigate with UI and agent wording rules and visible uncertainty bands.
+  \item \textbf{Misuse:} forecasts or crowd simulations read as safety guarantees, or pass-by read as expected customers. Mitigate with UI and agent wording rules, visible uncertainty bands, and labelled assumptions for user adjustments.
   \item \textbf{Transfer error:} a new site behaves differently from Melbourne, most of all in absolute volume. Mitigate with per-site calibration, the measured transfer results and calibration curve to set expectations, and a visible flag when a site's features fall outside the training range.
 \end{itemize}
 
@@ -607,7 +624,7 @@ Cloud Scheduler + Cloud Run jobs & Proposed orchestration: Cloud Scheduler trigg
 Cloud Storage & DVC remote (data), model artifacts, precomputed baseline flows and viewsheds \\\hline
 MLflow & Experiment tracking (with DVC data version) and model registry with model cards \\\hline
 Cloud Run (API) & Prediction and scenario endpoints; one Docker image bundles the model, the feature pipeline (same code as training) and the viewshed engine; canary rollout with automatic rollback; per-site calibrated variants stored separately \\\hline
-Cloud Run (web app) & Map, scenario builder, results, 3D walk views \\\hline
+Cloud Run (web app) & Map, scenario builder, store-siting view, results; cached replay mode for the expo (3D walk views are a stretch goal) \\\hline
 Secret Manager & LLM API key and service credentials; nothing hard-coded \\\hline
 Cloud Monitoring + Logging & Latency, errors, drift metrics, cost and budget alerts \\\hline
 \end{xltabular}
@@ -640,13 +657,14 @@ Retraining runs monthly on new counts, when accuracy drops or drift is detected,
   \item Flow model beats both baselines on held-out sensors: $\geq$~15\% lower MAE on log counts than Space Syntax + calibration.
   \item Prediction intervals are calibrated: 80\% intervals cover 75--85\% of held-out observations.
   \item Event-day error is reported separately, and no event-day claim is made without it.
-  \item Transfer is reported, not assumed: within-Melbourne precinct results are reported uncalibrated and calibrated on 1--2 sensors, NYC results uncalibrated and along the calibration curve, and no claim beyond Melbourne is made without them. Target: on NYC, rank correlation across locations $\geq$~0.6 uncalibrated, and error on log totals halved after calibrating on 5 locations.
+  \item Transfer is reported, not assumed: within-Melbourne precinct results are reported uncalibrated and calibrated on 1--2 sensors, NYC results uncalibrated and along the calibration curve, and no claim beyond Melbourne is made without them. Goal (not a pass/fail criterion): on NYC, rank correlation across locations $\geq$~0.6 uncalibrated, and error on log totals halved after calibrating on 5 locations.
   \item 100\% of sanity scenarios pass before any deployment.
+  \item Microsimulation validation is reported separately from the flow model, against controlled-experiment data.
   \item Path segmentation: recall $\geq$~0.7 on known informal paths in held-out tiles.
   \item Intake agent: $\geq$~90\% field-level accuracy on tests/agent\_eval/, and zero grounding violations reach the user.
   \item System: p95 latency $\leq$~2\,s for precomputed scenarios; the full pipeline runs end to end from the scheduler with no manual steps; a bad canary is rolled back automatically in a staged test.
   \item Reproducibility: any reported number can be regenerated from a git commit + DVC version + MLflow run.
-  \item Demonstrations: NEU campus and one event scenario run end to end in the web app, with their known gaps (ice, class-change surges) stated on screen.
+  \item Demonstrations: NEU campus, one event scenario with crowd simulation, and the store-siting view run end to end in the web app (or from cached replay), with their known gaps (ice, class-change surges) stated on screen.
 \end{enumerate}
 
 % =====================================================================
@@ -658,16 +676,16 @@ Retraining runs monthly on new counts, when accuracy drops or drift is detected,
 \hline\hrow
 \textbf{Week} & \textbf{Dates (2026)} & \textbf{Deliverables} \\\hline
 \endhead
-1 & Sep 28 -- Oct 4 & Scoping; data audit; ingest scripts for all Melbourne sources (done); NYC DOT counts checked \\\hline
-2 & Oct 5 -- 11 & DVC + GCS remote (first: version the rolling counts table); unified counts table; validation checks; freeze graph, feature-table and event-spec interfaces \\\hline
-3 & Oct 12 -- 18 & Graph build from CoM network; features v1; baselines (betweenness, Space Syntax + calibration); spatial CV harness with transfer-precinct folds \\\hline
-4 & Oct 19 -- 25 & Gradient-boosted flow model; MLflow tracking; first comparison to baselines; NYC ingest and OSM graph around the count locations \\\hline
-5 & Oct 26 -- Nov 1 & Spatio-temporal GNN v1; prediction intervals \\\hline
-6 & Nov 2 -- 8 & Checkpoint: model vs baselines decision, informed by within-Melbourne and NYC transfer results. Segmentation dataset; intake agent eval set; API skeleton \\\hline
-7 & Nov 9 -- 15 & Segmentation model; scenario API with sanity scenarios; intake agent; viewshed features \\\hline
-8 & Nov 16 -- 22 & Web app v1; Docker image; CI/CD; Cloud Run deploy \\\hline
-9 & Nov 23 -- 29 & Monitoring, drift detection, retraining trigger; event-day evaluation \\\hline
-10 & Nov 30 -- Dec 6 & NEU campus + event demos; canary/rollback test; documentation \\\hline
+1 & Sep 28 -- Oct 4 & Scoping; data audit; ingest scripts for all sources (done) \\\hline
+2 & Oct 5 -- 11 & DVC + GCS remote (first: version the rolling counts table); unified counts table; validation checks; freeze graph, feature-table, event-spec and adjustment interfaces \\\hline
+3 & Oct 12 -- 18 & Graph build from the CoM network and an OSM-derived Melbourne graph; features v1; baselines (betweenness, Space Syntax + calibration); spatial CV harness with transfer-precinct folds \\\hline
+4 & Oct 19 -- 25 & Gradient-boosted flow model fully evaluated: held-out sensors, baselines, intervals, transfer precincts; MLflow tracking; NYC graph around the count locations \\\hline
+5 & Oct 26 -- Nov 1 & Calibration curve (Melbourne and NYC); portable model and NYC cross-city test; event-day evaluation; route-sampling walkers v1 \\\hline
+6 & Nov 2 -- 8 & Checkpoint: model vs baselines decision. Integration dry run (data $\rightarrow$ features $\rightarrow$ model $\rightarrow$ API $\rightarrow$ map). Segmentation dataset; intake agent eval set; API skeleton \\\hline
+7 & Nov 9 -- 15 & Segmentation model; intake agent (event specs and knowledge adjustments); microsimulation set-up on an open-source simulator for one limited area \\\hline
+8 & Nov 16 -- 22 & Scenario API with sanity scenarios; viewshed features; web app v1 with the store-siting view and exposure score; Docker image; CI/CD; Cloud Run deploy \\\hline
+9 & Nov 23 -- 29 & Microsimulation validation against controlled-experiment data; Metro Tunnel knowledge-adjustment test; monitoring, drift detection, retraining trigger \\\hline
+10 & Nov 30 -- Dec 6 & NEU campus, event and store-siting demos; cached replay mode; canary/rollback test; documentation \\\hline
 11 & Dec 7 -- 11 & Final report, model cards, presentation \\\hline
 \end{xltabular}
 
@@ -676,19 +694,22 @@ Retraining runs monthly on new counts, when accuracy drops or drift is detected,
 
 \subsection{Scope Guardrails}
 
-\textbf{In scope:} flow model, transfer tests (within-Melbourne precincts and NYC), path segmentation (campus scale), agents, event days, viewshed integration, MLOps loop, web app.
+\textbf{In scope:} flow model (gradient-boosted), transfer tests (within-Melbourne precincts and NYC), crowd simulation (route-sampling walkers, then microsimulation in limited outdoor areas), path segmentation (campus scale), LLM intake agent with knowledge adjustments, event days, viewshed integration, store-siting view, MLOps loop, web app.
 
-\textbf{Out of scope (Tier 2 -- future work):} inverse reinforcement learning, social-force microsimulation, venue interiors, Fenway validation, cross-campus transfer demonstration (NEU Oakland), class-change surge modelling, learned ice and snow effects.
+\textbf{Stretch goals (Tier 2):} spatio-temporal GNN, LLM planning assistant, 3D walk views, Melbourne and Boston marathon case studies, research mode with a terrain-grid graph builder, pedestrian signage placement, a new-store before/after study (case-study scale), Fenway validation, cross-campus transfer demonstration (NEU Oakland).
+
+\textbf{Out of scope (future work):} inverse reinforcement learning, venue interiors, city-wide microsimulation, class-change surge modelling, learned ice and snow effects.
 
 \subsection{Open Decisions}
 \begin{itemize}
-  \item Final project name and branding guidelines
-  \item Agents: LLM intake/planning assistant, walker simulation, or both
+  \item Open-source microsimulator (e.g.\ JuPedSim or Vadere), after checking licences
   \item Graph and feature-table formats
   \item Orchestration tool (Cloud Scheduler + Cloud Run jobs vs Airflow on a VM)
   \item Weather source (proposed: ERA5 via Open-Meteo)
   \item Ice in Boston predictions: labelled hand-set rule, or omit
 \end{itemize}
+
+\textbf{To verify:} simulator licences; availability of controlled pedestrian-experiment data (e.g.\ the J\"ulich archive); Melbourne Marathon route against sensor locations and which race years fall in the data; MBTA gated-entry data for the Boston Marathon demonstration.
 
 \subsection{Data Findings from the Initial Audit}
 \begin{itemize}
@@ -703,11 +724,12 @@ Retraining runs monthly on new counts, when accuracy drops or drift is detected,
   \item No sensor lies within 500\,m of the MCG; event-day evaluation rests on Marvel Stadium.
   \item The Metro Tunnel (opened 2025-11-30) shows in the data: sensors within 300\,m of the new stations rose a median $\sim$4.5\% year on year while others were flat. The 2019 CoM network has no station entrances.
   \item Every outdoor sensor is within 18\,m of a walkable CoM link (median 2\,m), so sensor-to-edge matching is feasible, but each sensor has $\sim$3 candidate links within 10\,m and needs a hand check.
+  \item A before/after test of new stores is feasible only as case studies: of 133 large openings in the business census, 7 have a sensor within 100\,m with counts before and after, and none is clean. The one strong case is Emporium Melbourne (2014), with sensors 164--191\,m away.
   \item Opening hours are sparse: $\sim$12\% of OSM amenities and shops in the study area carry them, and the CoM datasets have none, so ``open now'' is a partial feature with explicit missingness.
 \end{itemize}
 
 \subsection{Tech Stack}
 
-Python 3.11+, pandas, GeoPandas, rasterio, PyTorch / PyTorch Geometric (GNN), LightGBM, DVC, MLflow, FastAPI, Docker, GitHub Actions, Google Cloud (Cloud Run, Cloud Storage, Artifact Registry, Secret Manager, Cloud Scheduler), a web map front end (MapLibre / deck.gl), and an LLM API for the agents. Documentation in Markdown and LaTeX.
+Python 3.11+, pandas, GeoPandas, rasterio, LightGBM, PyTorch (segmentation, viewshed; PyTorch Geometric for the stretch GNN), an open-source pedestrian simulator, DVC, MLflow, FastAPI, Docker, GitHub Actions, Google Cloud (Cloud Run, Cloud Storage, Artifact Registry, Secret Manager, Cloud Scheduler), a web map front end (MapLibre / deck.gl), and an LLM API for the agents. Documentation in Markdown and LaTeX.
 
 \end{document}

@@ -1,0 +1,18 @@
+# Parameters for one-off analyses under src/analysis/. Paths are relative to the repo root.
+processed_dir: data/processed
+
+new_openings:
+  # Feasibility of the new-store before/after study (PROJECT_CONTEXT 7.3): find large openings near
+  # count sensors that have counts before and after them.
+  crs: 28355  # GDA94 / MGA zone 55 (metres)
+  # ANZSIC 2-digit groups that attract foot traffic: retail (39-43), food and beverage (45),
+  # arts and recreation (89-92).
+  attractor_divisions: ["39", "40", "41", "42", "43", "45", "89", "90", "91", "92"]
+  min_new_establishments: 10    # jump at one property between consecutive census years
+  min_new_seats: 300            # cafe/restaurant seats added at one property
+  neighbourhood_radius_m: 75    # net change here filters out property re-coding artefacts
+  min_neighbourhood_gain: 5
+  sensor_radius_m: 100          # a sensor must be this close to see the effect
+  min_year_completeness: 0.8    # share of hours present in the before and after years
+  # Years with unusual counts: flagged, not dropped.
+  covid_years: [2020, 2021]

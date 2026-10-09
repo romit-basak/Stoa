@@ -146,7 +146,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
   - Run tests: `.venv/bin/python -m pytest`; lint: `.venv/bin/ruff check src tests && .venv/bin/ruff format src tests`
   - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
   - Build OSM features: `.venv/bin/python -m src.features.osm [--site melbourne] [--only extract,graph,features,sensors]` (column dictionary and join recipe in `docs/features/osm_features.md`)
-  - Run pipeline: **TBD**
+  - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Run the pipeline")
   - Run app locally: **TBD**
 
 ## Scope guardrails

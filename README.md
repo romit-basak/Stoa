@@ -84,6 +84,27 @@ Options:
 
 Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md).
 
+### Run the pipeline (Airflow)
+
+The Melbourne pipeline runs as one Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), in Docker. Requires Docker Desktop.
+
+```bash
+docker compose up -d --build     # first run builds the image (a few minutes)
+# open http://localhost:8080 (no login locally), unpause stoa_pipeline, press Trigger
+docker compose down              # stop; add -v to also wipe Airflow's database
+```
+
+The repo is mounted into the containers, so code changes apply on the next run; changes to `pyproject.toml` dependencies need `--build`. Data is written to `data/` on the host, as when running the modules directly.
+
+```
+pull_counts ────────────────────────────────────────────┐
+pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┐
+pull_weather ───────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► dvc_push
+pull_calendars ─────────────────────────────────────────────────────────────────┘
+```
+
+(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `join_all`, `validate` and `dvc_push` are placeholders: replace a task's body and keep its name, and the wiring stays the same. A full run takes about 3.5 minutes; `pull_counts` (re-downloading the 2-year counts export) is the slowest task.
+
 ### Tests and lint
 
 ```bash
@@ -99,6 +120,7 @@ configs/calendars/       hand-maintained school terms and university teaching pe
 configs/analysis.yaml    parameters for src/analysis/
 configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, sensor matching)
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
+dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
 data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, planned)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues

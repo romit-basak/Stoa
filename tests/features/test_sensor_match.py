@@ -99,6 +99,17 @@ def test_override_wins(street, fcfg):
     assert (r.segment_id, r.method, r.needs_review) == ("road-0", "override", False)
 
 
+def test_stale_override_fails_loudly(street, fcfg):
+    # After an extract refresh an override can point at a segment that no longer exists.
+    with pytest.raises(ValueError, match="1 -> gone-0"):
+        match_sensors(
+            sensors((1, (20, 3), "Outdoor", None)),
+            street,
+            fcfg["sensor_match"],
+            overrides={1: "gone-0"},
+        )
+
+
 def test_axes():
     assert sensor_axis("North", "South") == 0.0
     assert sensor_axis("In", "East") == 90.0

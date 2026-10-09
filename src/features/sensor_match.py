@@ -15,6 +15,7 @@ Outputs in data/processed/features/<site>/:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
@@ -42,6 +43,32 @@ def axis_diff(a: float, b: float) -> float:
     """Smallest angle between two undirected axes (0-90)."""
     d = abs(a - b) % 180.0
     return min(d, 180.0 - d)
+
+
+def sensor_locations_path(data_cfg: dict[str, Any]) -> Path:
+    return (
+        REPO_ROOT
+        / data_cfg["raw_dir"]
+        / "melbourne_portal"
+        / "pedestrian-counting-system-sensor-locations.geojson"
+    )
+
+
+def check_overrides(overrides: dict[int, str], edges: gpd.GeoDataFrame) -> None:
+    """Fail if an override names a segment the graph doesn't have.
+
+    Segment IDs belong to one OSM extract, so after a refresh old overrides can point at
+    segments that no longer exist. Matching would then leave that sensor without features.
+    """
+    known = set(edges["segment_id"])
+    stale = {lid: seg for lid, seg in overrides.items() if seg not in known}
+    if stale:
+        listed = ", ".join(f"{lid} -> {seg}" for lid, seg in sorted(stale.items()))
+        raise ValueError(
+            f"sensor overrides name segments missing from the current graph ({listed}). "
+            "The OSM extract has probably changed: re-check these sensors in "
+            "sensor_match_review.csv and update configs/sensor_overrides.yaml."
+        )
 
 
 def candidates(
@@ -83,6 +110,7 @@ def match_sensors(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return (map, candidates). The map has one row per sensor, matched or not."""
     overrides = overrides or {}
+    check_overrides(overrides, edges)
     cand = candidates(sensors, edges, cfg)
     first = cand[cand["rank"] == 1].set_index("location_id")
     second = cand[cand["rank"] == 2].set_index("location_id")
@@ -157,12 +185,7 @@ def sensor_match(
     site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]
 ) -> dict[str, Any]:
     cfg = fcfg["sensor_match"]
-    sensors = gpd.read_file(
-        REPO_ROOT
-        / data_cfg["raw_dir"]
-        / "melbourne_portal"
-        / "pedestrian-counting-system-sensor-locations.geojson"
-    ).to_crs(site.crs)
+    sensors = gpd.read_file(sensor_locations_path(data_cfg)).to_crs(site.crs)
     edges = gpd.read_parquet(site.graph_dir / "edges.parquet")
     m, cand = match_sensors(sensors, edges, cfg, load_overrides(site, cfg))
     write_parquet(m, site.processed / "sensor_segment_map.parquet")

@@ -1,0 +1,13 @@
+# The image only needs pyproject.toml (see Dockerfile); the repo is mounted at run time.
+# Keeping data and environments out of the build context avoids sending gigabytes to Docker.
+data/
+.venv/
+.git/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+docs/**/build/
+*.pdf
+*.docx
+.DS_Store

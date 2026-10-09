@@ -4,11 +4,17 @@ validate and version the result.
 Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
 /opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
 keep the task name, and the wiring at the bottom stays the same.
+
+The OSM extract is pinned: a daily run keeps the file it has, and the OSM stages skip
+themselves (--if-stale) unless the extract, the feature config or code, the sensor
+locations or the sensor overrides changed. To move to a newer extract, trigger the DAG with
+refresh_osm = true. That renumbers graph segments, so re-check the sensor overrides
+afterwards; osm_sensor_match fails until stale ones are fixed.
 """
 
 from datetime import UTC, datetime, timedelta
 
-from airflow.sdk import dag, task
+from airflow.sdk import Param, dag, task
 
 STOA = "cd /opt/stoa && python -m"
 
@@ -23,6 +29,13 @@ STOA = "cd /opt/stoa && python -m"
     max_active_runs=1,  # two runs merging into the same parquet at once would clash
     tags=["stoa", "melbourne"],
     default_args={"retries": 2, "retry_delay": timedelta(minutes=5)},
+    params={
+        "refresh_osm": Param(
+            False,
+            type="boolean",
+            description="Download the latest OSM extract (renumbers graph segments).",
+        )
+    },
 )
 def stoa_pipeline():
     # --- Ingest: independent downloads, so they run in parallel ---
@@ -46,26 +59,27 @@ def stoa_pipeline():
         return f"{STOA} src.ingest.calendars"
 
     @task.bash
-    def pull_osm():
-        return f"{STOA} src.ingest.osm --site melbourne"
+    def pull_osm(params=None):
+        refresh = " --refresh" if params and params.get("refresh_osm") else ""
+        return f"{STOA} src.ingest.osm --site melbourne{refresh}"
 
     # --- OSM features: one task per stage so each shows up on the Gantt chart ---
 
     @task.bash
     def osm_extract():
-        return f"{STOA} src.features.osm --site melbourne --only extract"
+        return f"{STOA} src.features.osm --site melbourne --only extract --if-stale"
 
     @task.bash
     def osm_graph():
-        return f"{STOA} src.features.osm --site melbourne --only graph"
+        return f"{STOA} src.features.osm --site melbourne --only graph --if-stale"
 
     @task.bash
     def osm_segment_features():
-        return f"{STOA} src.features.osm --site melbourne --only features"
+        return f"{STOA} src.features.osm --site melbourne --only features --if-stale"
 
     @task.bash
     def osm_sensor_match():
-        return f"{STOA} src.features.osm --site melbourne --only sensors"
+        return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
     # --- Placeholders (TODO) ---
 

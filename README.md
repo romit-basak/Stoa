@@ -22,7 +22,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Module | Path | Status |
 |---|---|---|
 | Ingestion | `src/ingest/` | ✅ Melbourne: counts, City of Melbourne layers, OSM, DEM, WorldCover, weather, AFL fixtures and crowds, calendars. ✅ NEU Boston: terrain, buildings, imagery, OSM, land cover, weather. ✅ NYC: test counts, OSM, land cover, weather |
-| Features | `src/features/` | Planned |
+| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). Other sources planned |
 | Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting; spatio-temporal GNN is a stretch goal) |
 | Path segmentation | `src/models/segmentation/` | Planned (NEU campus) |
 | Agents | `src/agents/` | Planned: LLM intake agent with local-knowledge adjustments (planning assistant is a stretch goal) |
@@ -76,6 +76,14 @@ Options:
 - `osm`, `dem`, `worldcover` and `weather` take `--site` (`melbourne`, `neu_boston`, `nyc`; see `configs/data.yaml`).
 - School terms and university teaching periods are hand-maintained in `configs/calendars/`.
 
+### Build features
+
+```bash
+.venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
+```
+
+Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md).
+
 ### Tests and lint
 
 ```bash
@@ -89,14 +97,18 @@ Options:
 configs/data.yaml        data sources and site bounding boxes
 configs/calendars/       hand-maintained school terms and university teaching periods
 configs/analysis.yaml    parameters for src/analysis/
-data/                    raw/ and processed/ (git-ignored; versioned with DVC, planned)
+configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, sensor matching)
+configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
+data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, planned)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues
   analysis/              write-ups of one-off analyses
+  features/              feature tables: how to build, column dictionaries, joins
   data_licenses.md       license register; check before adding any dataset
   PROJECT_CONTEXT.md     reasoning behind decisions, scope tiers, validation plan
   scoping/               project scoping document (LaTeX source; the PDF is built, not tracked)
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
+src/features/            feature pipeline (osm.py runs extract -> graph -> features -> sensors)
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
 tests/                   mirrors src/
 CLAUDE.md                project rules and conventions

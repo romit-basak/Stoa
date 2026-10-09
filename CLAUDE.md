@@ -55,7 +55,7 @@ Public data ──> ingest ──> validate ──> features ──> models ─�
 ### Interfaces
 
 Agree and freeze these early; build against fake data until real modules exist.
-- **Graph:** nodes = intersections and entrances; edges = path segments with stable IDs. Format **TBD**.
+- **Graph:** nodes = intersections and entrances; edges = path segments with stable IDs. OSM graph built (GeoParquet, `segment_id` = `<way_id>-<k>`, stable within one pinned extract; see `docs/features/osm_features.md`). CoM-network graph and the shared format **TBD**.
 - **Feature table:** one row per (segment_id, hour). Schema in `src/features/schema.py` **TBD**.
 - **Predictions:** (segment_id, hour, predicted_count, lower, upper, model_version).
 - **Event spec:** structured output of the intake agent. Schema in `src/agents/event_spec.py` **TBD**. Every field carries a `source` attribute.
@@ -138,12 +138,14 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
 - Tests in `tests/`, mirroring `src/`. New features need tests; model changes need an eval run.
 - Config in YAML under `configs/`; no hard-coded paths, credentials, or API keys. Secrets via environment variables / Secret Manager.
 - Small, focused PRs. Each PR states which module and interface it touches.
+- Code dependencies must have permissive licences (MIT, BSD, Apache), because the API image may be distributed. cityseer (AGPL-3.0) was ruled out for network metrics for this reason; `src/features/network_metrics.py` implements them with numba and scipy.
 - **Documentation is Markdown or LaTeX, tracked in git.** Binary documents (`.pdf`, `.docx`, `.pptx`, `.xlsx`) are never tracked: PDFs are build outputs of the LaTeX sources, and any reference copies stay local. New write-ups go in `.md`; formatted deliverables go in `.tex` under `docs/`.
 - Scoping document: `docs/scoping/project_scoping.tex`. Build: `cd docs/scoping && latexmk -pdf -outdir=build project_scoping.tex && cp build/project_scoping.pdf .`
 - Commands (fill in as they exist):
   - Setup: `uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"`
   - Run tests: `.venv/bin/python -m pytest`; lint: `.venv/bin/ruff check src tests && .venv/bin/ruff format src tests`
   - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
+  - Build OSM features: `.venv/bin/python -m src.features.osm [--site melbourne] [--only extract,graph,features,sensors]` (column dictionary and join recipe in `docs/features/osm_features.md`)
   - Run pipeline: **TBD**
   - Run app locally: **TBD**
 
@@ -164,7 +166,8 @@ Checkpoint around weeks 5-6: if the learned model does not beat the Space Syntax
 ## Open decisions
 
 - Open-source microsimulator (JuPedSim, Vadere, or other), after checking licences
-- Graph and feature-table formats
+- Graph and feature-table formats (the OSM graph uses GeoParquet keyed on `segment_id`; confirm or change)
+- Locations for the 18 archive sensors missing from the current sensor-locations file (17.5% of 2009–2022 rows)
 - Orchestration tool
 - Weather data source (proposed: ERA5 via Open-Meteo, already pulled for all sites)
 - Ice handling for Boston: labeled hand-set rule, or omit

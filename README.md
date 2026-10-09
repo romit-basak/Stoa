@@ -74,6 +74,8 @@ Options:
 - `melbourne_portal --large` also fetches the multi-GB 2018 DSM and point cloud.
 - The live counts table is a rolling ~2-year window, so re-pulls are merged into the rows already held, never overwritten.
 - `osm`, `dem`, `worldcover` and `weather` take `--site` (`melbourne`, `neu_boston`, `nyc`; see `configs/data.yaml`).
+- `osm` keeps an existing extract (graph segment IDs belong to one extract); `--refresh` downloads the latest.
+- `weather` re-fetches only missing years and the last two; `--full` re-fetches every year.
 - School terms and university teaching periods are hand-maintained in `configs/calendars/`.
 
 ### Build features
@@ -87,6 +89,12 @@ Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `
 ### Run the pipeline (Airflow)
 
 The Melbourne pipeline runs as one Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), in Docker. Requires Docker Desktop.
+
+On Linux, first tell the containers to run as your user, or they can't write to `data/`. Docker Desktop on macOS and Windows handles this for you.
+
+```bash
+echo "AIRFLOW_UID=$(id -u)" > .env
+```
 
 ```bash
 docker compose up -d --build     # first run builds the image (a few minutes)
@@ -104,6 +112,13 @@ pull_calendars ─────────────────────�
 ```
 
 (`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `join_all`, `validate` and `dvc_push` are placeholders: replace a task's body and keep its name, and the wiring stays the same. A full run takes about 3.5 minutes; `pull_counts` (re-downloading the 2-year counts export) is the slowest task.
+
+What a daily run re-does:
+- **Counts:** re-pulled and merged into the rows already held.
+- **Weather:** only the last two years (`--full` re-fetches all).
+- **OSM:** the extract is pinned. `pull_osm` keeps the file it has, and each OSM stage skips itself unless one of its inputs changed: the extract, `configs/features.yaml`, the code in `src/features/`, the sensor locations, or `configs/sensor_overrides.yaml`. A skipped OSM chain takes a couple of seconds.
+
+To move to a newer OSM extract, trigger the DAG with the `refresh_osm` parameter set to true (Trigger → advanced options in the UI). That renumbers the graph segments, so `osm_sensor_match` fails until any sensor overrides that point at old segments are fixed.
 
 ### Tests and lint
 

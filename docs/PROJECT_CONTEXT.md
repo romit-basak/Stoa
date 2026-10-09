@@ -329,7 +329,7 @@ Tests the amenity what-if and the reverse-causality question directly. Full feas
 - **Expo:** a small in-app panel showing model version, last retrain, latest accuracy on new Melbourne data, and drift status. **Cached replay mode:** record real runs and replay them, so the demo never depends on live model or LLM calls.
 - **Patterns adopted from GoogleCloudPlatform/race-condition** (Apache 2.0): cached replay for demos; a deterministic baseline alongside LLM agents (consistent with the golden rule). Not a validation source (its crowds are simulated). Don't copy its infrastructure (about $91/month fixed cost).
 
-**Infrastructure:** GCP Cloud Run, Cloud Storage, Artifact Registry; GitHub Actions CI/CD. Orchestration TBD: Cloud Composer is likely too expensive for the budget; prefer Cloud Scheduler + Cloud Run jobs or Airflow on a small VM. Segmentation training on free/university GPUs (Colab, Kaggle, NEU cluster), not the GCP budget. Keep one Cloud Run instance warm during the expo.
+**Infrastructure:** GCP Cloud Run, Cloud Storage, Artifact Registry; GitHub Actions CI/CD. Orchestration: Airflow (decided), locally in Docker Compose and on a small VM in the cloud; Cloud Composer is too expensive for the budget. Segmentation training on free/university GPUs (Colab, Kaggle, NEU cluster), not the GCP budget. Keep one Cloud Run instance warm during the expo.
 
 **Cost to serve:** precompute heavy work; GNN/GBM inference is cheap; simulation runs per scenario, not per click; the LLM narrates finished results and isn't called per map interaction.
 
@@ -442,7 +442,7 @@ Caveats shown to the user: the post-event surge is the hardest to predict; this 
 
 ## 13. Open decisions and verification to-dos
 
-**Decisions:** open-source microsimulator (after the licence check); graph and feature-table formats; orchestration tool; weather source (proposed: ERA5 via Open-Meteo, already pulled); expo date and timeline; ice handling for Boston (labeled hand-set rule vs. omit); exact boundaries of the within-Melbourne transfer precincts.
+**Decisions:** open-source microsimulator (after the licence check); graph and feature-table formats; weather source (proposed: ERA5 via Open-Meteo, already pulled); expo date and timeline; ice handling for Boston (labeled hand-set rule vs. omit); exact boundaries of the within-Melbourne transfer precincts.
 
 **Decided (success criteria, reviewed by the team, Oct 2026):** flow model ≥15% lower MAE on log counts than Space Syntax + calibration on held-out sensors; 80% intervals cover 75–85%; NYC rank correlation ≥0.6 uncalibrated, and error on log totals halved after calibrating on 5 locations; segmentation recall ≥0.7 on known informal paths; intake agent ≥90% field-level accuracy with zero grounding violations reaching the user; p95 latency ≤2 s for precomputed scenarios. Full list in the scoping document, section 11.
 

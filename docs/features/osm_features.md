@@ -10,7 +10,10 @@ It is the input for the **portable** model (features any city has; see `CLAUDE.m
 .venv/bin/python -m src.ingest.osm --site melbourne        # once: download the .osm.pbf
 .venv/bin/python -m src.features.osm --site melbourne      # all stages, ~2.5 min on a laptop
 .venv/bin/python -m src.features.osm --only features,sensors   # re-run some stages
+.venv/bin/python -m src.features.osm --if-stale           # skip stages whose inputs haven't changed
 ```
+
+With `--if-stale` (used by the Airflow DAG), a stage reruns only if its outputs are missing or an input changed: the extract, the bbox or CRS, `configs/features.yaml`, the code in `src/features/`, and, for sensor matching, the sensor locations file or `configs/sensor_overrides.yaml`. Fingerprints are kept in `data/interim/osm/<site>/stamps/`.
 
 | Stage | Module | Reads | Writes |
 |---|---|---|---|
@@ -148,7 +151,7 @@ A sensor is flagged for review when:
 - the segment runs across the sensor's counting direction (`direction_1`/`direction_2`, over 30° off)
 - it is an indoor sensor
 
-**To hand-check:** open `sensor_match_review.csv` (up to 3 candidates per flagged sensor) next to a map. Put the right `segment_id` in `configs/sensor_overrides.yaml` under `melbourne:` as `location_id: segment_id`, then re-run `--only sensors`. Overrides apply to one extract only, so re-check them when the extract changes.
+**To hand-check:** open `sensor_match_review.csv` (up to 3 candidates per flagged sensor) next to a map. Put the right `segment_id` in `configs/sensor_overrides.yaml` under `melbourne:` as `location_id: segment_id`, then re-run `--only sensors`. Overrides apply to one extract only. If an override names a segment the current graph doesn't have (after `src.ingest.osm --refresh`), sensor matching stops with an error listing those sensors, rather than leaving them without features.
 
 ## Caveats
 

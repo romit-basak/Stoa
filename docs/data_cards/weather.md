@@ -5,7 +5,7 @@
 | **Role** | Hourly weather features (temperature, apparent temperature, rain, wind, cloud, radiation, day/night) |
 | **Provider** | Open-Meteo archive API, built on ECMWF ERA5 / ERA5-Land reanalysis |
 | **License** | Data CC BY 4.0 (attribute Open-Meteo and Copernicus/ECMWF). **The free API tier is for non-commercial use only.** That's fine for this course project; a commercial product needs an Open-Meteo subscription or a pull straight from Copernicus CDS (ERA5 licence allows commercial use). |
-| **Access** | `python -m src.ingest.weather --site melbourne`, one JSON per year: `data/raw/weather/melbourne_openmeteo_YYYY.json` |
+| **Access** | `python -m src.ingest.weather --site melbourne`, one JSON per year: `data/raw/weather/melbourne_openmeteo_YYYY.json`. Re-runs fetch only missing years and the last two (`--full` for all). |
 | **Coverage** | 2009-01-01 00:00 → 2026-09-26 23:00 local time, 155,472 hourly rows, 0 nulls, 0 duplicate timestamps |
 | **Location** | Request at CBD centre (-37.8136, 144.9631); API snapped to grid cell (-37.786, 144.940), elevation 19 m |
 | **Time zone** | `Australia/Melbourne` local time, so it joins directly on (sensing_date, hourday) |

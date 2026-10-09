@@ -129,7 +129,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
 
 - GCP: Cloud Run (API, app), Cloud Storage (data, artifacts), Artifact Registry (images).
 - CI/CD: GitHub Actions (tests, build, deploy on merge to main).
-- Orchestration: **TBD.** Budget is limited; Cloud Composer is likely too expensive. Prefer Cloud Scheduler + Cloud Run jobs, or Airflow on a small VM.
+- Orchestration: **Airflow** (decided). The `stoa_pipeline` DAG (`dags/`) runs locally in Docker Compose; in the cloud, run it on a small VM rather than Cloud Composer, which is too expensive for the budget.
 - Keep costs per scenario low: precompute heavy work (baseline flows, viewsheds); the LLM narrates finished results and is not called per map interaction.
 
 ## Conventions
@@ -146,7 +146,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
   - Run tests: `.venv/bin/python -m pytest`; lint: `.venv/bin/ruff check src tests && .venv/bin/ruff format src tests`
   - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
   - Build OSM features: `.venv/bin/python -m src.features.osm [--site melbourne] [--only extract,graph,features,sensors]` (column dictionary and join recipe in `docs/features/osm_features.md`)
-  - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Run the pipeline")
+  - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Run the pipeline"). The OSM extract is pinned; trigger with `refresh_osm=true` to replace it, then re-check sensor overrides.
   - Run app locally: **TBD**
 
 ## Scope guardrails
@@ -168,6 +168,5 @@ Checkpoint around weeks 5-6: if the learned model does not beat the Space Syntax
 - Open-source microsimulator (JuPedSim, Vadere, or other), after checking licences
 - Graph and feature-table formats (the OSM graph uses GeoParquet keyed on `segment_id`; confirm or change)
 - Locations for the 18 archive sensors missing from the current sensor-locations file (17.5% of 2009–2022 rows)
-- Orchestration tool
 - Weather data source (proposed: ERA5 via Open-Meteo, already pulled for all sites)
 - Ice handling for Boston: labeled hand-set rule, or omit

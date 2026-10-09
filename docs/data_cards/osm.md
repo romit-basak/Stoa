@@ -5,7 +5,7 @@
 | **Role** | Walking network (graph), POIs + opening hours, crossings, entrances, building outlines; Boston campus network later |
 | **Provider** | OpenStreetMap contributors, via BBBike weekly city extract |
 | **License** | ODbL 1.0. Attribution: "© OpenStreetMap contributors". Share-alike applies if we *distribute* a derived database (e.g. a published graph). Model outputs (produced works) need attribution only. |
-| **Access** | `python -m src.ingest.osm --site melbourne` → `data/raw/osm/melbourne.osm.pbf` (89 MB) |
+| **Access** | `python -m src.ingest.osm --site melbourne` → `data/raw/osm/melbourne.osm.pbf` (89 MB). Pinned: an existing file is kept; `--refresh` replaces it with the latest extract, which renumbers graph segments. |
 | **Snapshot** | Extract `Last-Modified` 2026-09-26 (see `MANIFEST.json`) |
 | **Other sites** | `--site neu_boston` → BBBike `CambridgeMa` (no Boston extract exists; covers lon −71.30 to −70.82, lat 42.18 to 42.59). `--site nyc` → BBBike `NewYork` (153 MB; covers all 114 NYC DOT count points). Both snapshot 2026-10-02. |
 | **Processing** | `python -m src.features.osm` builds GeoParquet layers, the walking graph (109,733 segments in the Melbourne study bbox), per-segment features and the sensor matches. See `docs/features/osm_features.md`. |

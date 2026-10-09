@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-made test network (no double hyphens in XML comments). Grid step 0.0001 deg (~9 m east-west, ~11 m north-south).
+
+  n9 ======== n10        residential, sidewalk=separate (walkable, but sensors skip it)
+                 |
+  n4             n8      n3-n8: cycleway with foot=designated (kept)
+  |              |
+  n1 ... n2 ... n3 ~~~ n6 ~~~ n7     n3-n6: private service road (dropped)
+         |                           n6-n7: cycleway, no foot tag (dropped)
+         n5
+-->
+<osm version="0.6" generator="hand">
+  <node id="1" lat="-37.8100" lon="144.9600"/>
+  <node id="2" lat="-37.8100" lon="144.9601"/>
+  <node id="3" lat="-37.8100" lon="144.9602"/>
+  <node id="4" lat="-37.8099" lon="144.9601"/>
+  <node id="5" lat="-37.8101" lon="144.9601"/>
+  <node id="6" lat="-37.8100" lon="144.9603"/>
+  <node id="7" lat="-37.8100" lon="144.9604"/>
+  <node id="8" lat="-37.8099" lon="144.9602"/>
+  <node id="9" lat="-37.8098" lon="144.9600"/>
+  <node id="10" lat="-37.8098" lon="144.9602"/>
+  <node id="11" lat="-37.81001" lon="144.96001">
+    <tag k="shop" v="bakery"/>
+    <tag k="name" v="Test Bakery"/>
+    <tag k="opening_hours" v="Mo-Fr 09:00-17:00"/>
+  </node>
+  <node id="12" lat="-37.81001" lon="144.96019">
+    <tag k="amenity" v="cafe"/>
+    <tag k="opening_hours" v="by appointment"/>
+  </node>
+  <node id="13" lat="-37.80999" lon="144.96021">
+    <tag k="railway" v="tram_stop"/>
+    <tag k="name" v="Test Stop"/>
+  </node>
+  <way id="100">
+    <nd ref="1"/><nd ref="2"/><nd ref="3"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+    <tag k="surface" v="asphalt"/>
+    <tag k="lit" v="yes"/>
+  </way>
+  <way id="101">
+    <nd ref="4"/><nd ref="2"/><nd ref="5"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="crossing"/>
+  </way>
+  <way id="102">
+    <nd ref="3"/><nd ref="6"/>
+    <tag k="highway" v="service"/>
+    <tag k="access" v="private"/>
+  </way>
+  <way id="103">
+    <nd ref="3"/><nd ref="8"/><nd ref="10"/>
+    <tag k="highway" v="cycleway"/>
+    <tag k="foot" v="designated"/>
+  </way>
+  <way id="104">
+    <nd ref="6"/><nd ref="7"/>
+    <tag k="highway" v="cycleway"/>
+  </way>
+  <way id="105">
+    <nd ref="9"/><nd ref="10"/>
+    <tag k="highway" v="residential"/>
+    <tag k="sidewalk" v="separate"/>
+    <tag k="name" v="Test Street"/>
+  </way>
+</osm>

@@ -1,0 +1,100 @@
+# Parameters for the OSM feature pipeline (src/features/). Paths are relative to the repo root.
+# Site bboxes and timezones come from configs/data.yaml.
+interim_dir: data/interim
+processed_dir: data/processed
+
+sites:
+  melbourne:
+    crs: 28355  # GDA94 / MGA zone 55 (metres), same as configs/analysis.yaml
+  neu_boston:
+    crs: 26919  # NAD83 / UTM 19N
+  nyc:
+    crs: 32618  # WGS 84 / UTM 18N
+
+walk_filter:
+  # Based on OSMnx's "walk" network filter. A way is walkable if it has a highway tag not listed
+  # here, is not an area, and none of the access rules below exclude it.
+  exclude_highway:
+    [abandoned, bus_guideway, construction, cycleway, motorway, motorway_link, "no", planned,
+     platform, proposed, raceway, razed, bus_stop, rest_area, services]
+  exclude_tag_values:
+    foot: ["no"]
+    access: [private, "no"]
+    service: [private]
+  # Cycleways are excluded above unless pedestrians are explicitly allowed on them.
+  cycleway_foot_values: ["yes", designated, permissive]
+
+# Way tags kept on graph segments.
+way_tags:
+  [highway, footway, sidewalk, "sidewalk:both", "sidewalk:left", "sidewalk:right", surface, lit,
+   width, incline, access, foot, crossing, indoor, layer, level, bridge, tunnel, covered, name]
+
+paved_surfaces:
+  [paved, asphalt, concrete, "concrete:plates", "concrete:lanes", paving_stones, sett,
+   unhewn_cobblestone, cobblestone, metal, wood, bricks, tiles]
+
+# POI taxonomy: category -> list of key=value tag matches ("key=*" matches any value).
+# A POI can fall into several categories (e.g. a cafe is also "attractor").
+poi_categories:
+  food_drink: ["amenity=cafe", "amenity=restaurant", "amenity=fast_food", "amenity=bar",
+               "amenity=pub", "amenity=food_court", "amenity=ice_cream", "amenity=biergarten"]
+  retail: ["shop=*"]
+  toilets: ["amenity=toilets"]
+  drinking_water: ["amenity=drinking_water", "drinking_water=yes"]
+  bench: ["amenity=bench", "leisure=picnic_table"]
+  education: ["amenity=school", "amenity=university", "amenity=college", "amenity=library",
+              "amenity=kindergarten", "building=university"]
+  culture_entertainment: ["amenity=theatre", "amenity=cinema", "amenity=arts_centre",
+                          "amenity=nightclub", "tourism=museum", "tourism=gallery",
+                          "tourism=attraction", "leisure=stadium", "amenity=events_venue"]
+  healthcare: ["amenity=hospital", "amenity=clinic", "amenity=doctors", "amenity=pharmacy",
+               "amenity=dentist"]
+  services: ["amenity=bank", "amenity=atm", "amenity=post_office", "office=*",
+             "amenity=townhall", "amenity=courthouse"]
+  worship: ["amenity=place_of_worship"]
+  tourism_lodging: ["tourism=hotel", "tourism=hostel", "tourism=motel", "tourism=apartment",
+                    "tourism=guest_house"]
+
+# Transit, from points/polygons. Stops are matched on these tags.
+transit:
+  tram_stop: ["railway=tram_stop"]
+  bus_stop: ["highway=bus_stop"]
+  rail_station: ["railway=station"]
+  # Stations that opened during the count record. Their distances go in a separate column, so the
+  # training join can ignore them before the opening date (the OSM snapshot postdates it).
+  # Names are matched case-insensitively against the station's OSM name.
+  recent_stations:
+    - {name: Arden, opened: "2025-11-30"}
+    - {name: Parkville, opened: "2025-11-30"}
+    - {name: State Library, opened: "2025-11-30"}
+    - {name: Town Hall, opened: "2025-11-30"}
+    - {name: Anzac, opened: "2025-11-30"}
+
+green_tags: ["leisure=park", "leisure=garden", "leisure=nature_reserve", "landuse=grass",
+             "landuse=recreation_ground", "landuse=village_green", "landuse=forest",
+             "natural=wood", "natural=scrub"]
+
+amenities:
+  radii_m: [100, 200, 400]
+  snap_max_m: 50          # POIs farther than this from any graph node are dropped (and counted)
+  open_hours_radius_m: 200
+  open_hours_categories: [food_drink, retail, culture_entertainment, services]
+
+built_form:
+  buffer_m: 25            # building coverage around each segment
+  max_distance_m: 2000    # distance features are capped here (and flagged as "none nearby")
+
+network_metrics:
+  radii_m: [400, 800, 1600]
+  workers: 8              # processes for the source loop; 0 = os.cpu_count()
+
+sensor_match:
+  search_radius_m: 30
+  candidates: 3
+  review_if_nearest_over_m: 15
+  review_if_runner_up_within_m: 3
+  # Segment classes a footpath sensor should land on before a road centreline (cycleways in the
+  # graph allow pedestrians: they are shared paths).
+  preferred_highway: [footway, pedestrian, path, steps, living_street, corridor, cycleway]
+  # Hand-checked choices: location_id -> segment_id. Re-runs use these instead of the automatic pick.
+  overrides_file: configs/sensor_overrides.yaml

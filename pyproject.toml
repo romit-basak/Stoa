@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "geopandas>=1.0",
     "holidays==0.105",  # pinned: holiday rules change between releases
+    "numba>=0.60",
     "osmium>=4.0",
     "pandas>=2.2",
     "pyarrow>=15",
@@ -13,11 +14,12 @@ dependencies = [
     "pyyaml>=6",
     "rasterio>=1.4",
     "requests>=2.31",
+    "scipy>=1.13",
     "shapely>=2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # networkx: reference values in tests
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

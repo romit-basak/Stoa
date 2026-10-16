@@ -21,7 +21,7 @@ x-airflow-common: &airflow-common
     # leave STOA_ALERT_EMAILS empty to turn alerts off.
     STOA_ALERT_EMAILS: ${STOA_ALERT_EMAILS:-}
     STOA_SMTP_USER: ${STOA_SMTP_USER:-}
-    AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 465, "login": "${STOA_SMTP_USER:-}", "password": "${STOA_SMTP_PASSWORD:-}"}'
+    AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${STOA_SMTP_USER:-}", "password": "${STOA_SMTP_PASSWORD:-}", "extra": {"disable_ssl": true}}'
   volumes:
     - ./dags:/opt/airflow/dags
     - .:/opt/stoa # whole repo: tasks run src/ and write to data/ on the host

@@ -39,8 +39,8 @@ Coverage for all layers is the City of Melbourne municipality (~lon 144.897–14
 
 | Dataset | Rows | Notes |
 |---|---|---|
-| `tree-canopies-2021-urban-forest.geojson` | 57,980 polygons (271 MB) | Canopy cover for shade features. Convert to GeoParquet in features. |
-| `trees-with-species-and-dimensions-urban-forest.geojson` | 82,064 points | Height, diameter and age class: tree obstruction for viewshed |
+| `tree-canopies-2021-urban-forest.geojson` | 57,980 polygons (271 MB) | Canopy outlines only (no height attribute). Canopy cover for shade features. Convert to GeoParquet in features. |
+| `trees-with-species-and-dimensions-urban-forest.geojson` | 82,064 points | Species, trunk diameter (`diameter_breast_height`, cm), age class and year planted. **No height field**: tree height for shade or viewshed has to come from a surface model or be estimated from species and diameter. |
 
 ## Events
 

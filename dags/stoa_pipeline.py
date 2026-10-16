@@ -12,11 +12,36 @@ refresh_osm = true. That renumbers graph segments, so re-check the sensor overri
 afterwards; osm_sensor_match fails until stale ones are fixed.
 """
 
+import os
 from datetime import UTC, datetime, timedelta
 
+from airflow.providers.smtp.notifications.smtp import SmtpNotifier
 from airflow.sdk import Param, dag, task
 
 STOA = "cd /opt/stoa && python -m"
+
+# Email the team when a task fails after its last retry. Recipients and the Gmail login come
+# from .env via docker-compose.yaml; with STOA_ALERT_EMAILS unset, alerts are off.
+ALERT_EMAILS = [
+    e.strip() for e in os.environ.get("STOA_ALERT_EMAILS", "").split(",") if e.strip()
+]
+on_failure_alert = (
+    [
+        SmtpNotifier(
+            to=ALERT_EMAILS,
+            from_email=os.environ.get("STOA_SMTP_USER"),
+            subject="[Stoa] {{ dag.dag_id }}: {{ ti.task_id }} failed",
+            html_content=(
+                "<p>Task <b>{{ ti.task_id }}</b> in <b>{{ dag.dag_id }}</b> failed after "
+                "{{ ti.try_number }} tries.</p>"
+                "<p>Run: {{ run_id }}</p>"
+                '<p><a href="{{ ti.log_url }}">Open the log</a></p>'
+            ),
+        )
+    ]
+    if ALERT_EMAILS
+    else []
+)
 
 
 @dag(
@@ -28,7 +53,11 @@ STOA = "cd /opt/stoa && python -m"
     catchup=False,
     max_active_runs=1,  # two runs merging into the same parquet at once would clash
     tags=["stoa", "melbourne"],
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=5)},
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
+        "on_failure_callback": on_failure_alert,
+    },
     params={
         "refresh_osm": Param(
             False,

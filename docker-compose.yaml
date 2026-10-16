@@ -17,6 +17,11 @@ x-airflow-common: &airflow-common
     # Local development only: everyone who opens the UI is an admin, no password.
     AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    # Failure alerts by email (Gmail SMTP). The values come from .env, which is git-ignored;
+    # leave STOA_ALERT_EMAILS empty to turn alerts off.
+    STOA_ALERT_EMAILS: ${STOA_ALERT_EMAILS:-}
+    STOA_SMTP_USER: ${STOA_SMTP_USER:-}
+    AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${STOA_SMTP_USER:-}", "password": "${STOA_SMTP_PASSWORD:-}", "extra": {"disable_ssl": true}}'
   volumes:
     - ./dags:/opt/airflow/dags
     - .:/opt/stoa # whole repo: tasks run src/ and write to data/ on the host

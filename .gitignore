@@ -30,3 +30,6 @@ build/
 
 # macOS
 .DS_Store
+
+# Personal scratch space for files that never go in the repo.
+dump/

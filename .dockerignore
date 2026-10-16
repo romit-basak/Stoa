@@ -13,3 +13,4 @@ docs/**/build/
 *.pdf
 *.docx
 .DS_Store
+dump/

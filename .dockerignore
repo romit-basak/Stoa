@@ -3,6 +3,8 @@
 data/
 .venv/
 .git/
+# DVC's local cache is a second copy of data/.
+.dvc/cache/
 **/__pycache__/
 .pytest_cache/
 .ruff_cache/

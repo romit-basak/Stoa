@@ -4,8 +4,11 @@ __pycache__/
 .ruff_cache/
 *.part
 
-# Data is versioned with DVC, never git.
-data/
+# Data is versioned with DVC, never git. Git keeps only DVC's pointer files
+# (data/*.dvc) and the .gitignore DVC writes next to them.
+data/*
+!data/*.dvc
+!data/.gitignore
 *.egg-info/
 
 # Documentation lives in Markdown or LaTeX (tracked). Binary documents are build

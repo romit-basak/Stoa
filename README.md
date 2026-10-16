@@ -110,7 +110,7 @@ The Melbourne pipeline runs as one Airflow DAG, `stoa_pipeline` (`dags/stoa_pipe
 On Linux, first tell the containers to run as your user, or they can't write to `data/`. Docker Desktop on macOS and Windows handles this for you.
 
 ```bash
-echo "AIRFLOW_UID=$(id -u)" > .env
+echo "AIRFLOW_UID=$(id -u)" >> .env
 ```
 
 ```bash
@@ -136,6 +136,16 @@ What a daily run re-does:
 - **OSM:** the extract is pinned. `pull_osm` keeps the file it has, and each OSM stage skips itself unless one of its inputs changed: the extract, `configs/features.yaml`, the code in `src/features/`, the sensor locations, or `configs/sensor_overrides.yaml`. A skipped OSM chain takes a couple of seconds.
 
 To move to a newer OSM extract, trigger the DAG with the `refresh_osm` parameter set to true (Trigger → advanced options in the UI). That renumbers the graph segments, so `osm_sensor_match` fails until any sensor overrides that point at old segments are fixed.
+
+**Failure alerts.** When a task fails after its last retry, Airflow emails the team (task, run and a link to the log). Settings live in `.env` in the repo root, which is git-ignored; without it, alerts are off. The sender needs a Gmail [App Password](https://myaccount.google.com/apppasswords) (requires 2-Step Verification), not the account password:
+
+```bash
+STOA_SMTP_USER=you@gmail.com
+STOA_SMTP_PASSWORD=abcdefghijklmnop          # 16-character App Password, no spaces
+STOA_ALERT_EMAILS=a@northeastern.edu,b@northeastern.edu
+```
+
+After editing `.env`, run `docker compose up -d` to apply it.
 
 ### Tests and lint
 

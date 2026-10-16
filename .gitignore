@@ -1,4 +1,6 @@
 .venv/
+# Local secrets (SMTP login for Airflow alerts, AIRFLOW_UID). Never commit.
+.env
 __pycache__/
 .pytest_cache/
 .ruff_cache/

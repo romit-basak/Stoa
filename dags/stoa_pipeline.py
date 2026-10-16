@@ -34,7 +34,7 @@ on_failure_alert = (
             html_content=(
                 "<p>Task <b>{{ ti.task_id }}</b> in <b>{{ dag.dag_id }}</b> failed after "
                 "{{ ti.try_number }} tries.</p>"
-                "<p>Run: {{ run_id }}<br>Logical date: {{ logical_date }}</p>"
+                "<p>Run: {{ run_id }}</p>"
                 '<p><a href="{{ ti.log_url }}">Open the log</a></p>'
             ),
         )

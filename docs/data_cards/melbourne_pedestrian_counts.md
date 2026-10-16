@@ -53,6 +53,8 @@
 
 ## Known issues and handling
 
+- **Clock:** both tables use local time with daylight saving. The skipped October hour (02:00) still appears in the archive (370 rows), and the repeated April hour appears once. `src/features/counts_hourly.py` drops the first and reads the second as daylight time.
+- **September 2010 is unusable in the archive:** every hour of every day is stamped 12:00 AM, so each sensor has 24 different counts at midnight (12,240 rows). The hourly table drops them.
 0. **The live table is a rolling ~2-year window.** On 2026-10-04 the portal started at 2024-10-05, a day later than our 2026-10-03 pull. Re-pulls are merged into the held rows (`rolling_window` in `configs/data.yaml`), never overwritten. A dated copy of the first pull is in `data/raw/melbourne_portal/snapshots/`. Once DVC is set up, every pull is a version.
 
 1. **The 23-month gap** splits training into two eras. Treat this as a natural temporal holdout. Ask the CoM Open Data team (`opendata@melbourne.vic.gov.au`) whether they can supply Dec 2022 – Oct 2024. Nothing public covers it.

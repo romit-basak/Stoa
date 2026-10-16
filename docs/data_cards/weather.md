@@ -8,7 +8,7 @@
 | **Access** | `python -m src.ingest.weather --site melbourne`, one JSON per year: `data/raw/weather/melbourne_openmeteo_YYYY.json`. Re-runs fetch only missing years and the last two (`--full` for all). |
 | **Coverage** | 2009-01-01 00:00 → 2026-09-26 23:00 local time, 155,472 hourly rows, 0 nulls, 0 duplicate timestamps |
 | **Location** | Request at CBD centre (-37.8136, 144.9631); API snapped to grid cell (-37.786, 144.940), elevation 19 m |
-| **Time zone** | `Australia/Melbourne` local time, so it joins directly on (sensing_date, hourday) |
+| **Time zone** | Requested as `Australia/Melbourne`, but each file uses **one fixed offset (UTC+10) all year**: no daylight saving. The counts follow the local clock, so join on UTC, not on (sensing_date, hourday), or weather is an hour out from October to April. `src/features/counts_hourly.py` does this. `precipitation`, `rain` and `shortwave_radiation` describe the hour *before* their timestamp. |
 
 ## Other sites
 

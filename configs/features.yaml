@@ -98,3 +98,21 @@ sensor_match:
   preferred_highway: [footway, pedestrian, path, steps, living_street, corridor, cycleway]
   # Hand-checked choices: location_id -> segment_id. Re-runs use these instead of the automatic pick.
   overrides_file: configs/sensor_overrides.yaml
+
+counts_hourly:
+  # Hourly training table for Melbourne: counts + time + weather + calendars + sensor match.
+  # See docs/features/counts_hourly.md.
+  site: melbourne
+  # Open-Meteo values that describe the hour *before* their timestamp (sums and means). A count for
+  # hour h covers h:00-h+1:00, so these join from the weather row stamped h+1. Everything else is
+  # an instantaneous value at the stamp and joins from row h.
+  weather_interval_vars: [precipitation, rain, shortwave_radiation]
+  # A run of at least this many consecutive zero-count hours, with at least one of them in the
+  # daytime window, is flagged as a likely sensor outage rather than a genuinely empty street.
+  outage_zero_run_hours: 3
+  outage_daytime_hours: [8, 20]
+  # Victoria's COVID period: state of emergency declared 16 March 2020; Melbourne's sixth and last
+  # lockdown ended 21 October 2021. Flagged, not dropped.
+  covid_period: ["2020-03-16", "2021-10-21"]
+  # Metro Tunnel stations opened (structural break; see CLAUDE.md "Generalization").
+  metro_tunnel_opened: "2025-11-30"

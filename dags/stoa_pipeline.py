@@ -1,5 +1,5 @@
-"""Stoa data pipeline: pull the Melbourne sources, build OSM features, then (TODO) join,
-validate and version the result.
+"""Stoa data pipeline: pull the Melbourne sources, build OSM features, join the hourly table,
+then (TODO) validate and version the result.
 
 Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
 /opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
@@ -110,11 +110,12 @@ def stoa_pipeline():
     def osm_sensor_match():
         return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
-    # --- Placeholders (TODO) ---
+    # --- Join, then placeholders (TODO) ---
 
-    @task
+    @task.bash
     def join_all():
-        print("TODO: join counts + sensor_osm_features + weather + calendars")
+        # Hourly training table: counts + time + weather + calendars + sensor match.
+        return f"{STOA} src.features.counts_hourly"
 
     @task
     def validate():

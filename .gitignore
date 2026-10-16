@@ -4,8 +4,8 @@ __pycache__/
 .ruff_cache/
 *.part
 
-# Data is versioned with DVC, never git.
-data/
+# Data is versioned with DVC, never git. data/.gitignore (written by `dvc add`) keeps the
+# data folders out of git; only their pointer files (data/*.dvc) are committed.
 *.egg-info/
 
 # Documentation lives in Markdown or LaTeX (tracked). Binary documents are build

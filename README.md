@@ -29,7 +29,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
 | API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
-| MLOps (DVC, MLflow, CI/CD, Cloud Run) | — | Planned |
+| MLOps (DVC, MLflow, CI/CD, Cloud Run) | — | ✅ DVC (data in `gs://stoa-dvc-data`). MLflow, CI/CD, Cloud Run planned |
 
 ## Setup
 
@@ -38,6 +38,23 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
+```
+
+### Get the data (DVC)
+
+Data is not in git. It is versioned with [DVC](https://dvc.org) and stored in the `gs://stoa-dvc-data` bucket on the team's GCP project (ask Romit for access). Git holds only the pointer files `data/raw.dvc`, `data/interim.dvc` and `data/processed.dvc`.
+
+```bash
+gcloud auth application-default login    # once; sign in with the account added to the project
+.venv/bin/dvc pull                       # downloads data/ at the version this commit points to
+```
+
+After changing data (e.g. a new pull), save a new version and commit its pointers:
+
+```bash
+.venv/bin/dvc add data/raw data/interim data/processed
+.venv/bin/dvc push
+git add data/*.dvc && git commit -m "..."
 ```
 
 ## Usage
@@ -136,7 +153,7 @@ configs/analysis.yaml    parameters for src/analysis/
 configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, sensor matching)
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
-data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, planned)
+data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, pointers in data/*.dvc)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues
   analysis/              write-ups of one-off analyses

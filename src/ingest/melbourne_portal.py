@@ -1,12 +1,13 @@
 """Pull datasets and attachments from the City of Melbourne open data portal (Opendatasoft v2.1).
 
-Usage: python -m src.ingest.melbourne_portal [--only DATASET_ID ...] [--large]
+Usage: python -m src.ingest.melbourne_portal [--only DATASET_ID ...] [--large] [--full]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -27,7 +28,18 @@ def dataset_meta(base_url: str, dataset_id: str) -> dict:
     return r.json()
 
 
-def merge_rolling(existing: Path, fresh: Path, key: str) -> int:
+def recent_rows_filter(existing: Path, date_field: str, overlap_days: int) -> str:
+    """Portal `where` clause that re-fetches only the tail of a table already held.
+
+    Starts overlap_days before the latest date held, so the partly filled current day is
+    completed and any days missed while the pipeline was off are caught up.
+    """
+    latest = pd.read_parquet(existing, columns=[date_field])[date_field].max()
+    since = pd.Timestamp(latest).date() - timedelta(days=overlap_days)
+    return f"{date_field} >= date'{since.isoformat()}'"
+
+
+def merge_rolling(existing: Path, fresh: Path, key: str | list[str]) -> int:
     """Union a fresh rolling-window export into the rows already held; returns total rows.
 
     The portal keeps only a recent window of some tables, so overwriting would silently drop
@@ -53,6 +65,11 @@ def main() -> None:
     ap.add_argument(
         "--large", action="store_true", help="also fetch multi-GB bulk files"
     )
+    ap.add_argument(
+        "--full",
+        action="store_true",
+        help="re-fetch rolling-window tables in full and re-download held attachments",
+    )
     args = ap.parse_args()
 
     cfg = load_config()
@@ -68,11 +85,24 @@ def main() -> None:
         url = f"{base}/catalog/datasets/{ds}/exports/{fmt}"
         dest = out / f"{ds}.{fmt}"
         print(f"-> {ds} ({fmt})", flush=True)
-        rolling_key = pc.get("rolling_window", {}).get(ds)
-        if rolling_key and dest.exists():
-            fresh = download(url, dest.with_name(f"{dest.stem}.fresh.{fmt}"))
-            rows = merge_rolling(dest, fresh, rolling_key)
-            print(f"   merged rolling window: {rows} rows held", flush=True)
+        rolling = pc.get("rolling_window", {}).get(ds)
+        if rolling and dest.exists():
+            params = None
+            if not args.full:
+                where = recent_rows_filter(
+                    dest, rolling["date_field"], rolling["overlap_days"]
+                )
+                params = {"where": where}
+                print(f"   fetching only {where}", flush=True)
+            fresh = download(
+                url, dest.with_name(f"{dest.stem}.fresh.{fmt}"), params=params
+            )
+            fetched = len(pd.read_parquet(fresh, columns=rolling["key"][:1]))
+            rows = merge_rolling(dest, fresh, rolling["key"])
+            print(
+                f"   merged rolling window: {fetched} rows fetched, {rows} rows held",
+                flush=True,
+            )
         else:
             download(url, dest)
         (out / f"{ds}.meta.json").write_text(json.dumps(meta, indent=2) + "\n")
@@ -91,6 +121,11 @@ def main() -> None:
         kind = att.get("kind", "attachments")
         url = f"{base}/catalog/datasets/{att['dataset']}/{kind}/{att['id']}"
         dest = out / att["filename"]
+        # Attachments are fixed files (the 2009-2022 counts archive, tile indexes), so a held
+        # copy is kept; --full re-fetches it.
+        if dest.exists() and not args.full:
+            print(f"-> attachment {att['filename']} (held, skipped)", flush=True)
+            continue
         print(f"-> attachment {att['filename']}", flush=True)
         download(url, dest)
         record(out, dest, url, dataset=att["dataset"])

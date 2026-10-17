@@ -129,10 +129,10 @@ pull_weather ──────────────────────�
 pull_calendars ─────────────────────────────────────────────────────────────────┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `join_all`, `validate` and `dvc_push` are placeholders: replace a task's body and keep its name, and the wiring stays the same. A full run takes about 3.5 minutes; `pull_counts` (re-downloading the 2-year counts export) is the slowest task.
+(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `validate` and `dvc_push` are placeholders: replace a task's body and keep its name, and the wiring stays the same. A daily run takes about 30 seconds; `join_all` is the slowest task (see "Pipeline optimization" below).
 
 What a daily run re-does:
-- **Counts:** re-pulled and merged into the rows already held.
+- **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
 - **Weather:** only the last two years (`--full` re-fetches all).
 - **OSM:** the extract is pinned. `pull_osm` keeps the file it has, and each OSM stage skips itself unless one of its inputs changed: the extract, `configs/features.yaml`, the code in `src/features/`, the sensor locations, or `configs/sensor_overrides.yaml`. A skipped OSM chain takes a couple of seconds.
 
@@ -147,6 +147,28 @@ STOA_ALERT_EMAILS=a@northeastern.edu,b@northeastern.edu
 ```
 
 After editing `.env`, run `docker compose up -d` to apply it.
+
+### Pipeline optimization
+
+Airflow's Gantt chart (a run → Gantt) showed one bottleneck: `pull_counts` took 229 of 234 seconds, and every task after the OSM chain waited for it, because it re-downloaded the whole 2-year counts table (1.6M rows) and the 42 MB 2009–2022 archive on every run, to add one new day.
+
+Fix: `pull_counts` now asks the portal only for rows from two days before the latest date held (the portal fills in the current day hour by hour, and older rows don't change), and keeps held attachments.
+
+| Task | Before (s) | After (s) |
+|---|---|---|
+| `pull_counts` | 229.3 | 5.0 |
+| Other ingest tasks | 7.1 | 7.2 |
+| OSM stages (skipped, inputs unchanged) | 2.9 | 2.6 |
+| `join_all` | placeholder | 22.5 |
+| **Whole run** | **233.6** | **31.5** |
+
+| Before (run of 2026-10-17 00:00 UTC) | After (run `after_incremental_counts_2`) |
+|---|---|
+| ![Gantt before](docs/pipeline/gantt_before.png) | ![Gantt after](docs/pipeline/gantt_after.png) |
+
+`join_all` is now the slowest task. A run where `src/features/` or the OSM inputs changed also rebuilds the OSM stages (about 2.5 minutes, mostly `osm_segment_features`).
+
+While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 
 ### Tests and lint
 

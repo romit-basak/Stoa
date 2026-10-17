@@ -1,12 +1,13 @@
 """Pull datasets and attachments from the City of Melbourne open data portal (Opendatasoft v2.1).
 
-Usage: python -m src.ingest.melbourne_portal [--only DATASET_ID ...] [--large]
+Usage: python -m src.ingest.melbourne_portal [--only DATASET_ID ...] [--large] [--full]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -25,6 +26,17 @@ def dataset_meta(base_url: str, dataset_id: str) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+def recent_rows_filter(existing: Path, date_field: str, overlap_days: int) -> str:
+    """Portal `where` clause that re-fetches only the tail of a table already held.
+
+    Starts overlap_days before the latest date held, so the partly filled current day is
+    completed and any days missed while the pipeline was off are caught up.
+    """
+    latest = pd.read_parquet(existing, columns=[date_field])[date_field].max()
+    since = pd.Timestamp(latest).date() - timedelta(days=overlap_days)
+    return f"{date_field} >= date'{since.isoformat()}'"
 
 
 def merge_rolling(existing: Path, fresh: Path, key: str | list[str]) -> int:
@@ -53,6 +65,11 @@ def main() -> None:
     ap.add_argument(
         "--large", action="store_true", help="also fetch multi-GB bulk files"
     )
+    ap.add_argument(
+        "--full",
+        action="store_true",
+        help="re-fetch rolling-window tables in full instead of only their recent rows",
+    )
     args = ap.parse_args()
 
     cfg = load_config()
@@ -70,7 +87,16 @@ def main() -> None:
         print(f"-> {ds} ({fmt})", flush=True)
         rolling = pc.get("rolling_window", {}).get(ds)
         if rolling and dest.exists():
-            fresh = download(url, dest.with_name(f"{dest.stem}.fresh.{fmt}"))
+            params = None
+            if not args.full:
+                where = recent_rows_filter(
+                    dest, rolling["date_field"], rolling["overlap_days"]
+                )
+                params = {"where": where}
+                print(f"   fetching only {where}", flush=True)
+            fresh = download(
+                url, dest.with_name(f"{dest.stem}.fresh.{fmt}"), params=params
+            )
             fetched = len(pd.read_parquet(fresh, columns=rolling["key"][:1]))
             rows = merge_rolling(dest, fresh, rolling["key"])
             print(

@@ -70,9 +70,21 @@ def test_merge_rolling_on_composite_key_updates_the_partial_day(tmp_path):
     assert out["pedestriancount"].tolist() == [100, 250, 300]
 
 
+def test_recent_rows_filter_starts_overlap_days_before_latest_held(tmp_path):
+    held = tmp_path / "counts.parquet"
+    pd.DataFrame(
+        {"sensing_date": [date(2026, 9, 30), date(2026, 10, 16), date(2026, 10, 2)]}
+    ).to_parquet(held)
+
+    where = melbourne_portal.recent_rows_filter(held, "sensing_date", 2)
+    assert where == "sensing_date >= date'2026-10-14'"
+
+
 def test_counts_table_is_configured_as_rolling_on_a_composite_key():
     cfg = melbourne_portal.load_config()["melbourne_portal"]
     rolling = cfg["rolling_window"][
         "pedestrian-counting-system-monthly-counts-per-hour"
     ]
     assert rolling["key"] == KEY
+    assert rolling["date_field"] == "sensing_date"
+    assert rolling["overlap_days"] >= 1

@@ -27,7 +27,7 @@ def dataset_meta(base_url: str, dataset_id: str) -> dict:
     return r.json()
 
 
-def merge_rolling(existing: Path, fresh: Path, key: str) -> int:
+def merge_rolling(existing: Path, fresh: Path, key: str | list[str]) -> int:
     """Union a fresh rolling-window export into the rows already held; returns total rows.
 
     The portal keeps only a recent window of some tables, so overwriting would silently drop
@@ -68,11 +68,15 @@ def main() -> None:
         url = f"{base}/catalog/datasets/{ds}/exports/{fmt}"
         dest = out / f"{ds}.{fmt}"
         print(f"-> {ds} ({fmt})", flush=True)
-        rolling_key = pc.get("rolling_window", {}).get(ds)
-        if rolling_key and dest.exists():
+        rolling = pc.get("rolling_window", {}).get(ds)
+        if rolling and dest.exists():
             fresh = download(url, dest.with_name(f"{dest.stem}.fresh.{fmt}"))
-            rows = merge_rolling(dest, fresh, rolling_key)
-            print(f"   merged rolling window: {rows} rows held", flush=True)
+            fetched = len(pd.read_parquet(fresh, columns=rolling["key"][:1]))
+            rows = merge_rolling(dest, fresh, rolling["key"])
+            print(
+                f"   merged rolling window: {fetched} rows fetched, {rows} rows held",
+                flush=True,
+            )
         else:
             download(url, dest)
         (out / f"{ds}.meta.json").write_text(json.dumps(meta, indent=2) + "\n")

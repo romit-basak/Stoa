@@ -58,9 +58,12 @@ melbourne_portal:
     bom-weather-at-olympic-park: parquet
     microclimate-sensors-data: parquet
   # Tables the portal keeps only as a rolling window (counts: ~2 years). Re-pulls are merged into
-  # the rows already held, keyed on this column, never overwritten. dataset_id -> key column.
+  # the rows already held, never overwritten.
+  #   key: columns that identify a row. Not the portal's `id`: it glues location, hour and date
+  #     without separators, so e.g. (4, 20) and (42, 2) on the same day share an id.
   rolling_window:
-    pedestrian-counting-system-monthly-counts-per-hour: id
+    pedestrian-counting-system-monthly-counts-per-hour:
+      key: [location_id, sensing_date, hourday]
   # Files attached to datasets (not available through the records export). kind defaults to attachments.
   attachments:
     - dataset: pedestrian-counting-system-monthly-counts-per-hour

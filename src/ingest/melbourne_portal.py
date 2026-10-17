@@ -68,7 +68,7 @@ def main() -> None:
     ap.add_argument(
         "--full",
         action="store_true",
-        help="re-fetch rolling-window tables in full instead of only their recent rows",
+        help="re-fetch rolling-window tables in full and re-download held attachments",
     )
     args = ap.parse_args()
 
@@ -121,6 +121,11 @@ def main() -> None:
         kind = att.get("kind", "attachments")
         url = f"{base}/catalog/datasets/{att['dataset']}/{kind}/{att['id']}"
         dest = out / att["filename"]
+        # Attachments are fixed files (the 2009-2022 counts archive, tile indexes), so a held
+        # copy is kept; --full re-fetches it.
+        if dest.exists() and not args.full:
+            print(f"-> attachment {att['filename']} (held, skipped)", flush=True)
+            continue
         print(f"-> attachment {att['filename']}", flush=True)
         download(url, dest)
         record(out, dest, url, dataset=att["dataset"])

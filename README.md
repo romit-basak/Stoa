@@ -29,7 +29,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
 | API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
-| MLOps (DVC, MLflow, CI/CD, Cloud Run) | — | ✅ DVC (data in `gs://stoa-dvc-data`). MLflow, CI/CD, Cloud Run planned |
+| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). Data validation and bias slicing in progress. MLflow, CI/CD, Cloud Run planned |
 
 ## Setup
 
@@ -39,6 +39,8 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 ```
+
+Without uv, `requirements.txt` pins the exact versions we tested with: `pip install -r requirements.txt` (Python 3.11). `pyproject.toml` is the source of truth; after changing its dependencies, regenerate the pins with `uv pip compile pyproject.toml --extra dev --python-version 3.11 -o requirements.txt`.
 
 ### Get the data (DVC)
 
@@ -148,6 +150,8 @@ STOA_ALERT_EMAILS=a@northeastern.edu,b@northeastern.edu
 
 After editing `.env`, run `docker compose up -d` to apply it.
 
+**Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs; the files are kept in the `airflow-logs` Docker volume. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
+
 ### Pipeline optimization
 
 Airflow's Gantt chart (a run → Gantt) showed one bottleneck: `pull_counts` took 229 of 234 seconds, and every task after the OSM chain waited for it, because it re-downloaded the whole 2-year counts table (1.6M rows) and the 42 MB 2009–2022 archive on every run, to add one new day.
@@ -177,6 +181,14 @@ While doing this we found that the portal's `id` is not unique (it glues locatio
 .venv/bin/ruff check src tests && .venv/bin/ruff format src tests
 ```
 
+The DAG tests (`tests/dags/`) need Airflow, so they skip in `.venv`. Run them in the Airflow image (no Postgres needed; the override gives the run a throwaway database):
+
+```bash
+docker compose run --rm --no-deps \
+  -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db airflow-init \
+  bash -c "pip install -q pytest && cd /opt/stoa && python -m pytest tests/dags"
+```
+
 ## Repository layout
 
 ```
@@ -197,7 +209,8 @@ docs/
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
 src/features/            feature pipeline (osm.py runs extract -> graph -> features -> sensors)
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
-tests/                   mirrors src/
+tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
+requirements.txt         pinned versions generated from pyproject.toml
 CLAUDE.md                project rules and conventions
 ```
 

@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.ingest.common import download, load_config, raw_dir, record
+from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "events"
 
 
 def main() -> None:
+    setup_logging()
     cfg = load_config()
     ev = cfg["events"]
     out = raw_dir(cfg, SOURCE)

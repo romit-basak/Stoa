@@ -20,7 +20,14 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import from_bounds
 from shapely.geometry import box
 
-from src.ingest.common import USER_AGENT, download, load_config, raw_dir, record
+from src.ingest.common import (
+    USER_AGENT,
+    download,
+    load_config,
+    raw_dir,
+    record,
+    setup_logging,
+)
 
 SOURCE = "imagery"
 
@@ -97,6 +104,7 @@ def massgis(cfg: dict, site: str, bbox: list[float], out) -> None:
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", default="neu_boston")
     args = ap.parse_args()

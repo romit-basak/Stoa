@@ -15,12 +15,13 @@ import math
 
 from pyproj import Transformer
 
-from src.ingest.common import download, load_config, raw_dir, record
+from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "dem"
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", default="melbourne")
     args = ap.parse_args()

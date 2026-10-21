@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.ingest.common import download, load_config, raw_dir, record
+from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "nyc"
 LICENSE = "NYC Open Data terms (no licence on dataset page; verify). Evaluation only."
@@ -44,6 +44,7 @@ def fetch_paged_csv(
 
 
 def main() -> None:
+    setup_logging()
     cfg = load_config()
     nyc = cfg["nyc_open_data"]
     out = raw_dir(cfg, SOURCE)

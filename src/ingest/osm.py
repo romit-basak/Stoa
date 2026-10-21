@@ -17,7 +17,15 @@ from pathlib import Path
 
 import requests
 
-from src.ingest.common import USER_AGENT, download, load_config, raw_dir, record
+from src.ingest.common import (
+    USER_AGENT,
+    download,
+    load_config,
+    log,
+    raw_dir,
+    record,
+    setup_logging,
+)
 
 SOURCE = "osm"
 
@@ -27,6 +35,7 @@ def should_download(dest: Path, refresh: bool) -> bool:
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", default="melbourne")
     ap.add_argument(
@@ -42,7 +51,7 @@ def main() -> None:
     dest = out / f"{args.site}.osm.pbf"
 
     if not should_download(dest, args.refresh):
-        print(f"keeping pinned extract {dest.name} (use --refresh to replace it)")
+        log.info("keeping pinned extract %s (use --refresh to replace it)", dest.name)
         return
     head = requests.head(url, headers={"User-Agent": USER_AGENT}, timeout=60)
     download(url, dest, timeout=1800)

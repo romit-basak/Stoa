@@ -14,7 +14,14 @@ from typing import Any
 
 import requests
 
-from src.ingest.common import USER_AGENT, load_config, raw_dir, record
+from src.ingest.common import (
+    USER_AGENT,
+    load_config,
+    log,
+    raw_dir,
+    record,
+    setup_logging,
+)
 
 SOURCE = "boston_buildings"
 
@@ -31,6 +38,7 @@ def query(url: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", default="neu_boston")
     args = ap.parse_args()
@@ -84,7 +92,7 @@ def main() -> None:
         license="PDDL-1.0",
     )
     if len(features) != expected:
-        print(f"WARNING: got {len(features)} features, server reports {expected}")
+        log.warning("got %d features, server reports %d", len(features), expected)
 
 
 if __name__ == "__main__":

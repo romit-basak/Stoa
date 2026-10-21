@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 from datetime import UTC, date, datetime, timedelta
 
-from src.ingest.common import download, load_config, raw_dir, record
+from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "weather"
 
@@ -28,6 +28,7 @@ def years_to_fetch(
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument("--site", default="melbourne")
     ap.add_argument("--full", action="store_true", help="re-fetch every year")

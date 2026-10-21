@@ -14,7 +14,7 @@ import re
 import time
 from datetime import UTC, datetime
 
-from src.ingest.common import download, load_config, raw_dir, record
+from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "events"
 GAME = re.compile(
@@ -43,6 +43,7 @@ def parse_season(html: str, season: int) -> list[dict[str, str]]:
 
 
 def main() -> None:
+    setup_logging()
     cfg = load_config()
     ev = cfg["events"]
     out = raw_dir(cfg, SOURCE)

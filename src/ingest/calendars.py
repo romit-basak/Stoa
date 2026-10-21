@@ -13,7 +13,14 @@ from importlib.metadata import version
 
 import holidays
 
-from src.ingest.common import REPO_ROOT, download, load_config, raw_dir, record
+from src.ingest.common import (
+    REPO_ROOT,
+    download,
+    load_config,
+    raw_dir,
+    record,
+    setup_logging,
+)
 
 SOURCE = "calendars"
 
@@ -33,6 +40,7 @@ def site_holidays(
 
 
 def main() -> None:
+    setup_logging()
     cfg = load_config()
     cal = cfg["calendars"]
     out = raw_dir(cfg, SOURCE)

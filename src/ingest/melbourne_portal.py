@@ -13,7 +13,15 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from src.ingest.common import USER_AGENT, download, load_config, raw_dir, record
+from src.ingest.common import (
+    USER_AGENT,
+    download,
+    load_config,
+    log,
+    raw_dir,
+    record,
+    setup_logging,
+)
 
 SOURCE = "melbourne_portal"
 
@@ -58,6 +66,7 @@ def merge_rolling(existing: Path, fresh: Path, key: str | list[str]) -> int:
 
 
 def main() -> None:
+    setup_logging()
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--only", nargs="*", help="dataset ids to fetch (default: all in config)"
@@ -84,7 +93,7 @@ def main() -> None:
         default = meta.get("metas", {}).get("default", {})
         url = f"{base}/catalog/datasets/{ds}/exports/{fmt}"
         dest = out / f"{ds}.{fmt}"
-        print(f"-> {ds} ({fmt})", flush=True)
+        log.info("dataset %s (%s)", ds, fmt)
         rolling = pc.get("rolling_window", {}).get(ds)
         if rolling and dest.exists():
             params = None
@@ -93,15 +102,14 @@ def main() -> None:
                     dest, rolling["date_field"], rolling["overlap_days"]
                 )
                 params = {"where": where}
-                print(f"   fetching only {where}", flush=True)
+                log.info("fetching only %s", where)
             fresh = download(
                 url, dest.with_name(f"{dest.stem}.fresh.{fmt}"), params=params
             )
             fetched = len(pd.read_parquet(fresh, columns=rolling["key"][:1]))
             rows = merge_rolling(dest, fresh, rolling["key"])
-            print(
-                f"   merged rolling window: {fetched} rows fetched, {rows} rows held",
-                flush=True,
+            log.info(
+                "merged rolling window: %d rows fetched, %d rows held", fetched, rows
             )
         else:
             download(url, dest)
@@ -124,16 +132,18 @@ def main() -> None:
         # Attachments are fixed files (the 2009-2022 counts archive, tile indexes), so a held
         # copy is kept; --full re-fetches it.
         if dest.exists() and not args.full:
-            print(f"-> attachment {att['filename']} (held, skipped)", flush=True)
+            log.info(
+                "attachment %s held, skipped (--full re-fetches it)", att["filename"]
+            )
             continue
-        print(f"-> attachment {att['filename']}", flush=True)
+        log.info("attachment %s", att["filename"])
         download(url, dest)
         record(out, dest, url, dataset=att["dataset"])
 
     if args.large:
         for name, url in pc["large"].items():
             dest = out / url.rsplit("/", 1)[-1]
-            print(f"-> large {name}", flush=True)
+            log.info("large file %s", name)
             download(url, dest, timeout=3600)
             record(out, dest, url)
 

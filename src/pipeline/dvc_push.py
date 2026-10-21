@@ -18,13 +18,16 @@ Credentials: in Docker, GOOGLE_APPLICATION_CREDENTIALS points at a service accou
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from pathlib import Path
 
-from src.ingest.common import REPO_ROOT, log, setup_logging
+from src.ingest.common import REPO_ROOT, setup_logging
 
 TRACKED = ["data/raw", "data/interim", "data/processed"]
+
+log = logging.getLogger("stoa.pipeline")
 
 
 class VersioningError(RuntimeError):

@@ -45,6 +45,24 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+class DownloadError(RuntimeError):
+    """A download that failed after every retry, or came back empty or cut short."""
+
+
+def _write_body(r: requests.Response, tmp: Path) -> None:
+    """Write the response to tmp; raise if it is empty or shorter than the server said."""
+    with open(tmp, "wb") as f:
+        f.writelines(r.iter_content(1 << 20))
+    size = tmp.stat().st_size
+    if size == 0:
+        raise DownloadError(f"{r.url} returned an empty body")
+    # Content-Length counts the bytes on the wire; with gzip those differ from what we save.
+    expected = r.headers.get("Content-Length")
+    plain = r.headers.get("Content-Encoding", "identity") == "identity"
+    if expected and plain and size != int(expected):
+        raise DownloadError(f"{r.url} was cut short: got {size} of {expected} bytes")
+
+
 def download(
     url: str,
     dest: Path,
@@ -57,36 +75,52 @@ def download(
 ) -> Path:
     """Stream url to dest via a .part file so an interrupted download never looks complete.
 
-    Rate limits (429) and server errors (5xx) are retried with exponential backoff.
+    Rate limits (429), server errors (5xx), dropped connections, timeouts and empty or
+    truncated bodies are retried with exponential backoff. Other HTTP errors (a 404, say)
+    fail at once. If every try fails, raise DownloadError and leave any existing dest as it
+    was.
     """
     tmp = dest.with_suffix(dest.suffix + ".part")
     log.info("downloading %s -> %s", url, dest.name)
     for attempt in range(retries + 1):
-        with requests.request(
-            method,
+        wait = backoff * 2**attempt
+        try:
+            with requests.request(
+                method,
+                url,
+                params=params,
+                data=data,
+                stream=True,
+                timeout=timeout,
+                headers={"User-Agent": USER_AGENT},
+            ) as r:
+                if r.status_code == 429 or r.status_code >= 500:
+                    wait = int(r.headers.get("Retry-After", 0)) or wait
+                    problem = f"HTTP {r.status_code}"
+                else:
+                    r.raise_for_status()
+                    _write_body(r, tmp)
+                    break
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            requests.exceptions.ChunkedEncodingError,  # connection dropped mid-body
+            DownloadError,
+        ) as e:
+            problem = str(e)
+        tmp.unlink(missing_ok=True)
+        if attempt == retries:
+            log.error("giving up on %s after %d tries: %s", url, retries + 1, problem)
+            raise DownloadError(f"{url} failed after {retries + 1} tries: {problem}")
+        log.warning(
+            "%s from %s, retry %d/%d in %.0f s",
+            problem,
             url,
-            params=params,
-            data=data,
-            stream=True,
-            timeout=timeout,
-            headers={"User-Agent": USER_AGENT},
-        ) as r:
-            if (r.status_code == 429 or r.status_code >= 500) and attempt < retries:
-                wait = int(r.headers.get("Retry-After", 0)) or backoff * 2**attempt
-                log.warning(
-                    "HTTP %s from %s, retry %d/%d in %.0f s",
-                    r.status_code,
-                    url,
-                    attempt + 1,
-                    retries,
-                    wait,
-                )
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-            with open(tmp, "wb") as f:
-                f.writelines(r.iter_content(1 << 20))
-        break
+            attempt + 1,
+            retries,
+            wait,
+        )
+        time.sleep(wait)
     tmp.replace(dest)
     log.info("saved %s (%.1f MB)", dest.name, dest.stat().st_size / 1e6)
     return dest

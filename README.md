@@ -40,6 +40,8 @@ uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 ```
 
+Without uv, `requirements.txt` pins the exact versions we tested with: `pip install -r requirements.txt` (Python 3.11). `pyproject.toml` is the source of truth; after changing its dependencies, regenerate the pins with `uv pip compile pyproject.toml --extra dev --python-version 3.11 -o requirements.txt`.
+
 ### Get the data (DVC)
 
 Data is not in git. It is versioned with [DVC](https://dvc.org) and stored in the `gs://stoa-dvc-data` bucket on the team's GCP project (ask Romit for access). Git holds only the pointer files `data/raw.dvc`, `data/interim.dvc` and `data/processed.dvc`.

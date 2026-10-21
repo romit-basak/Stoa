@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -34,7 +33,7 @@ from src.features.graph import graph
 from src.features.osm_extract import extract
 from src.features.segment_features import segment_features
 from src.features.sensor_match import sensor_locations_path, sensor_match
-from src.ingest.common import REPO_ROOT, load_config, sha256
+from src.ingest.common import REPO_ROOT, load_config, setup_logging, sha256
 
 STAGES = ["extract", "graph", "features", "sensors"]
 FEATURE_CODE = REPO_ROOT / "src" / "features"
@@ -110,9 +109,7 @@ def main() -> None:
         help="skip stages whose inputs haven't changed since their last successful run",
     )
     args = ap.parse_args()
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    setup_logging()
 
     data_cfg = load_config()
     fcfg = load_features_config()

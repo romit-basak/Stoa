@@ -35,7 +35,7 @@ from src.features.common import (
     write_meta,
     write_parquet,
 )
-from src.ingest.common import REPO_ROOT, load_config
+from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
 ARCHIVE = "counts_per_hour_2009-05_to_2022-12-14.csv.zip"
 LIVE = "pedestrian-counting-system-monthly-counts-per-hour.parquet"
@@ -394,11 +394,7 @@ def build(
 
 
 def main() -> None:
-    import logging
-
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-    )
+    setup_logging()
     data_cfg = load_config()
     fcfg = load_features_config()
     t = time.perf_counter()

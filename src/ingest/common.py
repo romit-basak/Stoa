@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,15 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 USER_AGENT = "Stoa/0.1 (IE7374 Northeastern student project)"
+
+log = logging.getLogger("stoa.ingest")
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    """Log to stderr with timestamps; Airflow captures it in each task's log."""
+    logging.basicConfig(
+        level=level, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
@@ -50,6 +60,7 @@ def download(
     Rate limits (429) and server errors (5xx) are retried with exponential backoff.
     """
     tmp = dest.with_suffix(dest.suffix + ".part")
+    log.info("downloading %s -> %s", url, dest.name)
     for attempt in range(retries + 1):
         with requests.request(
             method,
@@ -62,6 +73,14 @@ def download(
         ) as r:
             if (r.status_code == 429 or r.status_code >= 500) and attempt < retries:
                 wait = int(r.headers.get("Retry-After", 0)) or backoff * 2**attempt
+                log.warning(
+                    "HTTP %s from %s, retry %d/%d in %.0f s",
+                    r.status_code,
+                    url,
+                    attempt + 1,
+                    retries,
+                    wait,
+                )
                 time.sleep(wait)
                 continue
             r.raise_for_status()
@@ -69,6 +88,7 @@ def download(
                 f.writelines(r.iter_content(1 << 20))
         break
     tmp.replace(dest)
+    log.info("saved %s (%.1f MB)", dest.name, dest.stat().st_size / 1e6)
     return dest
 
 

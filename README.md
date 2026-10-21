@@ -179,6 +179,14 @@ While doing this we found that the portal's `id` is not unique (it glues locatio
 .venv/bin/ruff check src tests && .venv/bin/ruff format src tests
 ```
 
+The DAG tests (`tests/dags/`) need Airflow, so they skip in `.venv`. Run them in the Airflow image (no Postgres needed; the override gives the run a throwaway database):
+
+```bash
+docker compose run --rm --no-deps \
+  -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db airflow-init \
+  bash -c "pip install -q pytest && cd /opt/stoa && python -m pytest tests/dags"
+```
+
 ## Repository layout
 
 ```

@@ -26,10 +26,13 @@ SOURCE = "calendars"
 
 
 def site_holidays(
-    country: str, subdiv: str, first: int, last: int
+    country: str, subdiv: str, first: int, last: int, language: str | None = None
 ) -> list[dict[str, str]]:
+    # Without an explicit language, `holidays` names follow the machine's locale (LANGUAGE,
+    # LC_ALL, LC_MESSAGES, LANG), so a US-English machine writes "Labor Day" for Victoria's
+    # "Labour Day" and the file changes with whoever ran the pull.
     days = holidays.country_holidays(
-        country, subdiv=subdiv, years=range(first, last + 1)
+        country, subdiv=subdiv, years=range(first, last + 1), language=language
     )
     return [
         {"date": d.isoformat(), "name": name}
@@ -51,7 +54,11 @@ def main() -> None:
         with open(dest, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=["date", "name"])
             w.writeheader()
-            w.writerows(site_holidays(spec["country"], spec["subdiv"], first, last))
+            w.writerows(
+                site_holidays(
+                    spec["country"], spec["subdiv"], first, last, spec["language"]
+                )
+            )
         record(
             out,
             dest,
@@ -59,6 +66,7 @@ def main() -> None:
             holidays_version=version("holidays"),
             country=spec["country"],
             subdiv=spec["subdiv"],
+            language=spec["language"],
             years=[first, last],
             license="MIT (package); holiday dates are public facts",
         )

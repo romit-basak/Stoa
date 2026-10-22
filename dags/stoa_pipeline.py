@@ -1,5 +1,6 @@
 """Stoa data pipeline: pull the Melbourne sources, build OSM features, join the hourly table,
-then (TODO) validate it and save it as a new DVC version.
+report how much data each bias slice has, then (TODO) validate it and save it as a new DVC
+version.
 
 Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
 /opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
@@ -88,6 +89,40 @@ def stoa_pipeline():
         return f"{STOA} src.ingest.calendars"
 
     @task.bash
+    def pull_static_layers():
+        # Layers that don't change day to day, so each is fetched only when it isn't held yet
+        # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
+        # (slope), the CLUE areas (precincts) and AFL crowds (match days), for bias slicing.
+        # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
+        # The braces matter: || and && have equal precedence, so `test || cd && python` would
+        # run python even when the file is held (from the wrong folder, so it fails), and a
+        # failed first fetch must stop the task rather than be hidden by the second.
+        raw = "/opt/stoa/data/raw"
+        portal = f"{raw}/melbourne_portal"
+        clue = "blocks-for-census-of-land-use-and-employment-clue"
+        steps = [
+            (
+                f"{portal}/footpath-steepness.geojson",
+                f"{STOA} src.ingest.melbourne_portal --only footpath-steepness",
+            ),
+            (
+                f"{portal}/{clue}.geojson",
+                f"{STOA} src.ingest.melbourne_portal --only {clue}",
+            ),
+            (
+                f"{raw}/dem/melbourne_ga_lidar_5m.tif",
+                f"{STOA} src.ingest.dem --site melbourne",
+            ),
+            (
+                f"{raw}/events/afl_attendance.csv",
+                f"{STOA} src.ingest.afl_attendance",
+            ),
+        ]
+        return " && ".join(
+            f"{{ test -f {path} || {{ {cmd}; }}; }}" for path, cmd in steps
+        )
+
+    @task.bash
     def pull_osm(params=None):
         refresh = " --refresh" if params and params.get("refresh_osm") else ""
         return f"{STOA} src.ingest.osm --site melbourne{refresh}"
@@ -110,18 +145,31 @@ def stoa_pipeline():
     def osm_sensor_match():
         return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
+    @task.bash
+    def sensor_steepness():
+        # Footpath slope and elevation per sensor (from Shubham Hadawle's join notebook).
+        return f"{STOA} src.features.sensor_steepness"
+
     # --- Join, validate (TODO), then version ---
 
     @task.bash
     def join_all():
-        # Hourly training table: counts + time + weather + calendars + sensor match.
+        # Hourly training table: counts + time + weather + calendars + sensor match + slope.
         return f"{STOA} src.features.counts_hourly"
+
+    @task.bash
+    def bias_slices():
+        # Bias step 1: how much data each slice (place, time, weather, era...) has against a
+        # reference. Needs no model. See docs/bias/bias_slicing.md.
+        return f"{STOA} src.bias.representation"
 
     @task
     def validate():
         print("TODO: schema checks, completeness per sensor, zero/stuck-value checks")
 
-    @task.bash
+    # Exit code 99 (src.pipeline.dvc_push.SKIP_EXIT_CODE) means there are no credentials
+    # for the bucket, as on a fresh clone outside the team: skip instead of failing the run.
+    @task.bash(skip_on_exit_code=99)
     def dvc_push():
         # Runs after validate, so only data that passed the checks becomes a version. It
         # uploads the data; committing the updated data/*.dvc pointers is left to a person.
@@ -140,9 +188,18 @@ def stoa_pipeline():
     sensors = osm_sensor_match()
     [osm_features, counts] >> sensors
 
+    # Slope matching needs the sensor locations and the terrain files.
+    static = pull_static_layers()
+    steepness = sensor_steepness()
+    [static, counts] >> steepness
+
     joined = join_all()
-    [sensors, counts, pull_weather(), pull_calendars()] >> joined
-    joined >> validate() >> dvc_push()
+    [sensors, steepness, counts, pull_weather(), pull_calendars()] >> joined
+
+    # Bias slicing runs beside validation; only data that went through both is versioned.
+    slices = bias_slices()
+    [joined, static] >> slices
+    [joined >> validate(), slices] >> dvc_push()
 
 
 stoa_pipeline()

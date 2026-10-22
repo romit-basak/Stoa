@@ -6,7 +6,7 @@
 .venv/bin/python -m src.features.counts_hourly    # ~30 s, ~2.5 GB memory
 ```
 
-It runs as `join_all` in the Airflow DAG. It needs the counts, weather and calendars pulled, and `sensor_osm_features.parquet` from the OSM pipeline. Settings are in `configs/features.yaml` under `counts_hourly`. Run statistics go to `counts_hourly_meta.json`.
+It runs as `join_all` in the Airflow DAG. It needs the counts, weather and calendars pulled, `sensor_osm_features.parquet` from the OSM pipeline, and `sensor_steepness.parquet` (below). Settings are in `configs/features.yaml` under `counts_hourly`. Run statistics go to `counts_hourly_meta.json`.
 
 ## Adding the segment features
 
@@ -70,8 +70,22 @@ Within each count hour (h:00 to h+1:00):
 | `wx_*` | Open-Meteo ERA5 for the city centre: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `cloud_cover`, `wind_speed_10m`, `is_day`, `precipitation`, `rain`, `shortwave_radiation` |
 | `sensor_description`, `location_type`, `segment_id`, `match_method`, `needs_review` | From the sensor match (`sensor_segment_map.parquet`) |
 | `has_location` | The sensor is in the current sensor-locations file |
+| `slope_pct`, `slope_pct_local_mean`, `elevation_m`, `place_source` | Footpath slope (%), the length-weighted mean slope within 25 m, and elevation (m AHD), from `sensor_steepness.parquet` (below). Missing for the 18 sensors with no location. |
 
 There's no month or day-of-year column, by design (core rule 9): use `sun_elevation_deg`, temperature and the calendar flags instead.
+
+## Footpath slope per sensor
+
+`src/features/sensor_steepness.py` (task `sensor_steepness`) writes `sensor_steepness.parquet`, one row per outdoor sensor. It's based on Shubham Hadawle's Colab join notebook. Each sensor is matched to the nearest section of the City of Melbourne footpath-steepness survey within 25 m:
+- `slope_pct` is that section's `gradepc` (metres of rise per 100 m along the footpath).
+- `elevation_m` is the mean of its `rlmin` and `rlmax`.
+- `slope_pct_local_mean` is the length-weighted mean `gradepc` of all sections within 25 m, so one odd section doesn't decide the value.
+
+Sections with no grade (4,455) or shorter than 5 m (4,854; their grades reach 580%) are skipped. Skipping the ungraded ones matters: without it, sensor 143 was matched to an empty section and got no slope.
+
+Sensors 25 and 130 have no section within 25 m. Their elevation and slope come from the GA 5 m LiDAR DEM, with slope taken from samples 10 m to each side. That's the steepest terrain gradient, not the grade along a footpath, so `place_source` (`footpath_steepness` or `ga_dem_5m`) records which method each sensor used.
+
+Sensor 139 (Sandridge Bridge signal box, by a ramp) has 20.4%; every other sensor is under 10%. The footpath survey exists only for the City of Melbourne, so these columns belong to the Melbourne-rich model, not the portable one (CLAUDE.md, "Generalization").
 
 ## Run of 16 October 2026
 

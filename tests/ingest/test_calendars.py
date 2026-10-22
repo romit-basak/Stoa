@@ -85,3 +85,10 @@ def test_holidays_package_matches_vic_important_dates():
         if not (d.weekday() >= 5 and d + timedelta(days=7 - d.weekday()) in ours)
     }
     assert missing == set()
+
+
+def test_holiday_names_do_not_follow_the_machine_locale(monkeypatch):
+    monkeypatch.setenv("LANGUAGE", "en_US")
+    names = {r["name"] for r in site_holidays("AU", "VIC", 2026, 2026, "en_AU")}
+    assert "Labour Day" in names
+    assert "Labor Day" not in names

@@ -1,4 +1,5 @@
-"""Hourly training table for Melbourne: counts + time + weather + calendars + sensor match.
+"""Hourly training table for Melbourne: counts + time + weather + calendars + sensor match +
+footpath slope.
 
 Usage: python -m src.features.counts_hourly
 
@@ -353,9 +354,24 @@ def build(
             "needs_review",
         ],
     )
-    table = pd.concat([counts, feats, wx], axis=1).merge(
-        sensors, on="location_id", how="left"
+    steepness = pd.read_parquet(
+        sensors_path.with_name("sensor_steepness.parquet"),
+        columns=[
+            "location_id",
+            "slope_pct",
+            "slope_pct_local_mean",
+            "elevation_m",
+            "place_source",
+        ],
     )
+    table = (
+        pd.concat([counts, feats, wx], axis=1)
+        .merge(sensors, on="location_id", how="left")
+        .merge(steepness, on="location_id", how="left")
+    )
+    table[["slope_pct", "slope_pct_local_mean", "elevation_m"]] = table[
+        ["slope_pct", "slope_pct_local_mean", "elevation_m"]
+    ].astype("float32")
     table["has_location"] = table["location_type"].notna()
     table["needs_review"] = table["needs_review"].astype("boolean")
     table[["direction_1", "direction_2"]] = table[

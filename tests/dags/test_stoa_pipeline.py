@@ -40,19 +40,28 @@ def test_has_every_stage(dag):
         "pull_weather",
         "pull_calendars",
         "pull_osm",
+        "pull_static_layers",
         "osm_extract",
         "osm_graph",
         "osm_segment_features",
         "osm_sensor_match",
+        "sensor_steepness",
         "join_all",
+        "bias_slices",
         "validate",
         "dvc_push",
     }
 
 
 def test_ingest_tasks_run_in_parallel(dag):
-    # The four downloads are independent, so none should wait on another.
-    for task_id in ("pull_counts", "pull_weather", "pull_calendars", "pull_osm"):
+    # The downloads are independent, so none should wait on another.
+    for task_id in (
+        "pull_counts",
+        "pull_weather",
+        "pull_calendars",
+        "pull_osm",
+        "pull_static_layers",
+    ):
         assert dag.get_task(task_id).upstream_task_ids == set()
 
 
@@ -64,16 +73,24 @@ def test_wiring(dag):
     assert upstream("osm_graph") == {"osm_extract"}
     assert upstream("osm_segment_features") == {"osm_graph"}
     assert upstream("osm_sensor_match") == {"osm_segment_features", "pull_counts"}
+    assert upstream("sensor_steepness") == {"pull_static_layers", "pull_counts"}
     assert upstream("join_all") == {
         "osm_sensor_match",
+        "sensor_steepness",
         "pull_counts",
         "pull_weather",
         "pull_calendars",
     }
     assert upstream("validate") == {"join_all"}
-    assert upstream("dvc_push") == {"validate"}
+    assert upstream("bias_slices") == {"join_all", "pull_static_layers"}
+    assert upstream("dvc_push") == {"validate", "bias_slices"}
 
 
 def test_every_task_retries(dag):
     for task in dag.tasks:
         assert task.retries == 2, task.task_id
+
+
+def test_dvc_push_skips_without_credentials(dag):
+    # Must match SKIP_EXIT_CODE in src/pipeline/dvc_push.py.
+    assert 99 in dag.get_task("dvc_push").skip_on_exit_code

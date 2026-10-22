@@ -1,6 +1,7 @@
 # The image only needs pyproject.toml (see Dockerfile); the repo is mounted at run time.
 # Keeping data and environments out of the build context avoids sending gigabytes to Docker.
 data/
+logs/
 .venv/
 .git/
 # DVC's local cache is a second copy of data/.

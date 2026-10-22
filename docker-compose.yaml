@@ -28,7 +28,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./dags:/opt/airflow/dags
     - .:/opt/stoa # whole repo: tasks run src/ and write to data/ on the host
-    - airflow-logs:/opt/airflow/logs
+    - ./logs:/opt/airflow/logs # task logs, readable in logs/ on the host
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     postgres:
@@ -107,4 +107,3 @@ services:
 
 volumes:
   postgres-db-volume:
-  airflow-logs:

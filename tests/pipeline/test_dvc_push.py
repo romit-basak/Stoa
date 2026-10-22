@@ -17,7 +17,11 @@ def repo(tmp_path):
     for d in dvc_push.TRACKED:
         (tmp_path / f"{d}.dvc").write_text("outs:\n- md5: aaa.dir\n")
     git("add", ".")
-    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "pointers")
+    # gpgsign=false: machines that sign commits by default would otherwise need gpg here.
+    git(
+        "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+        "commit", "-qm", "pointers",
+    )  # fmt: skip
     return tmp_path
 
 

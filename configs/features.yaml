@@ -116,3 +116,11 @@ counts_hourly:
   covid_period: ["2020-03-16", "2021-10-21"]
   # Metro Tunnel stations opened (structural break; see CLAUDE.md "Generalization").
   metro_tunnel_opened: "2025-11-30"
+
+sensor_steepness:
+  # Footpath slope and elevation per count sensor (src/features/sensor_steepness.py).
+  site: melbourne
+  max_match_m: 25        # nearest footpath-steepness section must be this close
+  min_section_m: 5       # shorter sections are skipped: their grades reach 580%
+  local_radius_m: 25     # length-weighted mean slope over sections this close
+  dem_offset_m: 10       # DEM fallback: terrain slope from samples this far to each side

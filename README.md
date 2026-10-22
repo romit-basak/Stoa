@@ -22,7 +22,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Module | Path | Status |
 |---|---|---|
 | Ingestion | `src/ingest/` | ✅ Melbourne: counts, City of Melbourne layers, OSM, DEM, WorldCover, weather, AFL fixtures and crowds, calendars. ✅ NEU Boston: terrain, buildings, imagery, OSM, land cover, weather. ✅ NYC: test counts, OSM, land cover, weather |
-| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Hourly table for Melbourne: counts + time + weather + calendars ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). Shade, terrain and City of Melbourne layers planned |
+| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Footpath slope and elevation per sensor. ✅ Hourly table for Melbourne: counts + time + weather + calendars + slope ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). Shade and other City of Melbourne layers planned |
 | Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting; spatio-temporal GNN is a stretch goal) |
 | Path segmentation | `src/models/segmentation/` | Planned (NEU campus) |
 | Agents | `src/agents/` | Planned: LLM intake agent with local-knowledge adjustments (planning assistant is a stretch goal) |
@@ -101,10 +101,11 @@ Options:
 
 ```bash
 .venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
-.venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars (~30 s)
+.venv/bin/python -m src.features.sensor_steepness         # footpath slope and elevation per sensor (~5 s)
+.venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars + slope (~30 s)
 ```
 
-Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md). `counts_hourly.parquet` is the hourly training table (one row per sensor and hour); see [docs/features/counts_hourly.md](docs/features/counts_hourly.md), including how it handles daylight saving.
+Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md). `counts_hourly.parquet` is the hourly training table (one row per sensor and hour); see [docs/features/counts_hourly.md](docs/features/counts_hourly.md), including how it handles daylight saving. `sensor_steepness.parquet` gives each outdoor sensor its footpath slope and elevation (from Shubham Hadawle's join notebook), and the hourly table carries those columns.
 
 ### Run the pipeline (Airflow)
 
@@ -127,11 +128,12 @@ The repo is mounted into the containers, so code changes apply on the next run; 
 ```
 pull_counts ────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┐
-pull_weather ───────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► dvc_push
-pull_calendars ─────────────────────────────────────────────────────────────────┘
+pull_terrain ─► sensor_steepness ─────────────────────────────────────────────────┤
+pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► dvc_push
+pull_calendars ───────────────────────────────────────────────────────────────────┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `validate` is a placeholder: replace its body and keep its name, and the wiring stays the same. `dvc_push` saves the result as a new DVC version (below). A daily run takes about 30 seconds; `join_all` is the slowest task (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_terrain` fetches the footpath-steepness survey and the 5 m DEM only when they aren't held yet: both are fixed snapshots.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `validate` is a placeholder: replace its body and keep its name, and the wiring stays the same. `dvc_push` saves the result as a new DVC version (below). A daily run takes about 30 seconds; `join_all` is the slowest task (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.

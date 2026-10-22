@@ -40,10 +40,12 @@ def test_has_every_stage(dag):
         "pull_weather",
         "pull_calendars",
         "pull_osm",
+        "pull_terrain",
         "osm_extract",
         "osm_graph",
         "osm_segment_features",
         "osm_sensor_match",
+        "sensor_steepness",
         "join_all",
         "validate",
         "dvc_push",
@@ -51,8 +53,14 @@ def test_has_every_stage(dag):
 
 
 def test_ingest_tasks_run_in_parallel(dag):
-    # The four downloads are independent, so none should wait on another.
-    for task_id in ("pull_counts", "pull_weather", "pull_calendars", "pull_osm"):
+    # The downloads are independent, so none should wait on another.
+    for task_id in (
+        "pull_counts",
+        "pull_weather",
+        "pull_calendars",
+        "pull_osm",
+        "pull_terrain",
+    ):
         assert dag.get_task(task_id).upstream_task_ids == set()
 
 
@@ -64,8 +72,10 @@ def test_wiring(dag):
     assert upstream("osm_graph") == {"osm_extract"}
     assert upstream("osm_segment_features") == {"osm_graph"}
     assert upstream("osm_sensor_match") == {"osm_segment_features", "pull_counts"}
+    assert upstream("sensor_steepness") == {"pull_terrain", "pull_counts"}
     assert upstream("join_all") == {
         "osm_sensor_match",
+        "sensor_steepness",
         "pull_counts",
         "pull_weather",
         "pull_calendars",

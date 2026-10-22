@@ -88,6 +88,18 @@ def stoa_pipeline():
         return f"{STOA} src.ingest.calendars"
 
     @task.bash
+    def pull_terrain():
+        # Footpath-steepness survey and the GA 5 m DEM. Both are fixed snapshots, so each is
+        # fetched only when it isn't held yet (a fresh clone without `dvc pull`).
+        raw = "/opt/stoa/data/raw"
+        return (
+            f"test -f {raw}/melbourne_portal/footpath-steepness.geojson || "
+            f"{STOA} src.ingest.melbourne_portal --only footpath-steepness; "
+            f"test -f {raw}/dem/melbourne_ga_lidar_5m.tif || "
+            f"{STOA} src.ingest.dem --site melbourne"
+        )
+
+    @task.bash
     def pull_osm(params=None):
         refresh = " --refresh" if params and params.get("refresh_osm") else ""
         return f"{STOA} src.ingest.osm --site melbourne{refresh}"
@@ -110,11 +122,16 @@ def stoa_pipeline():
     def osm_sensor_match():
         return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
+    @task.bash
+    def sensor_steepness():
+        # Footpath slope and elevation per sensor (from Shubham Hadawle's join notebook).
+        return f"{STOA} src.features.sensor_steepness"
+
     # --- Join, validate (TODO), then version ---
 
     @task.bash
     def join_all():
-        # Hourly training table: counts + time + weather + calendars + sensor match.
+        # Hourly training table: counts + time + weather + calendars + sensor match + slope.
         return f"{STOA} src.features.counts_hourly"
 
     @task
@@ -140,8 +157,12 @@ def stoa_pipeline():
     sensors = osm_sensor_match()
     [osm_features, counts] >> sensors
 
+    # Slope matching needs the sensor locations and the terrain files.
+    steepness = sensor_steepness()
+    [pull_terrain(), counts] >> steepness
+
     joined = join_all()
-    [sensors, counts, pull_weather(), pull_calendars()] >> joined
+    [sensors, steepness, counts, pull_weather(), pull_calendars()] >> joined
     joined >> validate() >> dvc_push()
 
 

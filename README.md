@@ -162,7 +162,7 @@ gcloud iam service-accounts keys create .secrets/stoa-airflow-dvc.json \
 
 Without the key, every other task still runs and `dvc_push` fails with a message saying the key is missing.
 
-**Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs; the files are kept in the `airflow-logs` Docker volume. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
+**Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs. The same files are written to `logs/` in the repo (mounted in `docker-compose.yaml`, git-ignored), one folder per DAG, run and task, e.g. `logs/dag_id=stoa_pipeline/run_id=<run>/task_id=pull_counts/attempt=1.log`, so you can read or `grep` them without the UI. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
 
 ### Pipeline optimization
 
@@ -211,6 +211,7 @@ configs/features.yaml    feature pipeline settings (walk filter, POI categories,
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
 data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, pointers in data/*.dvc)
+logs/                    Airflow task logs (written by the containers, git-ignored)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues
   analysis/              write-ups of one-off analyses

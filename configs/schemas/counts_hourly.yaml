@@ -1,0 +1,42 @@
+# Expected columns and pandas dtypes of the hourly counts table, checked by
+# src/pipeline/validate.py. Generated with `python -m src.pipeline.validate --write-schema`.
+columns:
+  location_id: int32
+  ts_utc: datetime64[us, UTC]
+  ts_local: datetime64[us, Australia/Melbourne]
+  date_local: datetime64[us]
+  hour_local: int8
+  source: category
+  pedestriancount: int32
+  direction_1: float32
+  direction_2: float32
+  suspect_outage_zero: bool
+  weekday: int8
+  hour_of_week: int16
+  is_weekend: bool
+  is_public_holiday: bool
+  school_term: boolean
+  uni_teaching: boolean
+  uni_exams: boolean
+  sun_elevation_deg: float32
+  covid_period: bool
+  post_metro_tunnel: bool
+  wx_temperature_2m: float32
+  wx_apparent_temperature: float32
+  wx_relative_humidity_2m: float32
+  wx_cloud_cover: float32
+  wx_wind_speed_10m: float32
+  wx_is_day: float32
+  wx_precipitation: float32
+  wx_rain: float32
+  wx_shortwave_radiation: float32
+  sensor_description: str
+  location_type: str
+  segment_id: str
+  match_method: str
+  needs_review: boolean
+  slope_pct: float32
+  slope_pct_local_mean: float32
+  elevation_m: float32
+  place_source: category
+  has_location: bool

@@ -45,6 +45,7 @@ os.environ.setdefault("GX_ANALYTICS_ENABLED", "false")
 import great_expectations as gx
 import great_expectations.expectations as gxe
 from great_expectations.data_context.types.base import ProgressBarsConfig
+from great_expectations.expectations.row_conditions import Column, Condition
 
 log = logging.getLogger("stoa.pipeline")
 
@@ -122,6 +123,26 @@ def check_schema(df: pd.DataFrame, schema: dict[str, Any]) -> list[Check]:
 
 # --- Great Expectations suite ---
 
+# Row conditions are Condition objects (Column("x") == 1): GX 2.0 removes text conditions.
+OPERATORS = {
+    "==": lambda c, v: c == v,
+    "!=": lambda c, v: c != v,
+    ">": lambda c, v: c > v,
+    ">=": lambda c, v: c >= v,
+    "<": lambda c, v: c < v,
+    "<=": lambda c, v: c <= v,
+}
+
+
+def condition(rule: list[Any]) -> Condition:
+    """[column, operator, value] from the config as a GX row condition."""
+    column, op, value = rule
+    if op not in OPERATORS:
+        raise ValueError(
+            f"unknown operator {op!r} in {rule}; use one of {list(OPERATORS)}"
+        )
+    return OPERATORS[op](Column(column), value)
+
 
 def build_suite(cfg: dict[str, Any], columns: list[str]) -> list[gxe.Expectation]:
     """Expectations from the config; meta carries each one's name and severity."""
@@ -139,12 +160,12 @@ def build_suite(cfg: dict[str, Any], columns: list[str]) -> list[gxe.Expectation
             gxe.ExpectColumnValuesToNotBeNull(column=col, meta=meta(f"present: {col}"))
         )
     for col, rule in cfg["required_when"].items():
+        where = " ".join(str(part) for part in rule)
         exps.append(
             gxe.ExpectColumnValuesToNotBeNull(
                 column=col,
-                row_condition=rule,
-                condition_parser="pandas",
-                meta=meta(f"present: {col} where {rule}"),
+                row_condition=condition(rule),
+                meta=meta(f"present: {col} where {where}"),
             )
         )
     for col, (lo, hi) in cfg["ranges"].items():

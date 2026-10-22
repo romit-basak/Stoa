@@ -49,17 +49,18 @@ allowed_values:
   place_source: [footpath_steepness, ga_dem_5m]
 
 # Columns that may be missing only in documented cases (docs/features/counts_hourly.md). Each
-# rule is a pandas query selecting the rows where the column must be present (error).
+# rule is [column, operator, value] and selects the rows where the column must be present
+# (error). Operators: == != > >= < <=. Dates are compared as "YYYY-MM-DD" strings.
 required_when:
-  segment_id: has_location == True
-  location_type: has_location == True
-  sensor_description: has_location == True
-  slope_pct: has_location == True
-  elevation_m: has_location == True
-  uni_teaching: date_local >= "2015-01-01"
-  uni_exams: date_local >= "2015-01-01"
-  direction_1: source == "live"
-  direction_2: source == "live"
+  segment_id: [has_location, "==", true]
+  location_type: [has_location, "==", true]
+  sensor_description: [has_location, "==", true]
+  slope_pct: [has_location, "==", true]
+  elevation_m: [has_location, "==", true]
+  uni_teaching: [date_local, ">=", "2015-01-01"]
+  uni_exams: [date_local, ">=", "2015-01-01"]
+  direction_1: [source, "==", live]
+  direction_2: [source, "==", live]
 
 # Weather lags about a week behind the counts, so the newest rows have none yet (warning).
 weather_min_present: 0.99

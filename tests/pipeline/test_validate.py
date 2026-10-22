@@ -182,6 +182,24 @@ def test_outlier_warns(cfg):
     assert failures(checks, v.ERROR) == {}
 
 
+def test_conditions_are_gx_condition_objects():
+    cond = v.condition(["has_location", "==", True])
+    assert isinstance(cond, v.Condition)
+    assert (cond.column.name, cond.operator, cond.parameter) == (
+        "has_location",
+        "==",
+        True,
+    )
+    with pytest.raises(ValueError, match="unknown operator"):
+        v.condition(["has_location", "is", True])
+
+
+@pytest.mark.filterwarnings("error:.*row_condition:DeprecationWarning")
+@pytest.mark.filterwarnings("error:.*condition_parser:DeprecationWarning")
+def test_suite_uses_no_conditions_gx_2_removes(cfg):
+    v.run_expectations(make_table(), cfg)
+
+
 def test_missing_night_hours_are_normal_but_daytime_gaps_warn(cfg):
     df = make_table()
     night = df["hour_local"].isin([1, 2, 3, 4]) & (df["location_id"] == 2)

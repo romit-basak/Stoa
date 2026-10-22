@@ -31,7 +31,7 @@ def parse_season(html: str, season: int) -> list[dict[str, str]]:
         rows.append(
             {
                 # Calendar date as printed (venue-local); no time zone involved.
-                "date": datetime.strptime(m["date"], "%d-%b-%Y").date().isoformat(),  # noqa: DTZ007
+                "date": datetime.strptime(m["date"], "%d-%b-%Y").date().isoformat(),
                 "local_time": m["time"],
                 "melbourne_time": m["melb_time"] or m["time"],
                 "attendance": (m["att"] or "").replace(",", ""),

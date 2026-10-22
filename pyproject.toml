@@ -7,6 +7,7 @@ dependencies = [
     "dvc[gs]>=3.50",  # data versioning; gs = Google Cloud Storage remote
     "geopandas>=1.0",
     "google-auth>=2.20",  # dvc_push finds bucket credentials the way gcloud tools do
+    "great-expectations>=1.5",  # data validation: schema, value and anomaly checks
     "holidays==0.105",  # pinned: holiday rules change between releases
     "numba>=0.60",
     "osmium>=4.0",

@@ -1,9 +1,7 @@
 """Stoa data pipeline: pull the Melbourne sources, build OSM features, join the hourly table,
-then (TODO) validate it and save it as a new DVC version.
+then validate it and save it as a new DVC version.
 
-Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
-/opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
-keep the task name, and the wiring at the bottom stays the same.
+Each task runs an existing `src` module as-is, from the repo mounted at /opt/stoa.
 
 The OSM extract is pinned: a daily run keeps the file it has, and the OSM stages skip
 themselves (--if-stale) unless the extract, the feature config or code, the sensor
@@ -127,16 +125,20 @@ def stoa_pipeline():
         # Footpath slope and elevation per sensor (from Shubham Hadawle's join notebook).
         return f"{STOA} src.features.sensor_steepness"
 
-    # --- Join, validate (TODO), then version ---
+    # --- Join, validate, then version ---
 
     @task.bash
     def join_all():
         # Hourly training table: counts + time + weather + calendars + sensor match + slope.
         return f"{STOA} src.features.counts_hourly"
 
-    @task
+    # No retries: bad data fails the same way every time, so retrying would only delay the
+    # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
+    @task.bash(retries=0)
     def validate():
-        print("TODO: schema checks, completeness per sensor, zero/stuck-value checks")
+        # Schema, Great Expectations suite, anomalies and drift on the hourly table. Fails on
+        # any error-level check, so dvc_push never versions bad data.
+        return f"{STOA} src.pipeline.validate"
 
     # Exit code 99 (src.pipeline.dvc_push.SKIP_EXIT_CODE) means there are no credentials
     # for the bucket, as on a fresh clone outside the team: skip instead of failing the run.

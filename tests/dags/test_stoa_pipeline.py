@@ -86,7 +86,13 @@ def test_wiring(dag):
 
 def test_every_task_retries(dag):
     for task in dag.tasks:
-        assert task.retries == 2, task.task_id
+        if task.task_id != "validate":
+            assert task.retries == 2, task.task_id
+
+
+def test_validate_fails_without_retrying(dag):
+    # Bad data fails the same way on every try; retrying would only delay the alert.
+    assert dag.get_task("validate").retries == 0
 
 
 def test_dvc_push_skips_without_credentials(dag):

@@ -1,0 +1,3 @@
+# Airflow writes task logs here (mounted in docker-compose.yaml). Keep the folder, not the logs.
+*
+!.gitignore

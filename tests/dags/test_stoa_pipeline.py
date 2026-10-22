@@ -77,3 +77,8 @@ def test_wiring(dag):
 def test_every_task_retries(dag):
     for task in dag.tasks:
         assert task.retries == 2, task.task_id
+
+
+def test_dvc_push_skips_without_credentials(dag):
+    # Must match SKIP_EXIT_CODE in src/pipeline/dvc_push.py.
+    assert 99 in dag.get_task("dvc_push").skip_on_exit_code

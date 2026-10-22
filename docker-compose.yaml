@@ -24,6 +24,9 @@ x-airflow-common: &airflow-common
     # dvc_push logs in to the DVC bucket as the stoa-airflow-dvc service account. The key
     # lives in .secrets/ (git-ignored), which the containers see through the repo mount.
     GOOGLE_APPLICATION_CREDENTIALS: /opt/stoa/.secrets/stoa-airflow-dvc.json
+    # Set to 1 in .env on team machines: dvc_push then fails (and emails) without credentials
+    # instead of skipping, which is meant for clones outside the team.
+    STOA_REQUIRE_DVC_PUSH: ${STOA_REQUIRE_DVC_PUSH:-}
     AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${STOA_SMTP_USER:-}", "password": "${STOA_SMTP_PASSWORD:-}", "extra": {"disable_ssl": true}}'
   volumes:
     - ./dags:/opt/airflow/dags

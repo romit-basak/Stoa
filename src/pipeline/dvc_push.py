@@ -13,7 +13,9 @@ which ones changed. Until then, teammates' `dvc pull` still fetches the previous
 
 Credentials: in Docker, GOOGLE_APPLICATION_CREDENTIALS points at a service account key in
 .secrets/ (see README, "Run the pipeline"). Run by hand, it falls back to your own
-`gcloud auth application-default login`.
+`gcloud auth application-default login`. With neither (e.g. a fresh clone by someone outside
+the team), it logs a warning and exits with SKIP_EXIT_CODE, which Airflow shows as skipped, so
+the rest of the run still counts as a success.
 """
 
 from __future__ import annotations
@@ -21,11 +23,15 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from src.ingest.common import REPO_ROOT, setup_logging
 
 TRACKED = ["data/raw", "data/interim", "data/processed"]
+
+# @task.bash marks a task skipped (not failed) when its command exits with 99.
+SKIP_EXIT_CODE = 99
 
 log = logging.getLogger("stoa.pipeline")
 
@@ -34,14 +40,29 @@ class VersioningError(RuntimeError):
     """A dvc or git command failed, or credentials are missing."""
 
 
+class MissingCredentials(VersioningError):
+    """No key file and no gcloud login, so there is no way to reach the bucket."""
+
+
+def gcloud_login_path() -> Path:
+    """Where `gcloud auth application-default login` saves its credentials."""
+    config = os.environ.get("CLOUDSDK_CONFIG", Path.home() / ".config" / "gcloud")
+    return Path(config) / "application_default_credentials.json"
+
+
 def check_credentials() -> None:
-    """Fail early with a clear message if the configured key file isn't there."""
+    """Fail early with a clear message if there are no credentials for the bucket."""
     key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if key and not Path(key).is_file():
-        raise VersioningError(
+        raise MissingCredentials(
             f"GOOGLE_APPLICATION_CREDENTIALS points at {key}, which does not exist. "
             "Create a key for the stoa-airflow-dvc service account (README, 'Run the "
             "pipeline') or unset the variable to use your own gcloud login."
+        )
+    if not key and not gcloud_login_path().is_file():
+        raise MissingCredentials(
+            "no GOOGLE_APPLICATION_CREDENTIALS and no gcloud login. Run "
+            "`gcloud auth application-default login` with an account on the project."
         )
 
 
@@ -75,7 +96,17 @@ def version_data(cwd: Path = REPO_ROOT) -> list[str]:
 
 def main() -> None:
     setup_logging()
-    changed = version_data()
+    try:
+        changed = version_data()
+    except MissingCredentials as err:
+        # Expected on a clone without access to the team bucket: the data is still built,
+        # just not versioned, so skip rather than fail the run.
+        log.warning(
+            "skipping dvc_push, data not versioned (expected without access to the team "
+            "bucket): %s",
+            err,
+        )
+        sys.exit(SKIP_EXIT_CODE)
     if changed:
         log.info(
             "new data version pushed; commit the pointers to record it: git add %s && "

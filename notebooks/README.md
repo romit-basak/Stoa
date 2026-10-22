@@ -7,6 +7,7 @@ Three notebooks that build a Melbourne hourly pedestrian dataset with footpath s
 | 1 | `01_download.ipynb` | the web (the only notebook that goes online) | `raw/` |
 | 2 | `02_combine.ipynb` | `raw/` | `interim/`, `processed/` |
 | 3 | `03_preprocess.ipynb` | `raw/`, `interim/`, `processed/` | `final/` |
+| 4 | `04_bias_slicing.ipynb` | `final/`, `interim/missing_hours.parquet` | `reports/bias/` (data-bias slice report) |
 
 Paths are relative to the data folder:
 - **Colab:** `MyDrive/stoa/data/` on Google Drive (mounted by the first cell).

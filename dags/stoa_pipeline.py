@@ -93,17 +93,33 @@ def stoa_pipeline():
         # Layers that don't change day to day, so each is fetched only when it isn't held yet
         # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
         # (slope), the CLUE areas (precincts) and AFL crowds (match days), for bias slicing.
+        # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
+        # The braces matter: || and && have equal precedence, so `test || cd && python` would
+        # run python even when the file is held (from the wrong folder, so it fails), and a
+        # failed first fetch must stop the task rather than be hidden by the second.
         raw = "/opt/stoa/data/raw"
         portal = f"{raw}/melbourne_portal"
-        return (
-            f"test -f {portal}/footpath-steepness.geojson || "
-            f"{STOA} src.ingest.melbourne_portal --only footpath-steepness; "
-            f"test -f {portal}/blocks-for-census-of-land-use-and-employment-clue.geojson || "
-            f"{STOA} src.ingest.melbourne_portal --only "
-            "blocks-for-census-of-land-use-and-employment-clue; "
-            f"test -f {raw}/dem/melbourne_ga_lidar_5m.tif || "
-            f"{STOA} src.ingest.dem --site melbourne; "
-            f"test -f {raw}/events/afl_attendance.csv || {STOA} src.ingest.afl_attendance"
+        clue = "blocks-for-census-of-land-use-and-employment-clue"
+        steps = [
+            (
+                f"{portal}/footpath-steepness.geojson",
+                f"{STOA} src.ingest.melbourne_portal --only footpath-steepness",
+            ),
+            (
+                f"{portal}/{clue}.geojson",
+                f"{STOA} src.ingest.melbourne_portal --only {clue}",
+            ),
+            (
+                f"{raw}/dem/melbourne_ga_lidar_5m.tif",
+                f"{STOA} src.ingest.dem --site melbourne",
+            ),
+            (
+                f"{raw}/events/afl_attendance.csv",
+                f"{STOA} src.ingest.afl_attendance",
+            ),
+        ]
+        return " && ".join(
+            f"{{ test -f {path} || {{ {cmd}; }}; }}" for path, cmd in steps
         )
 
     @task.bash

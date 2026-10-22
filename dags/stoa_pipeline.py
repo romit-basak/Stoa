@@ -91,12 +91,23 @@ def stoa_pipeline():
     def pull_terrain():
         # Footpath-steepness survey and the GA 5 m DEM. Both are fixed snapshots, so each is
         # fetched only when it isn't held yet (a fresh clone without `dvc pull`).
+        # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
+        # The braces matter: || and && have equal precedence, so `test || cd && python` would
+        # run python even when the file is held (from the wrong folder, so it fails), and a
+        # failed first fetch must stop the task rather than be hidden by the second.
         raw = "/opt/stoa/data/raw"
-        return (
-            f"test -f {raw}/melbourne_portal/footpath-steepness.geojson || "
-            f"{STOA} src.ingest.melbourne_portal --only footpath-steepness; "
-            f"test -f {raw}/dem/melbourne_ga_lidar_5m.tif || "
-            f"{STOA} src.ingest.dem --site melbourne"
+        steps = [
+            (
+                f"{raw}/melbourne_portal/footpath-steepness.geojson",
+                f"{STOA} src.ingest.melbourne_portal --only footpath-steepness",
+            ),
+            (
+                f"{raw}/dem/melbourne_ga_lidar_5m.tif",
+                f"{STOA} src.ingest.dem --site melbourne",
+            ),
+        ]
+        return " && ".join(
+            f"{{ test -f {path} || {{ {cmd}; }}; }}" for path, cmd in steps
         )
 
     @task.bash

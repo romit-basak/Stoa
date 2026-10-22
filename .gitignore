@@ -1,6 +1,8 @@
 .venv/
 # Local secrets (SMTP login for Airflow alerts, AIRFLOW_UID). Never commit.
 .env
+# Service account keys (e.g. the one dvc_push uses). Never commit.
+.secrets/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

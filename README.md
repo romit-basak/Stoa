@@ -51,7 +51,7 @@ gcloud auth application-default login    # once; sign in with the account added 
 .venv/bin/dvc pull                       # downloads data/ at the version this commit points to
 ```
 
-After changing data (e.g. a new pull), save a new version and commit its pointers:
+The pipeline's `dvc_push` task saves and uploads a new version after every run that passes validation (see "Run the pipeline"). To do it by hand after changing data, save a new version and commit its pointers:
 
 ```bash
 .venv/bin/dvc add data/raw data/interim data/processed
@@ -131,7 +131,7 @@ pull_weather ──────────────────────�
 pull_calendars ─────────────────────────────────────────────────────────────────┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `validate` and `dvc_push` are placeholders: replace a task's body and keep its name, and the wiring stays the same. A daily run takes about 30 seconds; `join_all` is the slowest task (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match`, which needs the sensor locations.) It runs daily so no day of the counts' rolling window is missed; each task retries twice. `validate` is a placeholder: replace its body and keep its name, and the wiring stays the same. `dvc_push` saves the result as a new DVC version (below). A daily run takes about 30 seconds; `join_all` is the slowest task (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
@@ -149,6 +149,18 @@ STOA_ALERT_EMAILS=a@northeastern.edu,b@northeastern.edu
 ```
 
 After editing `.env`, run `docker compose up -d` to apply it.
+
+**Data versioning (`dvc_push`).** The last task runs `python -m src.pipeline.dvc_push`: `dvc add` on `data/raw`, `data/interim` and `data/processed`, then `dvc push` to `gs://stoa-dvc-data`. It runs after `validate`, so only data that passed the checks becomes a version. It does not commit to git: when the data changed, its log ends with the `git add data/*.dvc && git commit` command to run. Commit those pointers to record the version; until then, teammates' `dvc pull` still fetches the previous one.
+
+The containers log in to the bucket as the `stoa-airflow-dvc` service account, through a key file in `.secrets/` (git-ignored, never shared; each person makes their own). Once, with `gcloud` signed in to an account on the project:
+
+```bash
+mkdir -p .secrets
+gcloud iam service-accounts keys create .secrets/stoa-airflow-dvc.json \
+  --iam-account=stoa-airflow-dvc@stoa-511822.iam.gserviceaccount.com
+```
+
+Without the key, every other task still runs and `dvc_push` fails with a message saying the key is missing.
 
 **Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs; the files are kept in the `airflow-logs` Docker volume. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
 

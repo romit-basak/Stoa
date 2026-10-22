@@ -184,11 +184,12 @@ imagery:
 
 calendars:
   # Public holidays come from the `holidays` package (MIT, pinned in pyproject.toml), written out
-  # per site so the exact dates used are versioned with the data.
+  # per site so the exact dates used are versioned with the data. The language fixes the holiday
+  # names; otherwise they follow the machine's locale.
   holidays:
-    melbourne: {country: AU, subdiv: VIC}
-    neu_boston: {country: US, subdiv: MA}
-    nyc: {country: US, subdiv: NY}
+    melbourne: {country: AU, subdiv: VIC, language: en_AU}
+    neu_boston: {country: US, subdiv: MA, language: en_US}
+    nyc: {country: US, subdiv: NY, language: en_US}
   years: [2007, 2027]
   # Vic Government "Important Dates" (CC BY 4.0): public holidays 2019-2027, school terms 2019-2030.
   # Cross-check for the package and for configs/calendars/vic_school_terms.yaml.

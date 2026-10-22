@@ -1,5 +1,6 @@
 """Stoa data pipeline: pull the Melbourne sources, build OSM features, join the hourly table,
-then (TODO) validate it and save it as a new DVC version.
+report how much data each bias slice has, then (TODO) validate it and save it as a new DVC
+version.
 
 Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
 /opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
@@ -88,15 +89,21 @@ def stoa_pipeline():
         return f"{STOA} src.ingest.calendars"
 
     @task.bash
-    def pull_terrain():
-        # Footpath-steepness survey and the GA 5 m DEM. Both are fixed snapshots, so each is
-        # fetched only when it isn't held yet (a fresh clone without `dvc pull`).
+    def pull_static_layers():
+        # Layers that don't change day to day, so each is fetched only when it isn't held yet
+        # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
+        # (slope), the CLUE areas (precincts) and AFL crowds (match days), for bias slicing.
         raw = "/opt/stoa/data/raw"
+        portal = f"{raw}/melbourne_portal"
         return (
-            f"test -f {raw}/melbourne_portal/footpath-steepness.geojson || "
+            f"test -f {portal}/footpath-steepness.geojson || "
             f"{STOA} src.ingest.melbourne_portal --only footpath-steepness; "
+            f"test -f {portal}/blocks-for-census-of-land-use-and-employment-clue.geojson || "
+            f"{STOA} src.ingest.melbourne_portal --only "
+            "blocks-for-census-of-land-use-and-employment-clue; "
             f"test -f {raw}/dem/melbourne_ga_lidar_5m.tif || "
-            f"{STOA} src.ingest.dem --site melbourne"
+            f"{STOA} src.ingest.dem --site melbourne; "
+            f"test -f {raw}/events/afl_attendance.csv || {STOA} src.ingest.afl_attendance"
         )
 
     @task.bash
@@ -134,6 +141,12 @@ def stoa_pipeline():
         # Hourly training table: counts + time + weather + calendars + sensor match + slope.
         return f"{STOA} src.features.counts_hourly"
 
+    @task.bash
+    def bias_slices():
+        # Bias step 1: how much data each slice (place, time, weather, era...) has against a
+        # reference. Needs no model. See docs/bias/bias_slicing.md.
+        return f"{STOA} src.bias.representation"
+
     @task
     def validate():
         print("TODO: schema checks, completeness per sensor, zero/stuck-value checks")
@@ -160,12 +173,17 @@ def stoa_pipeline():
     [osm_features, counts] >> sensors
 
     # Slope matching needs the sensor locations and the terrain files.
+    static = pull_static_layers()
     steepness = sensor_steepness()
-    [pull_terrain(), counts] >> steepness
+    [static, counts] >> steepness
 
     joined = join_all()
     [sensors, steepness, counts, pull_weather(), pull_calendars()] >> joined
-    joined >> validate() >> dvc_push()
+
+    # Bias slicing runs beside validation; only data that went through both is versioned.
+    slices = bias_slices()
+    [joined, static] >> slices
+    [joined >> validate(), slices] >> dvc_push()
 
 
 stoa_pipeline()

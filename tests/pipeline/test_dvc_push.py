@@ -1,6 +1,7 @@
 import subprocess
 
 import pytest
+from google.auth.exceptions import DefaultCredentialsError
 
 from src.pipeline import dvc_push
 
@@ -17,7 +18,11 @@ def repo(tmp_path):
     for d in dvc_push.TRACKED:
         (tmp_path / f"{d}.dvc").write_text("outs:\n- md5: aaa.dir\n")
     git("add", ".")
-    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "pointers")
+    # gpgsign=false: machines that sign commits by default would otherwise need gpg here.
+    git(
+        "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+        "commit", "-qm", "pointers",
+    )  # fmt: skip
     return tmp_path
 
 
@@ -28,56 +33,85 @@ def test_changed_pointers_lists_only_modified_pointer_files(repo):
     assert dvc_push.changed_pointers(repo) == ["data/raw.dvc"]
 
 
-def test_version_data_adds_then_pushes(monkeypatch, tmp_path):
+@pytest.fixture
+def credentials(monkeypatch):
+    """Stand in for google.auth.default; records GOOGLE_APPLICATION_CREDENTIALS per call."""
+    seen = []
+
+    def found():
+        seen.append(dvc_push.os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
+        return object(), "stoa"
+
+    monkeypatch.setattr(dvc_push.google.auth, "default", found)
+    monkeypatch.delenv("STOA_REQUIRE_DVC_PUSH", raising=False)
+    return seen
+
+
+@pytest.fixture
+def no_credentials(monkeypatch):
+    def missing():
+        raise DefaultCredentialsError("none found")
+
+    monkeypatch.setattr(dvc_push.google.auth, "default", missing)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.delenv("STOA_REQUIRE_DVC_PUSH", raising=False)
+
+
+@pytest.fixture
+def dvc_calls(monkeypatch):
     calls = []
     monkeypatch.setattr(dvc_push, "run", lambda cmd, cwd=None: calls.append(cmd) or "")
-    key = tmp_path / "key.json"
-    key.write_text("{}")
-    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(key))
+    return calls
+
+
+def test_version_data_adds_then_pushes(credentials, dvc_calls, tmp_path):
     dvc_push.version_data(tmp_path)
-    assert calls[0] == ["dvc", "add", *dvc_push.TRACKED]
-    assert calls[1] == ["dvc", "push"]
+    assert dvc_calls[0] == ["dvc", "add", *dvc_push.TRACKED]
+    assert dvc_calls[1] == ["dvc", "push"]
 
 
-def test_missing_key_file_fails_before_any_dvc_command(monkeypatch, tmp_path):
-    calls = []
-    monkeypatch.setattr(dvc_push, "run", lambda cmd, cwd=None: calls.append(cmd) or "")
-    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "missing.json"))
-    with pytest.raises(dvc_push.VersioningError, match="does not exist"):
+def test_no_credentials_fails_before_any_dvc_command(
+    no_credentials, dvc_calls, tmp_path
+):
+    with pytest.raises(dvc_push.MissingCredentials, match="no gcloud login"):
         dvc_push.version_data(tmp_path)
-    assert calls == []
+    assert dvc_calls == []
 
 
-def test_existing_key_file_passes(monkeypatch, tmp_path):
+def test_existing_key_file_is_used(credentials, monkeypatch, tmp_path):
     key = tmp_path / "key.json"
     key.write_text("{}")
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(key))
     dvc_push.check_credentials()
+    assert credentials == [str(key)]
 
 
-def test_gcloud_login_is_enough_without_a_key(monkeypatch, tmp_path):
-    (tmp_path / "application_default_credentials.json").write_text("{}")
-    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
-    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))
-    dvc_push.check_credentials()
-
-
-def test_no_key_and_no_gcloud_login_fails(monkeypatch, tmp_path):
-    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
-    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))
-    with pytest.raises(dvc_push.MissingCredentials, match="no gcloud login"):
-        dvc_push.check_credentials()
-
-
-def test_main_skips_without_credentials(monkeypatch, tmp_path, caplog):
-    calls = []
-    monkeypatch.setattr(dvc_push, "run", lambda cmd, cwd=None: calls.append(cmd) or "")
+def test_missing_key_file_falls_back_to_other_credentials(
+    credentials, monkeypatch, tmp_path
+):
+    # On a Google Cloud VM there is no key file, but the VM's own account works.
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "missing.json"))
+    dvc_push.check_credentials()
+    assert credentials == [None]
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in dvc_push.os.environ
+
+
+def test_main_skips_without_credentials(no_credentials, dvc_calls, caplog):
     with pytest.raises(SystemExit) as exit_info:
         dvc_push.main()
     assert exit_info.value.code == dvc_push.SKIP_EXIT_CODE
     assert "skipping dvc_push" in caplog.text
-    assert calls == []
+    assert dvc_calls == []
+
+
+@pytest.mark.parametrize("value", ["1", "true", "YES"])
+def test_main_fails_without_credentials_when_push_is_required(
+    no_credentials, dvc_calls, monkeypatch, value
+):
+    monkeypatch.setenv("STOA_REQUIRE_DVC_PUSH", value)
+    with pytest.raises(dvc_push.MissingCredentials):
+        dvc_push.main()
+    assert dvc_calls == []
 
 
 def test_failed_command_raises_with_its_stderr(tmp_path):

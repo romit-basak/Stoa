@@ -167,6 +167,7 @@ google-api-core==2.42.0
     #   google-cloud-storage-control
 google-auth==2.62.0
     # via
+    #   stoa (pyproject.toml)
     #   gcsfs
     #   google-api-core
     #   google-auth-oauthlib

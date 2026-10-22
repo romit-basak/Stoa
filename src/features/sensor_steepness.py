@@ -175,7 +175,7 @@ def build(
     for p in (steepness_path, dem_path):
         if not p.exists():
             raise FileNotFoundError(
-                f"{p} is missing; run `dvc pull`, or the pull_terrain task, first"
+                f"{p} is missing; run `dvc pull`, or the pull_static_layers task, first"
             )
 
     sensors = outdoor_sensors(sensor_locations_path(data_cfg), crs)

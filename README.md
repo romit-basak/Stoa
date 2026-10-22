@@ -29,7 +29,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
 | API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
-| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics and anomaly checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)). Bias slicing in progress. MLflow, CI/CD, Cloud Run planned |
+| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics and anomaly checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)). ✅ Bias slicing: representation report per slice ([docs/bias/bias_slicing.md](docs/bias/bias_slicing.md)); per-slice model errors next. MLflow, CI/CD, Cloud Run planned |
 
 ## Setup
 
@@ -103,6 +103,7 @@ Options:
 .venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
 .venv/bin/python -m src.features.sensor_steepness         # footpath slope and elevation per sensor (~5 s)
 .venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars + slope (~30 s)
+.venv/bin/python -m src.bias.representation               # bias slices: how much data each group has (~35 s)
 ```
 
 Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md). `counts_hourly.parquet` is the hourly training table (one row per sensor and hour); see [docs/features/counts_hourly.md](docs/features/counts_hourly.md), including how it handles daylight saving. `sensor_steepness.parquet` gives each outdoor sensor its footpath slope and elevation (from Shubham Hadawle's join notebook), and the hourly table carries those columns.
@@ -128,12 +129,12 @@ The repo is mounted into the containers, so code changes apply on the next run; 
 ```
 pull_counts ────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┐
-pull_terrain ─► sensor_steepness ─────────────────────────────────────────────────┤
-pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► dvc_push
-pull_calendars ───────────────────────────────────────────────────────────────────┘
+pull_static_layers ─► sensor_steepness ───────────────────────────────────────────┤
+pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─┬─► validate ────┬─► dvc_push
+pull_calendars ───────────────────────────────────────────────────────────────────┘             └─► bias_slices ─┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_terrain` fetches the footpath-steepness survey and the 5 m DEM only when they aren't held yet: both are fixed snapshots.) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 2.5 minutes in Docker; `validate` (about 85 s, a Great Expectations pass over 6M rows) and `join_all` are the slowest tasks (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM, the CLUE areas and the AFL crowds only when they aren't held yet, and also feeds `bias_slices`. `bias_slices` reports how much data each bias slice has; see [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 2.5 minutes in Docker; `validate` (about 85 s, a Great Expectations pass over 6M rows) and `join_all` are the slowest tasks (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
@@ -162,7 +163,13 @@ gcloud iam service-accounts keys create .secrets/stoa-airflow-dvc.json \
   --iam-account=stoa-airflow-dvc@stoa-511822.iam.gserviceaccount.com
 ```
 
-Without the key, every other task still runs and `dvc_push` is **skipped** (shown pink in the UI) with a warning in its log, so the run still succeeds and no failure email is sent. That is the expected result on a clone by someone outside the team: the pipeline builds all the data from public sources, it just isn't versioned.
+`dvc_push` finds credentials the way Google's own tools do: this key file, else your `gcloud auth application-default login`, else the service account of the Google Cloud VM it runs on (so a VM needs no key file).
+
+With no credentials at all, every other task still runs and `dvc_push` is **skipped** (shown pink in the UI) with a warning in its log, so the run still succeeds and no failure email is sent. That is the expected result on a clone by someone outside the team: the pipeline builds all the data from public sources, it just isn't versioned. On team machines, add this to `.env` so a missing key fails the task and sends the failure email instead:
+
+```bash
+STOA_REQUIRE_DVC_PUSH=1
+```
 
 **Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs. The same files are written to `logs/` in the repo (mounted in `docker-compose.yaml`, git-ignored), one folder per DAG, run and task, e.g. `logs/dag_id=stoa_pipeline/run_id=<run>/task_id=pull_counts/attempt=1.log`, so you can read or `grep` them without the UI. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
 
@@ -213,6 +220,7 @@ configs/calendars/       hand-maintained school terms and university teaching pe
 configs/analysis.yaml    parameters for src/analysis/
 configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, sensor matching)
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
+configs/bias.yaml        bias slices: precincts, time and weather bins, eras, thresholds
 configs/validation.yaml  data validation thresholds; configs/schemas/ holds the expected table schema
 dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
 data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, pointers in data/*.dvc)
@@ -221,12 +229,14 @@ docs/
   data_cards/            one card per dataset: schema, coverage, known issues
   analysis/              write-ups of one-off analyses
   features/              feature tables: how to build, column dictionaries, joins
+  bias/                  bias analysis: slices, representation report, findings
   pipeline/              data validation checks, Gantt charts
   data_licenses.md       license register; check before adding any dataset
   PROJECT_CONTEXT.md     reasoning behind decisions, scope tiers, validation plan
   scoping/               project scoping document (LaTeX source; the PDF is built, not tracked)
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
 src/features/            feature pipeline (osm.py runs extract -> graph -> features -> sensors)
+src/bias/                bias slicing (slices.py) and the representation report
 src/pipeline/            pipeline steps that aren't ingest or features: validate, dvc_push
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)

@@ -1,5 +1,5 @@
 """Stoa data pipeline: pull the Melbourne sources, build OSM features, join the hourly table,
-then (TODO) validate and version the result.
+then (TODO) validate it and save it as a new DVC version.
 
 Each ingest task runs an existing `src.ingest` module as-is, from the repo mounted at
 /opt/stoa. Tasks marked TODO are placeholders for teammates' code; replace the body,
@@ -110,7 +110,7 @@ def stoa_pipeline():
     def osm_sensor_match():
         return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
-    # --- Join, then placeholders (TODO) ---
+    # --- Join, validate (TODO), then version ---
 
     @task.bash
     def join_all():
@@ -121,9 +121,11 @@ def stoa_pipeline():
     def validate():
         print("TODO: schema checks, completeness per sensor, zero/stuck-value checks")
 
-    @task
+    @task.bash
     def dvc_push():
-        print("TODO: dvc add data/ && dvc push")
+        # Runs after validate, so only data that passed the checks becomes a version. It
+        # uploads the data; committing the updated data/*.dvc pointers is left to a person.
+        return f"{STOA} src.pipeline.dvc_push"
 
     # --- Wiring ---
 

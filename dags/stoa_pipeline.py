@@ -138,7 +138,9 @@ def stoa_pipeline():
     def validate():
         print("TODO: schema checks, completeness per sensor, zero/stuck-value checks")
 
-    @task.bash
+    # Exit code 99 (src.pipeline.dvc_push.SKIP_EXIT_CODE) means there are no credentials
+    # for the bucket, as on a fresh clone outside the team: skip instead of failing the run.
+    @task.bash(skip_on_exit_code=99)
     def dvc_push():
         # Runs after validate, so only data that passed the checks becomes a version. It
         # uploads the data; committing the updated data/*.dvc pointers is left to a person.

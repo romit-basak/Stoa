@@ -31,7 +31,9 @@ def test_changed_pointers_lists_only_modified_pointer_files(repo):
 def test_version_data_adds_then_pushes(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(dvc_push, "run", lambda cmd, cwd=None: calls.append(cmd) or "")
-    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    key = tmp_path / "key.json"
+    key.write_text("{}")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(key))
     dvc_push.version_data(tmp_path)
     assert calls[0] == ["dvc", "add", *dvc_push.TRACKED]
     assert calls[1] == ["dvc", "push"]
@@ -51,6 +53,31 @@ def test_existing_key_file_passes(monkeypatch, tmp_path):
     key.write_text("{}")
     monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(key))
     dvc_push.check_credentials()
+
+
+def test_gcloud_login_is_enough_without_a_key(monkeypatch, tmp_path):
+    (tmp_path / "application_default_credentials.json").write_text("{}")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))
+    dvc_push.check_credentials()
+
+
+def test_no_key_and_no_gcloud_login_fails(monkeypatch, tmp_path):
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.setenv("CLOUDSDK_CONFIG", str(tmp_path))
+    with pytest.raises(dvc_push.MissingCredentials, match="no gcloud login"):
+        dvc_push.check_credentials()
+
+
+def test_main_skips_without_credentials(monkeypatch, tmp_path, caplog):
+    calls = []
+    monkeypatch.setattr(dvc_push, "run", lambda cmd, cwd=None: calls.append(cmd) or "")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(tmp_path / "missing.json"))
+    with pytest.raises(SystemExit) as exit_info:
+        dvc_push.main()
+    assert exit_info.value.code == dvc_push.SKIP_EXIT_CODE
+    assert "skipping dvc_push" in caplog.text
+    assert calls == []
 
 
 def test_failed_command_raises_with_its_stderr(tmp_path):

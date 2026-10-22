@@ -162,7 +162,7 @@ gcloud iam service-accounts keys create .secrets/stoa-airflow-dvc.json \
   --iam-account=stoa-airflow-dvc@stoa-511822.iam.gserviceaccount.com
 ```
 
-Without the key, every other task still runs and `dvc_push` fails with a message saying the key is missing.
+Without the key, every other task still runs and `dvc_push` is **skipped** (shown pink in the UI) with a warning in its log, so the run still succeeds and no failure email is sent. That is the expected result on a clone by someone outside the team: the pipeline builds all the data from public sources, it just isn't versioned.
 
 **Logs and error handling.** Every command logs what it does with Python's `logging` (set up once in `src/ingest/common.py`): each download with its size, retries, skipped steps and row counts. In Airflow, open a run, click a task and choose Logs; the files are kept in the `airflow-logs` Docker volume. `download()` retries rate limits, server errors, dropped connections, timeouts and empty or cut-short files with backoff, writing to a `.part` file so a failed download never replaces the last good copy. If every try fails it raises `DownloadError` naming the URL; the task then fails, Airflow retries it twice, and the failure email links to the log.
 

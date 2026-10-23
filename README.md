@@ -51,6 +51,8 @@ gcloud auth application-default login    # once; sign in with the account added 
 .venv/bin/dvc pull                       # downloads data/ at the version this commit points to
 ```
 
+**No access to the bucket?** You don't need it to run the pipeline. Skip `dvc pull`: every input comes from public sources (the City of Melbourne portal, the Internet Archive's copy of the counts export, OpenStreetMap, Open-Meteo, Geoscience Australia, AFL Tables and the calendars in `configs/`), and the first Airflow run downloads and builds all of it (see "Run the pipeline" for how long that takes). The only difference is at the end: without a key, `dvc_push` is skipped instead of uploading a new version, and the run still succeeds. The data you get covers the same years as the team's, plus whatever the portal has published since.
+
 The pipeline's `dvc_push` task saves and uploads a new version after every run that passes validation (see "Run the pipeline"). To do it by hand after changing data, save a new version and commit its pointers:
 
 ```bash

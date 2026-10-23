@@ -15,7 +15,7 @@
 |---|---|---|
 | `pedestrian-counting-system-monthly-counts-per-hour.parquet` | 1,624,373 | 2024-10-04 → 2026-10-03, 103 sensors, ~90% of sensor-hours present |
 | `counts_per_hour_2009-05_to_2022-12-14.csv.zip` (423 MB unzipped) | 4,562,230 | **2009-05-01 → 2022-10-31** (despite the filename), 82 sensors |
-| `counts_per_hour_wayback_2025-05-02.csv` (171 MB, `;`-separated, same columns as the live table) | 2,288,804 | 2021-07-01 → 2025-05-02, 98 sensors. The hourly table uses only 2022-11-01 → 2024-10-03 from it (1,180,314 rows, 94 sensors) |
+| `counts_per_hour_wayback_2025-05-02.csv` (171 MB, `;`-separated, same columns as the live table) | 2,288,804 | 2021-07-01 → 2025-05-02, 98 sensors. The hourly table uses it only between the archive's last hour and the live table's first: in the team's data version of 23 October 2026, 2022-11-01 → 2024-10-03 (1,180,314 rows, 94 sensors). A fresh clone, whose live window starts later, uses a little more of it (1,218,441 rows in a clone of the same day) |
 | `pedestrian-counting-system-sensor-locations.geojson` | 134 | 100 outdoor, 34 indoor; all status `A` |
 
 `data/raw/melbourne_pedestrian/` holds the original hand-downloaded CSVs. That counts CSV is a **~9% sparse subset** (148,500 rows) and is superseded by the parquet above. Do not train on it.
@@ -39,7 +39,7 @@
 | 2009–2012 | 18 | Core CBD only |
 | 2013–2016 | 32–43 | |
 | 2017–2022 | 52–73 | |
-| **2022-11 → 2024-10** | 94 | **From the Wayback copy** (1,180,314 rows): in neither the archive nor the current API window |
+| **2022-11 → 2024-10** | 94 | **From the Wayback copy** (1,180,314 rows in the team's data version): in neither the archive nor the current API window |
 | 2024-10 → now | 103 | 67 of these also appear in the archive; 15 archive sensors are retired |
 
 - 57 sensors have ≥5 years of history in the archive.

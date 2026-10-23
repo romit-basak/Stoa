@@ -137,6 +137,13 @@ docker compose up -d --build     # first run builds the image (a few minutes)
 docker compose down              # stop; add -v to also wipe Airflow's database
 ```
 
+**How long the first run takes.** On a fresh clone with no data, the first run downloads and builds everything, so it takes about **20 minutes**. Measured on 23 October 2026 (Docker Desktop with its default 8 GB, a clean clone): 21 minutes from `git clone` to the end of the run. Most of it is three tasks:
+- `pull_counts`, about 3.5 min: the 2009–2022 archive, the 171 MB Wayback copy from the Internet Archive (often slow) and the live table;
+- the OSM stages, about 2.5 min: the walking network and segment features, built once;
+- `bias_errors`, about 14 min: it trains 15 models, and on a first run there is no earlier result to reuse.
+
+A task that shows as running for several minutes isn't stuck: its log (click the task, then Logs) shows its progress, e.g. `bias_errors` logs each model it trains. Later daily runs reuse what's held: about 6 minutes, with `bias_errors` rerunning only weekly.
+
 The repo is mounted into the containers, so code changes apply on the next run; changes to `pyproject.toml` dependencies need `--build`. Data is written to `data/` on the host, as when running the modules directly.
 
 ```

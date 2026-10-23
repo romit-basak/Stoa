@@ -7,7 +7,10 @@ One row per (sensor, hour). Writes data/processed/features/melbourne/counts_hour
 counts_hourly_meta.json. The per-segment OSM features are not copied onto every row (that would
 be ~115 columns x ~7M rows); join them on location_id from sensor_osm_features.parquet.
 
-Time. Both count tables use Melbourne's local clock, daylight saving included, and behaviour
+Counts come from the 2009-2022 archive, the live table, and a Wayback Machine copy of the portal
+export for the gap between them (November 2022 to October 2024); each hour has one source.
+
+Time. All the count tables use Melbourne's local clock, daylight saving included, and behaviour
 follows that clock, so hour, weekday and calendar features are local. The Open-Meteo files use a
 fixed UTC+10 offset all year, so weather is joined on UTC: joining on the local clock would put it
 an hour out for half of every year. Two edges of the local clock are handled explicitly:
@@ -40,6 +43,7 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
 ARCHIVE = "counts_per_hour_2009-05_to_2022-12-14.csv.zip"
 LIVE = "pedestrian-counting-system-monthly-counts-per-hour.parquet"
+WAYBACK = "counts_per_hour_wayback_2025-05-02.csv"
 
 
 # --------------------------------------------------------------------------------------------
@@ -91,6 +95,47 @@ def read_live(path: Path) -> pd.DataFrame:
             "source": "live",
         }
     )
+
+
+def read_wayback(path: Path) -> pd.DataFrame:
+    """The Wayback Machine copy of the portal's full CSV export (same columns as the live table)."""
+    w = pd.read_csv(
+        path,
+        sep=";",
+        usecols=[
+            "location_id",
+            "sensing_date",
+            "hourday",
+            "direction_1",
+            "direction_2",
+            "pedestriancount",
+        ],
+    )
+    return pd.DataFrame(
+        {
+            "location_id": w["location_id"].astype("int32"),
+            "ts_local_naive": pd.to_datetime(w["sensing_date"])
+            + pd.to_timedelta(w["hourday"], unit="h"),
+            "pedestriancount": w["pedestriancount"].astype("int32"),
+            "direction_1": w["direction_1"].astype("float32"),
+            "direction_2": w["direction_2"].astype("float32"),
+            "source": "wayback",
+        }
+    )
+
+
+def fill_gap(
+    wayback: pd.DataFrame, archive: pd.DataFrame, live: pd.DataFrame
+) -> pd.DataFrame:
+    """Wayback rows strictly between the archive's last hour and the live table's first hour.
+
+    The Wayback copy overlaps both tables; taking only the gap gives every hour a single source
+    and leaves the archive and live rows as published.
+    """
+    after = archive["ts_local_naive"].max()
+    before = live["ts_local_naive"].min()
+    t = wayback["ts_local_naive"]
+    return wayback[(t > after) & (t < before)]
 
 
 def drop_unplaceable(counts: pd.DataFrame) -> tuple[pd.DataFrame, int]:
@@ -308,9 +353,18 @@ def build(
     portal = raw / "melbourne_portal"
 
     t = time.perf_counter()
-    counts = pd.concat(
-        [read_archive(portal / ARCHIVE), read_live(portal / LIVE)], ignore_index=True
-    )
+    archive, live = read_archive(portal / ARCHIVE), read_live(portal / LIVE)
+    parts = [archive, live]
+    if (portal / WAYBACK).exists():
+        parts.append(fill_gap(read_wayback(portal / WAYBACK), archive, live))
+    else:
+        log.warning(
+            "%s not held, so the gap between the archive and the live table has no counts "
+            "(python -m src.ingest.melbourne_portal --only "
+            "pedestrian-counting-system-monthly-counts-per-hour fetches it)",
+            WAYBACK,
+        )
+    counts = pd.concat(parts, ignore_index=True)
     n_read = len(counts)
     counts, n_dup = drop_unplaceable(counts)
     counts, n_nonexistent = localize(counts, s["timezone"])
@@ -394,6 +448,9 @@ def build(
     meta = {
         "rows_read": n_read,
         "rows": len(table),
+        "rows_by_source": {
+            str(k): int(v) for k, v in table["source"].value_counts().items()
+        },
         "dropped_unplaceable_duplicates": n_dup,
         "dropped_nonexistent_spring_forward": n_nonexistent,
         "sensors": int(table["location_id"].nunique()),

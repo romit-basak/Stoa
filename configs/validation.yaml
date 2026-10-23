@@ -45,7 +45,7 @@ ranges:
   elevation_m: [-5, 100]
 
 allowed_values:
-  source: [archive, live]
+  source: [archive, live, wayback]
   place_source: [footpath_steepness, ga_dem_5m]
 
 # Columns that may be missing only in documented cases (docs/features/counts_hourly.md). Each
@@ -59,8 +59,9 @@ required_when:
   elevation_m: [has_location, "==", true]
   uni_teaching: [date_local, ">=", "2015-01-01"]
   uni_exams: [date_local, ">=", "2015-01-01"]
-  direction_1: [source, "==", live]
-  direction_2: [source, "==", live]
+  # The archive has no directional counts; the live table and its Wayback copy do.
+  direction_1: [source, "!=", archive]
+  direction_2: [source, "!=", archive]
 
 # Weather lags about a week behind the counts, so the newest rows have none yet (warning).
 weather_min_present: 0.99

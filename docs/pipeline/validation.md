@@ -61,7 +61,7 @@ The outlier check also finds 9 older hours, at sensors 8, 10, 71 and 75. They ar
 
 ## Speed
 
-Great Expectations makes one pass over the 6.2M rows per check. Running the suite with `result_format="BOOLEAN_ONLY"` and re-running only failed checks with `SUMMARY` (for counts and example rows) cut it from 73 s to 33 s. The whole task takes about 40 s run directly on a Mac and about 85 s in the Airflow container (Docker Desktop) when it runs alone; beside `bias_slices`, which also reads the whole table, it took 218 s on 23 October 2026. That makes it the slowest task of a daily run (README, "Pipeline optimization"). Possible next steps if that matters: validate the fixed 2009–2022 archive rows once and only the live rows each day, or give the container more CPUs.
+Great Expectations makes one pass over the 6.2M rows per check. Running the suite with `result_format="BOOLEAN_ONLY"` and re-running only failed checks with `SUMMARY` (for counts and example rows) cut it from 73 s to 33 s. The whole task takes about 40 s run directly on a Mac and about 85 s in the Airflow container (Docker Desktop) when it runs alone; beside `bias_slices`, which also reads the whole table, it took 218 s on 23 October 2026, and once the table reached 7.4M rows the pair ran out of Docker's 8 GB, so `bias_slices` now runs after it (peaks measured natively: `validate` 3.3 GB, `bias_slices` 2.9 GB). That makes it the slowest task of a daily run (README, "Pipeline optimization"). Possible next steps if that matters: validate the fixed 2009–2022 archive rows once and only the live rows each day, or give the container more CPUs.
 
 ## Changing a check
 

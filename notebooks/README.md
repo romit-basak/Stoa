@@ -1,5 +1,7 @@
 # Melbourne dataset notebooks
 
+These notebooks are for exploration and demonstration. The `src/` pipeline, run by the Airflow DAG, is what builds the project's data; every step worked out here now lives there (the README's "Notebooks are not the pipeline" table says where).
+
 Notebooks 01-03 build a Melbourne hourly pedestrian dataset with footpath steepness, runnable in Colab or locally; 04 and 05 are the bias checks. Run them in order:
 
 | Step | Notebook | Reads | Writes |
@@ -46,13 +48,13 @@ All CC BY 4.0 (City of Melbourne, Open-Meteo/ERA5, Geoscience Australia).
 
 ## How this relates to the `src/` pipeline
 
-`src/features/counts_hourly.py` builds a similar hourly table. These notebooks first added three things; the third is now in the pipeline (`src/features/sensor_steepness.py`):
+`src/features/counts_hourly.py` builds a similar hourly table. These notebooks first added three things, and all three are now in the pipeline:
 
 1. **The Nov 2022 to Oct 2024 gap.** `counts_hourly` uses the archive and the live table, so it has no rows between the archive's end and the live window's start (6.17M rows vs 7.42M here). The Wayback copy fills that gap. Where sources overlap, live wins, then the archive, then Wayback (the Wayback copy matched the others on ~98.5% of overlapping hours, per the check noted in `01_download`).
 2. **Locations for the 18 archive sensors** missing from the current sensor-locations file (an open decision in `CLAUDE.md`): taken from the Oct 2022 copy of the same City of Melbourne table.
 3. **Footpath slope and elevation per sensor** from the footpath-steepness survey, with a LiDAR fallback for the two sensors (25 and 130) with no footpath section within 25 m.
 
-Folding the first two into `src/ingest/` and `src/features/` (with tests and `configs/` settings) is the way to get them onto `main`.
+Where they are now: the Wayback fill in `counts_hourly.fill_gap` (PR #16), the 18 sensors' locations in `sensor_match.load_sensor_locations`, and the slope in `src/features/sensor_steepness.py`. The September 2010 fix below is `counts_hourly.rehour_midnight_days`. The pipeline differs in two ways: the Wayback copy is used only for the gap, so archive and live rows stay as published, and its outage rule is the one described in `docs/features/counts_hourly.md`.
 
 ## Processing notes
 

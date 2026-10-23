@@ -22,7 +22,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Module | Path | Status |
 |---|---|---|
 | Ingestion | `src/ingest/` | ✅ Melbourne: counts, City of Melbourne layers, OSM, DEM, WorldCover, weather, AFL fixtures and crowds, calendars. ✅ NEU Boston: terrain, buildings, imagery, OSM, land cover, weather. ✅ NYC: test counts, OSM, land cover, weather |
-| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Footpath slope and elevation per sensor. ✅ Hourly table for Melbourne: counts + time + weather + calendars + slope ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). Shade and other City of Melbourne layers planned |
+| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Footpath slope and elevation per sensor. ✅ Hourly table for Melbourne: counts + time + weather + calendars + slope, with the November 2022 to October 2024 gap filled from a Wayback copy, September 2010's hours recovered and the 18 retired sensors located ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). Shade and other City of Melbourne layers planned |
 | Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting; spatio-temporal GNN is a stretch goal) |
 | Path segmentation | `src/models/segmentation/` | Planned (NEU campus) |
 | Agents | `src/agents/` | Planned: LLM intake agent with local-knowledge adjustments (planning assistant is a stretch goal) |
@@ -251,10 +251,25 @@ src/features/            feature pipeline (osm.py runs extract -> graph -> featu
 src/bias/                bias slicing (slices.py), representation report, per-slice errors (slice_errors.py)
 src/pipeline/            pipeline steps that aren't ingest or features: validate, dvc_push
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
+notebooks/               exploration and demonstration only; the pipeline doesn't run them (see below)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
 requirements.txt         pinned versions generated from pyproject.toml
 CLAUDE.md                project rules and conventions
 ```
+
+### Notebooks are not the pipeline
+
+`notebooks/` holds exploration and demonstration notebooks. Airflow doesn't run them, and nothing the pipeline produces depends on them. Each one was written while working out a step, and that step now lives in `src/`, where the DAG runs it and `tests/` tests it:
+
+| Notebook | What it explored | Where the pipeline does it | DAG task |
+|---|---|---|---|
+| `01_download` | Downloading the counts, sensor tables, footpath steepness, DEM and weather | `src/ingest/melbourne_portal.py`, `weather.py`, `dem.py` | `pull_counts`, `pull_weather`, `pull_static_layers` |
+| `02_combine` | Merging the archive, live table and Wayback copy; the September 2010 fix; daylight saving; locations for retired sensors; the weather join | `src/features/counts_hourly.py`, `sensor_match.py` (`load_sensor_locations`) | `join_all`, `osm_sensor_match` |
+| `03_preprocess` | Footpath slope with a DEM fallback; outage zeros; quality checks | `src/features/sensor_steepness.py`, `counts_hourly.py`, `src/pipeline/validate.py` | `sensor_steepness`, `join_all`, `validate` |
+| `04_bias_slicing` | Figures for the bias write-up, drawn from the pipeline's bias outputs | reads `data/processed/bias/` from `src/bias/representation.py` | `bias_slices` |
+| `05_bias_stage1` | The representation check on the notebooks' own dataset | `src/bias/representation.py` | `bias_slices` |
+
+The notebooks' tables differ from the pipeline's in a few documented ways (UTC-only time, four weather variables, a different outage-zero rule); see `notebooks/README.md`. Use the pipeline's tables (`dvc pull`, or a DAG run) for anything that feeds a model.
 
 ## Data at a glance
 

@@ -12,6 +12,7 @@ from src.features.counts_hourly import (
     localize,
     read_wayback,
     read_weather,
+    rehour_midnight_days,
     solar_elevation,
     weather_for_counts,
 )
@@ -65,6 +66,32 @@ def test_duplicate_sensor_hours_are_dropped_entirely():
     )
     kept, n = drop_unplaceable(c)
     assert n == 2 and len(kept) == 1
+
+
+def test_a_day_stamped_all_midnight_gets_its_hours_back_in_id_order():
+    day = counts_at(*["2010-09-01 00:00"] * 24, count=0)
+    day["pedestriancount"] = np.arange(24) * 10
+    other = counts_at("2010-09-01 00:00", sensor=2)
+    c = pd.concat([day, other], ignore_index=True)
+    # Shuffled IDs: the hour follows the archive ID, not the row's position in the file.
+    ids = pd.Series(np.r_[np.random.default_rng(0).permutation(24) + 100, 7])
+    out, n = rehour_midnight_days(c, ids)
+    assert n == 24
+    s1 = out[out["location_id"] == 1].assign(id=ids).sort_values("id")
+    assert s1["ts_local_naive"].dt.hour.tolist() == list(range(24))
+    assert (
+        s1["pedestriancount"].tolist()
+        == day["pedestriancount"].iloc[ids.iloc[:24].argsort()].tolist()
+    )
+    assert out.loc[24, "ts_local_naive"] == pd.Timestamp("2010-09-01 00:00")
+    assert not out.duplicated(["location_id", "ts_local_naive"]).any()
+
+
+def test_other_duplicates_are_left_for_drop_unplaceable():
+    c = counts_at("2010-09-01 00:00", "2010-09-01 00:00", "2010-09-01 05:00")
+    out, n = rehour_midnight_days(c, pd.Series([1, 2, 3]))
+    assert n == 0
+    assert out.equals(c)
 
 
 def test_wayback_export_is_read_like_the_live_table(tmp_path):

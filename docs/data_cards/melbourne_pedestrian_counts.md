@@ -5,8 +5,9 @@
 | **Role** | **Target variable.** Training and validation for the flow model; all accuracy claims rest here. |
 | **Provider** | City of Melbourne Open Data (`pedestrian-counting-system-monthly-counts-per-hour`, `pedestrian-counting-system-sensor-locations`) |
 | **License** | Sensor locations: CC BY 4.0. Counts: CC BY 4.0 under the portal-wide terms ("Our open data is provided under a creative commons licence … free to share and adapt our data for any purpose, provided you give the appropriate credit", About our data page; confirmed 2026-10-04). The dataset's own licence field is empty; every other CoM dataset lists CC BY 4.0. Credit "Source: City of Melbourne Open Data". |
-| **Access** | `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour pedestrian-counting-system-sensor-locations` (also fetches the two Wayback copies below) |
-| **Update cadence** | Daily (rolling window); the archive is static |
+| **Access** | `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour pedestrian-counting-system-sensor-locations` (also fetches the two Wayback copies) |
+| **Update cadence** | Daily (rolling window); the archive and the Wayback copies are static |
+| **Wayback copy** | The live window had already moved past November 2022 to October 2024, so those months come from the portal's own CSV export as the Internet Archive saved it on 2025-05-02 (`melbourne_portal.wayback` in `configs/data.yaml`). The same ingest command downloads it once and keeps it. It matched the archive on about 98.5% of overlapping hours (`docs/bias/bias_slicing.md`, "Trade-offs"). How the three sources are combined: `docs/features/counts_hourly.md`, "Count sources". A second Wayback copy, of the sensor table on 2022-10-24, gives the 18 retired sensors their locations ("Known issues", item 3). |
 
 ## Files (`data/raw/melbourne_portal/`)
 
@@ -14,9 +15,9 @@
 |---|---|---|
 | `pedestrian-counting-system-monthly-counts-per-hour.parquet` | 1,624,373 | 2024-10-04 → 2026-10-03, 103 sensors, ~90% of sensor-hours present |
 | `counts_per_hour_2009-05_to_2022-12-14.csv.zip` (423 MB unzipped) | 4,562,230 | **2009-05-01 → 2022-10-31** (despite the filename), 82 sensors |
+| `counts_per_hour_wayback_2025-05-02.csv` (171 MB, `;`-separated, same columns as the live table) | 2,288,804 | 2021-07-01 → 2025-05-02, 98 sensors. The hourly table uses it only between the archive's last hour and the live table's first: in the team's data version of 23 October 2026, 2022-11-01 → 2024-10-03 (1,180,314 rows, 94 sensors). A fresh clone, whose live window starts later, uses a little more of it (1,218,441 rows in a clone of the same day) |
 | `pedestrian-counting-system-sensor-locations.geojson` | 134 | 100 outdoor, 34 indoor; all status `A` |
-| `counts_per_hour_wayback_2025-05-02.csv` | Wayback Machine copy of the portal's full counts export, snapshot `20250502183548` | 2021-07-01 → 2025-05-02; the hourly table takes only the rows between the archive and the live table (November 2022 to October 2024) |
-| `sensor_locations_wayback_2022-10-24.json` | Wayback Machine copy of the sensor table from the portal's old Socrata API, snapshot `20221024034400`; 91 sensors, status A/R/I | Gives the locations of the 18 archive sensors today's table no longer lists |
+| `sensor_locations_wayback_2022-10-24.json` (Wayback copy of the sensor table from the portal's old Socrata API, snapshot `20221024034400`) | 91 | Status A/R/I. Gives the locations and direction labels of the 18 archive sensors today's table no longer lists |
 
 Both Wayback copies are the City's own files, so the City's CC BY 4.0 applies (`docs/data_licenses.md`). Their URLs and snapshot times are in `configs/data.yaml` (`wayback`) and `MANIFEST.json`.
 
@@ -41,7 +42,7 @@ Both Wayback copies are the City's own files, so the City's CC BY 4.0 applies (`
 | 2009–2012 | 18 | Core CBD only |
 | 2013–2016 | 32–43 | |
 | 2017–2022 | 52–73 | |
-| **2022-11 → 2024-10** | 86–96 | In neither the archive nor the live window; filled from the Wayback copy of the portal export |
+| **2022-11 → 2024-10** | 94 | **From the Wayback copy** (1,180,314 rows in the team's data version): in neither the archive nor the current API window |
 | 2024-10 → now | 103 | 67 of these also appear in the archive; 15 archive sensors are retired |
 
 - 57 sensors have ≥5 years of history in the archive.

@@ -159,6 +159,10 @@ stages:
       hash: md5
       md5: aee474f7a7946aafa95e692ad49fae1f
       size: 51576
+    - path: data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      hash: md5
+      md5: ee1a296afd1f05a8c7d2ea0d7bea901a
+      size: 36209
     - path: src/features
       hash: md5
       md5: bcd4f635cfcf8e300313ac95c856cae5.dir
@@ -184,6 +188,14 @@ stages:
       hash: md5
       md5: aee474f7a7946aafa95e692ad49fae1f
       size: 51576
+    - path: data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      hash: md5
+      md5: ee1a296afd1f05a8c7d2ea0d7bea901a
+      size: 36209
+    - path: src/features/sensor_match.py
+      hash: md5
+      md5: 10bee00c43af125a1016c117f7700b69
+      size: 12073
     - path: src/features/sensor_steepness.py
       hash: md5
       md5: ce80c0f2f840203cc790dfbaba3b54a9
@@ -242,6 +254,10 @@ stages:
       hash: md5
       md5: 67eaa05373ec6020aac455919f31cf1d
       size: 4375
+    - path: configs/features.yaml
+      hash: md5
+      md5: 20cdd9800d3ea03f32b20adf54d1f029
+      size: 6264
     - path: data/interim/osm/melbourne/graph/edges.parquet
       hash: md5
       md5: 2026e0a945755700fbef5b206c1d3bf3
@@ -258,6 +274,10 @@ stages:
       hash: md5
       md5: 634c7a9e634ca785d660fc24549059de
       size: 12758
+    - path: data/raw/calendars/melbourne_public_holidays.csv
+      hash: md5
+      md5: e8cca7d3deff982993c477adc8532ded
+      size: 7387
     - path: data/raw/events/afl_attendance.csv
       hash: md5
       md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
@@ -271,6 +291,20 @@ stages:
       hash: md5
       md5: 705e662a3f930d88e8602623be24db6a
       size: 35207584
+    - path: 
+        data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      hash: md5
+      md5: aee474f7a7946aafa95e692ad49fae1f
+      size: 51576
+    - path: data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      hash: md5
+      md5: ee1a296afd1f05a8c7d2ea0d7bea901a
+      size: 36209
+    - path: data/raw/weather
+      hash: md5
+      md5: 8f22c8c7a2bfafa6f78803de1c3ed960.dir
+      size: 27220745
+      nfiles: 57
     - path: src/bias
       hash: md5
       md5: 484d6bce3bb6bb12203d15429a113594.dir
@@ -293,5 +327,68 @@ stages:
       size: 33945988
     - path: src/pipeline/validate.py
       hash: md5
-      md5: 6af10a6270d468ae02782a7fa6c56b6b
-      size: 25641
+      md5: 5327c3a7966584acd30c48c6604edb85
+      size: 26961
+  bias_errors:
+    cmd: python -m src.bias.slice_errors --if-older-than 7
+    deps:
+    - path: configs/bias.yaml
+      hash: md5
+      md5: 67eaa05373ec6020aac455919f31cf1d
+      size: 4375
+    - path: configs/features.yaml
+      hash: md5
+      md5: 20cdd9800d3ea03f32b20adf54d1f029
+      size: 6264
+    - path: data/interim/osm/melbourne/graph/edges.parquet
+      hash: md5
+      md5: 2026e0a945755700fbef5b206c1d3bf3
+      size: 8687543
+    - path: data/processed/features/melbourne/counts_hourly.parquet
+      hash: md5
+      md5: 009b54dd7c61f73da8a20bb12877014f
+      size: 33945988
+    - path: data/processed/features/melbourne/sensor_osm_features.parquet
+      hash: md5
+      md5: 99d7592a05269d0b25a219c5e995e7ec
+      size: 150451
+    - path: data/processed/features/melbourne/sensor_steepness.parquet
+      hash: md5
+      md5: 634c7a9e634ca785d660fc24549059de
+      size: 12758
+    - path: data/raw/calendars/melbourne_public_holidays.csv
+      hash: md5
+      md5: e8cca7d3deff982993c477adc8532ded
+      size: 7387
+    - path: data/raw/events/afl_attendance.csv
+      hash: md5
+      md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
+      size: 179220
+    - path: 
+        data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
+      hash: md5
+      md5: 740aee82f03147f9654f96d3b446f2e0
+      size: 437645
+    - path: data/raw/melbourne_portal/footpath-steepness.geojson
+      hash: md5
+      md5: 705e662a3f930d88e8602623be24db6a
+      size: 35207584
+    - path: 
+        data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      hash: md5
+      md5: aee474f7a7946aafa95e692ad49fae1f
+      size: 51576
+    - path: data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      hash: md5
+      md5: ee1a296afd1f05a8c7d2ea0d7bea901a
+      size: 36209
+    - path: data/raw/weather
+      hash: md5
+      md5: 8f22c8c7a2bfafa6f78803de1c3ed960.dir
+      size: 27220745
+      nfiles: 57
+    - path: src/bias
+      hash: md5
+      md5: 484d6bce3bb6bb12203d15429a113594.dir
+      size: 41606
+      nfiles: 4

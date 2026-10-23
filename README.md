@@ -55,9 +55,19 @@ The pipeline's `dvc_push` task saves and uploads a new version after every run t
 
 ```bash
 .venv/bin/dvc add data/raw data/interim data/processed
+.venv/bin/dvc commit --force dvc.yaml   # record each stage's inputs in dvc.lock
 .venv/bin/dvc push
-git add data/*.dvc && git commit -m "..."
+git add data/*.dvc dvc.lock && git commit -m "..."
 ```
+
+**Pipeline stages (`dvc.yaml`).** `dvc.yaml` lists the pipeline's stages, one per Airflow task, with each stage's command and inputs: its code, configs and the data it reads. `dvc.lock` records the exact version of every input for the data version committed with it, so a data version can be traced to the code and settings that produced it. To see which stages' results are out of date, and why:
+
+```bash
+.venv/bin/dvc status   # e.g. "validate: changed deps: modified: configs/validation.yaml"
+.venv/bin/dvc dag      # the stages and the tracked data folders
+```
+
+The stages list no outputs. `data/raw`, `data/interim` and `data/processed` are versioned as whole folders (`data/*.dvc`), and DVC doesn't allow a stage output inside a tracked folder. So DVC can't order the stages by itself: run the pipeline with Airflow (below), not `dvc repro`. The download stages always show as changed, because they fetch new data on every run.
 
 ## Usage
 
@@ -153,7 +163,7 @@ STOA_ALERT_EMAILS=a@northeastern.edu,b@northeastern.edu
 
 After editing `.env`, run `docker compose up -d` to apply it.
 
-**Data versioning (`dvc_push`).** The last task runs `python -m src.pipeline.dvc_push`: `dvc add` on `data/raw`, `data/interim` and `data/processed`, then `dvc push` to `gs://stoa-dvc-data`. It runs after `validate`, so only data that passed the checks becomes a version. It does not commit to git: when the data changed, its log ends with the `git add data/*.dvc && git commit` command to run. Commit those pointers to record the version; until then, teammates' `dvc pull` still fetches the previous one.
+**Data versioning (`dvc_push`).** The last task runs `python -m src.pipeline.dvc_push`: `dvc add` on `data/raw`, `data/interim` and `data/processed`, `dvc commit` to record each stage's inputs in `dvc.lock`, then `dvc push` to `gs://stoa-dvc-data`. It runs after `validate`, so only data that passed the checks becomes a version. It does not commit to git: when the data changed, its log ends with the `git add data/*.dvc dvc.lock && git commit` command to run. Commit those files to record the version; until then, teammates' `dvc pull` still fetches the previous one.
 
 The containers log in to the bucket as the `stoa-airflow-dvc` service account, through a key file in `.secrets/` (git-ignored, never shared; each person makes their own). Once, with `gcloud` signed in to an account on the project:
 
@@ -224,6 +234,7 @@ configs/bias.yaml        bias slices: precincts, time and weather bins, eras, th
 configs/validation.yaml  data validation thresholds; configs/schemas/ holds the expected table schema
 dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
 data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, pointers in data/*.dvc)
+dvc.yaml, dvc.lock       pipeline stages with their inputs, and the input versions behind the committed data
 logs/                    Airflow task logs (written by the containers, git-ignored)
 docs/
   data_cards/            one card per dataset: schema, coverage, known issues

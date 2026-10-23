@@ -144,7 +144,7 @@ pull_weather ──────────────────────�
 pull_calendars ───────────────────────────────────────────────────────────────────┘             └─► bias_slices ─┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM, the CLUE areas and the AFL crowds only when they aren't held yet, and also feeds `bias_slices`. `bias_slices` reports how much data each bias slice has; see [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 2.5 minutes in Docker; `validate` (about 85 s, a Great Expectations pass over 6M rows) and `join_all` are the slowest tasks (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM, the CLUE areas and the AFL crowds only when they aren't held yet, and also feeds `bias_slices`. `bias_slices` reports how much data each bias slice has; see [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 6 minutes in Docker; `validate` and `bias_slices`, which run side by side over the whole hourly table (7.4M rows), and `join_all` are the slowest tasks (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
@@ -203,7 +203,23 @@ Fix: `pull_counts` now asks the portal only for rows from two days before the la
 |---|---|
 | ![Gantt before](docs/pipeline/gantt_before.png) | ![Gantt after](docs/pipeline/gantt_after.png) |
 
-`join_all` is now the slowest task. A run where `src/features/` or the OSM inputs changed also rebuilds the OSM stages (about 2.5 minutes, mostly `osm_segment_features`).
+At that point `join_all` was the slowest task. A run where `src/features/` or the OSM inputs changed also rebuilds the OSM stages (about 2.5 minutes, mostly `osm_segment_features`).
+
+**The pipeline today.** Since then the DAG gained `pull_static_layers`, `sensor_steepness`, `bias_slices` and a real `validate`, so a daily run does more work. The run `gantt_2026_10_23` (a daily run with the OSM stages skipped and `dvc_push` uploading a new version) took 345 s:
+
+| Task | Seconds |
+|---|---|
+| `validate` | 217.8 |
+| `bias_slices` (runs beside `validate`) | 154.7 |
+| `join_all` | 92.1 |
+| `dvc_push` | 16.0 |
+| `pull_counts` | 10.3 |
+| Other ingest and OSM tasks (OSM skipped) | under 6 each |
+| **Whole run** | **345.2** |
+
+![Gantt today](docs/pipeline/gantt_current.png)
+
+The `pull_counts` fix holds (10 s against 229 s). The new bottleneck is the stretch after `join_all`: `validate` and `bias_slices` run side by side, and each reads the whole hourly table (6.2M rows in this run; 7.4M since the Wayback fill of November 2022 to October 2024, so expect both to take somewhat longer now). Run alone, `validate` takes about 85 s in Docker; beside `bias_slices` it took 218 s, likely because the two compete for the Docker VM's CPU and 8 GB of memory (an observation from these runs, not yet measured separately). We kept full-table validation on purpose: it checks every row on every run, which is the stronger data-quality guarantee, and a daily run of about 6 minutes leaves the day's data ready well within the day. If it needs to be faster, the next steps are, in order: give Docker more memory and CPUs; run `bias_slices` after `validate` instead of beside it, if the contention is confirmed; and validate the fixed 2009–2022 archive rows once and only the new rows each day (`docs/pipeline/validation.md`, "Speed").
 
 While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 

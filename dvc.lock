@@ -95,9 +95,9 @@ stages:
       size: 88975238
     - path: src/features
       hash: md5
-      md5: 664431899cabdc504e286f9fa9fa2af6.dir
-      size: 2874819
-      nfiles: 43
+      md5: ffc4dcd2af402adcf818ce96d930e1ef.dir
+      size: 98355
+      nfiles: 11
   osm_graph:
     cmd: python -m src.features.osm --site melbourne --only graph --if-stale
     deps:
@@ -111,9 +111,9 @@ stages:
       size: 5441015
     - path: src/features
       hash: md5
-      md5: 664431899cabdc504e286f9fa9fa2af6.dir
-      size: 2874819
-      nfiles: 43
+      md5: ffc4dcd2af402adcf818ce96d930e1ef.dir
+      size: 98355
+      nfiles: 11
   osm_segment_features:
     cmd: python -m src.features.osm --site melbourne --only features --if-stale
     deps:
@@ -136,9 +136,9 @@ stages:
       size: 132936
     - path: src/features
       hash: md5
-      md5: 664431899cabdc504e286f9fa9fa2af6.dir
-      size: 2874819
-      nfiles: 43
+      md5: ffc4dcd2af402adcf818ce96d930e1ef.dir
+      size: 98355
+      nfiles: 11
   osm_sensor_match:
     cmd: python -m src.features.osm --site melbourne --only sensors --if-stale
     deps:
@@ -161,9 +161,9 @@ stages:
       size: 51576
     - path: src/features
       hash: md5
-      md5: 664431899cabdc504e286f9fa9fa2af6.dir
-      size: 2874819
-      nfiles: 43
+      md5: ffc4dcd2af402adcf818ce96d930e1ef.dir
+      size: 98355
+      nfiles: 11
   sensor_steepness:
     cmd: python -m src.features.sensor_steepness
     deps:
@@ -273,9 +273,9 @@ stages:
       size: 35207584
     - path: src/bias
       hash: md5
-      md5: 44bb2196ac5143ef714b3d4454e239d5.dir
-      size: 55401
-      nfiles: 6
+      md5: 92845f9c129b544f5ef4ad64fa2b8a67.dir
+      size: 20672
+      nfiles: 3
   validate:
     cmd: python -m src.pipeline.validate
     deps:

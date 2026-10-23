@@ -5,3 +5,6 @@
 # Finder metadata and half-finished downloads (src/ingest writes *.part, then renames).
 .DS_Store
 *.part
+# Python caches: written whenever code runs, so they would make code folders in dvc.yaml look changed.
+__pycache__/
+*.pyc

@@ -99,6 +99,14 @@ melbourne_portal:
       url: https://data.melbourne.vic.gov.au/explore/dataset/pedestrian-counting-system-monthly-counts-per-hour/download?format=csv
       filename: counts_per_hour_wayback_2025-05-02.csv
       license: CC BY 4.0
+    # Today's sensor-locations table has dropped 18 sensors that the 2009-2022 archive counts
+    # (17.5% of its rows). This copy of the same table, archived on 2022-10-24 from the portal's
+    # old Socrata API, still lists them (sensor_match.load_sensor_locations).
+    - dataset: pedestrian-counting-system-sensor-locations
+      snapshot: "20221024034400"
+      url: https://data.melbourne.vic.gov.au/resource/h57g-5234
+      filename: sensor_locations_wayback_2022-10-24.json
+      license: CC BY 4.0
   # Large bulk downloads, fetched only with --large.
   large:
     dsm_2018_0p1m: https://s3-ap-southeast-2.amazonaws.com/gis-opendata-com/2018-DSM/CoM_DSM_2018.zip

@@ -94,6 +94,7 @@ stages:
     deps:
       - data/processed/features/melbourne/osm_segment_features.parquet
       - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
       - src/features
       - configs/features.yaml
       - configs/sensor_overrides.yaml
@@ -104,7 +105,9 @@ stages:
       - data/raw/melbourne_portal/footpath-steepness.geojson
       - data/raw/dem/melbourne_ga_lidar_5m.tif
       - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
       - src/features/sensor_steepness.py
+      - src/features/sensor_match.py
       - configs/features.yaml
 
   # --- Hourly table, then its checks ---
@@ -131,10 +134,37 @@ stages:
       - data/processed/features/melbourne/sensor_steepness.parquet
       - data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
       - data/raw/melbourne_portal/footpath-steepness.geojson
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
       - data/raw/events/afl_attendance.csv
+      - data/raw/calendars/melbourne_public_holidays.csv
+      - data/raw/weather
       - data/interim/osm/melbourne/graph/edges.parquet
       - src/bias
       - configs/bias.yaml
+      - configs/features.yaml
+
+  bias_errors:
+    # A baseline's error per slice on held-out sensors, with and without mitigations. It reads
+    # the same inputs as bias_slices (it rebuilds the slices itself, it doesn't read their CSVs).
+    # About 18 minutes, so --if-older-than 7 skips it when its last run is under a week old and
+    # its settings are unchanged; dvc status still flags it when an input below changes.
+    cmd: python -m src.bias.slice_errors --if-older-than 7
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/features/melbourne/sensor_steepness.parquet
+      - data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
+      - data/raw/melbourne_portal/footpath-steepness.geojson
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      - data/raw/events/afl_attendance.csv
+      - data/raw/calendars/melbourne_public_holidays.csv
+      - data/raw/weather
+      - data/interim/osm/melbourne/graph/edges.parquet
+      - src/bias
+      - configs/bias.yaml
+      - configs/features.yaml
 
   validate:
     cmd: python -m src.pipeline.validate

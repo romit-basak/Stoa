@@ -15,6 +15,7 @@ Outputs in data/processed/features/<site>/:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ import yaml
 from src.features.common import Site, log, write_meta, write_parquet
 from src.ingest.common import REPO_ROOT
 
+RETIRED_LOCATIONS = "sensor_locations_wayback_2022-10-24.json"
 CROSSING_PENALTY_M = 5.0
 # Sensor direction labels -> the axis (degrees from north, 0-180) a matching segment runs along.
 DIRECTION_AXIS = {"north": 0.0, "south": 0.0, "east": 90.0, "west": 90.0}
@@ -52,6 +54,60 @@ def sensor_locations_path(data_cfg: dict[str, Any]) -> Path:
         / "melbourne_portal"
         / "pedestrian-counting-system-sensor-locations.geojson"
     )
+
+
+def retired_locations_path(data_cfg: dict[str, Any]) -> Path:
+    """The October 2022 Wayback copy of the sensor table (configs/data.yaml, `wayback`)."""
+    return sensor_locations_path(data_cfg).with_name(RETIRED_LOCATIONS)
+
+
+def add_retired(current: gpd.GeoDataFrame, snapshot: list[dict]) -> gpd.GeoDataFrame:
+    """Today's sensor table plus the sensors only the October 2022 table lists.
+
+    Today's table has dropped 18 sensors that the 2009-2022 archive counts. The 2022 copy of the
+    same City of Melbourne table still lists them, with coordinates and direction labels. It has
+    no indoor/outdoor column. The 18 are street sensors by name (the indoor sensors in today's
+    table are 80-106 and 144-160), so the sensors only this table lists are typed Outdoor. The
+    one other such sensor, 88 (Micro-Labs, installed July 2022), has no counts in any source,
+    so its type reaches no table built from the counts. `location_source` says which table each
+    row came from. Today's table wins for any sensor in both. Port of the lookup in Arshmehar's
+    notebook (notebooks/02_combine.ipynb).
+    """
+    current = current.assign(location_source="current")
+    old = pd.DataFrame(snapshot)
+    old = old[~old["sensor_id"].astype(int).isin(current["location_id"])]
+    retired = gpd.GeoDataFrame(
+        {
+            "location_id": old["sensor_id"].astype(int),
+            "sensor_description": old["sensor_description"],
+            "sensor_name": old["sensor_name"],
+            "status": old["status"],
+            "location_type": "Outdoor",
+            "direction_1": old.get("direction_1"),
+            "direction_2": old.get("direction_2"),
+            "location_source": "wayback_2022-10-24",
+        },
+        geometry=gpd.points_from_xy(
+            old["longitude"].astype(float), old["latitude"].astype(float)
+        ),
+        crs=4326,
+    )
+    return pd.concat([current, retired.to_crs(current.crs)], ignore_index=True)
+
+
+def load_sensor_locations(data_cfg: dict[str, Any]) -> gpd.GeoDataFrame:
+    """Every sensor with a known location: today's table and the retired ones from 2022."""
+    current = gpd.read_file(sensor_locations_path(data_cfg))
+    path = retired_locations_path(data_cfg)
+    if not path.exists():
+        log.warning(
+            "%s not held, so the 18 retired sensors have no location "
+            "(python -m src.ingest.melbourne_portal --only "
+            "pedestrian-counting-system-sensor-locations fetches it)",
+            path.name,
+        )
+        return current.assign(location_source="current")
+    return add_retired(current, json.loads(path.read_text()))
 
 
 def check_overrides(overrides: dict[int, str], edges: gpd.GeoDataFrame) -> None:
@@ -122,6 +178,7 @@ def match_sensors(
             "location_id": lid,
             "sensor_description": s.get("sensor_description"),
             "location_type": s.get("location_type"),
+            "location_source": s.get("location_source", "current"),
             "segment_id": None,
             "distance_m": np.nan,
             "method": "none",
@@ -185,7 +242,7 @@ def sensor_match(
     site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]
 ) -> dict[str, Any]:
     cfg = fcfg["sensor_match"]
-    sensors = gpd.read_file(sensor_locations_path(data_cfg)).to_crs(site.crs)
+    sensors = load_sensor_locations(data_cfg).to_crs(site.crs)
     edges = gpd.read_parquet(site.graph_dir / "edges.parquet")
     m, cand = match_sensors(sensors, edges, cfg, load_overrides(site, cfg))
     write_parquet(m, site.processed / "sensor_segment_map.parquet")
@@ -209,6 +266,7 @@ def sensor_match(
         "location_id",
         "sensor_description",
         "location_type",
+        "location_source",
         "segment_id",
         "distance_m",
         "method",

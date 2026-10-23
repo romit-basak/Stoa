@@ -51,14 +51,15 @@ WAYBACK = "counts_per_hour_wayback_2025-05-02.csv"
 # --------------------------------------------------------------------------------------------
 
 
-def read_archive(path: Path) -> pd.DataFrame:
+def read_archive(path: Path) -> tuple[pd.DataFrame, int]:
+    """The 2009-2022 archive, with September 2010's hours recovered; returns (rows, rows re-houred)."""
     with zipfile.ZipFile(path) as z:
         a = pd.read_csv(
             z.open(z.namelist()[0]),
-            usecols=["Sensor_ID", "Date_Time", "Hourly_Counts"],
-            dtype={"Sensor_ID": "int32", "Hourly_Counts": "int32"},
+            usecols=["ID", "Sensor_ID", "Date_Time", "Hourly_Counts"],
+            dtype={"ID": "int64", "Sensor_ID": "int32", "Hourly_Counts": "int32"},
         )
-    return pd.DataFrame(
+    out = pd.DataFrame(
         {
             "location_id": a["Sensor_ID"],
             "ts_local_naive": pd.to_datetime(
@@ -70,6 +71,35 @@ def read_archive(path: Path) -> pd.DataFrame:
             "source": "archive",
         }
     )
+    return rehour_midnight_days(out, a["ID"])
+
+
+def rehour_midnight_days(
+    counts: pd.DataFrame, row_id: pd.Series
+) -> tuple[pd.DataFrame, int]:
+    """Recover the hours of sensor-days whose 24 counts are all stamped midnight.
+
+    In the archive every hour of September 2010 is stamped 00:00, so each sensor has 24 counts
+    at midnight on each of those days (12,240 rows). The rows are still in hour order by the
+    archive's ID, and in that order each day's counts trace the usual daily curve, so numbering
+    them 0-23 by ID gives back the hour. Only groups of exactly 24 rows at midnight are
+    renumbered; any other duplicate is left for drop_unplaceable. Port of the fix in Arshmehar's
+    notebook (notebooks/02_combine.ipynb).
+    """
+    key = ["location_id", "ts_local_naive"]
+    dup = counts.duplicated(key, keep=False)
+    at_midnight = counts["ts_local_naive"].eq(counts["ts_local_naive"].dt.normalize())
+    size = counts[dup].groupby(key)["pedestriancount"].transform("size")
+    whole_day = dup & at_midnight & size.reindex(counts.index).eq(24)
+    if not whole_day.any():
+        return counts, 0
+    days = counts[whole_day].assign(_id=row_id[whole_day]).sort_values("_id")
+    hour = days.groupby(key).cumcount()
+    out = counts.copy()
+    out.loc[days.index, "ts_local_naive"] = days["ts_local_naive"] + pd.to_timedelta(
+        hour, unit="h"
+    )
+    return out, int(whole_day.sum())
 
 
 def read_live(path: Path) -> pd.DataFrame:
@@ -141,8 +171,8 @@ def fill_gap(
 def drop_unplaceable(counts: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """Drop every row of a (sensor, local hour) that appears more than once.
 
-    Such rows can't be put in order: in the archive, every hour of September 2010 is stamped
-    midnight, so each sensor has 24 different counts at 00:00 on each of those days.
+    Such rows can't be put in order. September 2010's midnight stamps are fixed before this
+    (rehour_midnight_days), so this is a safeguard: no other duplicates are known.
     """
     dup = counts.duplicated(["location_id", "ts_local_naive"], keep=False)
     return counts[~dup], int(dup.sum())
@@ -353,7 +383,10 @@ def build(
     portal = raw / "melbourne_portal"
 
     t = time.perf_counter()
-    archive, live = read_archive(portal / ARCHIVE), read_live(portal / LIVE)
+    (archive, n_rehoured), live = (
+        read_archive(portal / ARCHIVE),
+        read_live(portal / LIVE),
+    )
     parts = [archive, live]
     if (portal / WAYBACK).exists():
         parts.append(fill_gap(read_wayback(portal / WAYBACK), archive, live))
@@ -451,6 +484,7 @@ def build(
         "rows_by_source": {
             str(k): int(v) for k, v in table["source"].value_counts().items()
         },
+        "archive_rows_rehoured": n_rehoured,
         "dropped_unplaceable_duplicates": n_dup,
         "dropped_nonexistent_spring_forward": n_nonexistent,
         "sensors": int(table["location_id"].nunique()),

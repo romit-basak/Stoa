@@ -80,8 +80,8 @@ Within each count hour (h:00 to h+1:00):
 | `post_metro_tunnel` | On or after 30 November 2025 (structural break) |
 | `wx_*` | Open-Meteo ERA5 for the city centre: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `cloud_cover`, `wind_speed_10m`, `is_day`, `precipitation`, `rain`, `shortwave_radiation` |
 | `sensor_description`, `location_type`, `segment_id`, `match_method`, `needs_review` | From the sensor match (`sensor_segment_map.parquet`) |
-| `has_location` | The sensor is in the current sensor-locations file |
-| `slope_pct`, `slope_pct_local_mean`, `elevation_m`, `place_source` | Footpath slope (%), the length-weighted mean slope within 25 m, and elevation (m AHD), from `sensor_steepness.parquet` (below). Missing for the 18 sensors with no location. |
+| `has_location` | The sensor has a location: in the current sensor-locations file, or for the 18 retired sensors, its October 2022 copy |
+| `slope_pct`, `slope_pct_local_mean`, `elevation_m`, `place_source` | Footpath slope (%), the length-weighted mean slope within 25 m, and elevation (m AHD), from `sensor_steepness.parquet` (below). Missing for sensors with no location. |
 
 There's no month or day-of-year column, by design (core rule 9): use `sun_elevation_deg`, temperature and the calendar flags instead.
 
@@ -100,15 +100,16 @@ Sensor 139 (Sandridge Bridge signal box, by a ramp) has 20.4%; every other senso
 
 ## Run of 22 October 2026
 
-The first run with the Wayback fill (the 16 October run had 6,173,993 rows and no November 2022 to October 2024).
+With the Wayback fill, September 2010's hours recovered and the retired sensors located (the 16 October run had 6,173,993 rows and no November 2022 to October 2024).
 
 | | |
 |---|---|
-| Rows | 7,397,628 (of 7,410,238 read), 118 sensors, 2009-05-01 to 2026-10-22 (local) |
-| Rows by source | archive 4,549,620; Wayback 1,180,314; live 1,667,694 |
-| Dropped: unplaceable duplicates | 12,240: **every hour of September 2010 is stamped midnight** in the archive, so those days can't be put in order |
+| Rows | 7,409,868 (of 7,410,238 read), 118 sensors, 2009-05-01 to 2026-10-22 (local) |
+| Rows by source | archive 4,561,860; Wayback 1,180,314; live 1,667,694 |
+| Re-houred: September 2010 | 12,240: **every hour of September 2010 is stamped midnight** in the archive. The rows are in hour order by the archive's `ID`, so each sensor-day's 24 rows are numbered 0–23 in that order (`rehour_midnight_days`). The month's mean hourly profile then matches August 2010's (correlation 1.00). |
+| Dropped: unplaceable duplicates | 0 |
 | Dropped: non-existent spring-forward hour | 370 |
-| Rows from sensors with no location | 865,590 (18 sensors, e.g. 7 Birrarung Marr, 13 Flagstaff Station). They have no `segment_id`. |
+| Rows from sensors with no location | 0. The 18 sensors missing from today's sensor table (e.g. 7 Birrarung Marr, 13 Flagstaff Station; 867,750 rows) are placed from its October 2022 copy. |
 | Suspected outage hours | 9,882 |
 | Rows without weather | 16,333, the newest days. The weather archive lags by about a week, and the next run fills them. |
 

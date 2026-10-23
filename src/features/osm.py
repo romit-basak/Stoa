@@ -32,7 +32,11 @@ from src.features.common import (
 from src.features.graph import graph
 from src.features.osm_extract import extract
 from src.features.segment_features import segment_features
-from src.features.sensor_match import sensor_locations_path, sensor_match
+from src.features.sensor_match import (
+    retired_locations_path,
+    sensor_locations_path,
+    sensor_match,
+)
 from src.ingest.common import REPO_ROOT, load_config, setup_logging, sha256
 
 STAGES = ["extract", "graph", "features", "sensors"]
@@ -79,6 +83,7 @@ def fingerprints(
     fp["sensors"] = _hash(
         fp["features"],
         _file_hash(sensor_locations_path(data_cfg)),
+        _file_hash(retired_locations_path(data_cfg)),
         _file_hash(overrides),
     )
     return fp

@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # networkx: reference values in tests
+dev = ["matplotlib>=3.8", "networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # matplotlib: bias figures (notebooks/04); networkx: reference values in tests
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

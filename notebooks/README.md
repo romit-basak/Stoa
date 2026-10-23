@@ -1,13 +1,16 @@
 # Melbourne dataset notebooks
 
-Three notebooks that build a Melbourne hourly pedestrian dataset with footpath steepness, runnable in Colab or locally. Run them in order:
+Notebooks 01-03 build a Melbourne hourly pedestrian dataset with footpath steepness, runnable in Colab or locally; 04 and 05 are the bias checks. Run them in order:
 
 | Step | Notebook | Reads | Writes |
 |---|---|---|---|
 | 1 | `01_download.ipynb` | the web (the only notebook that goes online) | `raw/` |
 | 2 | `02_combine.ipynb` | `raw/` | `interim/`, `processed/` |
 | 3 | `03_preprocess.ipynb` | `raw/`, `interim/`, `processed/` | `final/` |
-| 4 | `04_bias_slicing.ipynb` | `final/`, `interim/missing_hours.parquet` | `reports/bias/` (data-bias slice report) |
+| 4 | `04_bias_slicing.ipynb` | the team's bias report, `data/processed/bias/melbourne/` (from `src.bias.representation` or `dvc pull`), and `configs/bias.yaml` | the figures in `docs/bias/figures/` |
+| 5 | `05_bias_stage1.ipynb` | `final/`, `interim/missing_hours.parquet` | `reports/bias/`: the same data-bias check on this dataset, which includes the Wayback fill |
+
+Notebook 04 runs locally from the repo only, in the project environment (`.venv`); it doesn't use the data folder below. Notebooks 01-03 and 05 use the data folder.
 
 Paths are relative to the data folder:
 - **Colab:** `MyDrive/stoa/data/` on Google Drive (mounted by the first cell).
@@ -19,10 +22,10 @@ The data isn't in DVC yet.
 
 | File | One row per | Key | Contents |
 |---|---|---|---|
-| `final/pcs_hourly.parquet` | sensor-hour (7,415,985 rows, 21.7 MB) | `location_id` + `date` + `time` | `latitude`, `longitude`, UTC `date` and `time`, `pedestriancount`, `direction_1`, `direction_2` (NaN before July 2021), `source`, `suspect_outage_zero`, `temp_c`, `wind_kmh`, `is_day`, `rain_mm` |
+| `final/pcs_hourly.parquet` | sensor-hour (~7.4M rows, ~22 MB) | `location_id` + `date` + `time` | `latitude`, `longitude`, UTC `date` and `time`, `pedestriancount`, `direction_1`, `direction_2` (NaN before July 2021), `source`, `suspect_outage_zero`, `temp_c`, `wind_kmh`, `is_day`, `rain_mm` |
 | `final/sensor_steepness.parquet` | sensor (118 rows) | `location_id` | location, `slope_pct`, `elevation_m`, direction labels, how each value was matched (`match_distance_m`, `slope_matched`, `place_source`) |
 
-Join them on `location_id`. Coverage: 2009-05-01 to the latest live pull (UTC); weather ends about 6 days before the download (ERA5 lag).
+Join them on `location_id`. Coverage: 2009-05-01 (UTC) to the last hour with weather, about 6 days before the download (ERA5 lag), so every row has weather. Row counts grow with each new download.
 
 `direction_1` and `direction_2` add up to `pedestriancount`, so never use them as features.
 
@@ -43,13 +46,13 @@ All CC BY 4.0 (City of Melbourne, Open-Meteo/ERA5, Geoscience Australia).
 
 ## How this relates to the `src/` pipeline
 
-`src/features/counts_hourly.py` builds a similar hourly table. These notebooks add three things it doesn't have yet:
+`src/features/counts_hourly.py` builds a similar hourly table. These notebooks first added three things; the third is now in the pipeline (`src/features/sensor_steepness.py`):
 
 1. **The Nov 2022 to Oct 2024 gap.** `counts_hourly` uses the archive and the live table, so it has no rows between the archive's end and the live window's start (6.17M rows vs 7.42M here). The Wayback copy fills that gap. Where sources overlap, live wins, then the archive, then Wayback (the Wayback copy matched the others on ~98.5% of overlapping hours, per the check noted in `01_download`).
 2. **Locations for the 18 archive sensors** missing from the current sensor-locations file (an open decision in `CLAUDE.md`): taken from the Oct 2022 copy of the same City of Melbourne table.
 3. **Footpath slope and elevation per sensor** from the footpath-steepness survey, with a LiDAR fallback for the two sensors (25 and 130) with no footpath section within 25 m.
 
-Folding these into `src/ingest/` and `src/features/` (with tests and `configs/` settings) is the way to get them onto `main`.
+Folding the first two into `src/ingest/` and `src/features/` (with tests and `configs/` settings) is the way to get them onto `main`.
 
 ## Processing notes
 

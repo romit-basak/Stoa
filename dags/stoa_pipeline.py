@@ -160,6 +160,12 @@ def stoa_pipeline():
         # reference. Needs no model. See docs/bias/bias_slicing.md.
         return f"{STOA} src.bias.representation"
 
+    @task.bash
+    def bias_errors():
+        # Bias steps 2-3: a baseline's error per slice on held-out sensors, with and without
+        # reweighting. About 10 minutes, so it reruns only weekly or when its settings change.
+        return f"{STOA} src.bias.slice_errors --if-older-than 7"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
     @task.bash(retries=0)
@@ -200,7 +206,9 @@ def stoa_pipeline():
     # Bias slicing runs beside validation; only data that went through both is versioned.
     slices = bias_slices()
     [joined, static] >> slices
-    [joined >> validate(), slices] >> dvc_push()
+    errors = bias_errors()
+    slices >> errors
+    [joined >> validate(), errors] >> dvc_push()
 
 
 stoa_pipeline()

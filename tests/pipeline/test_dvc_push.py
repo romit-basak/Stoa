@@ -8,7 +8,7 @@ from src.pipeline import dvc_push
 
 @pytest.fixture
 def repo(tmp_path):
-    """A throwaway git repo holding the three committed pointer files."""
+    """A throwaway git repo holding the three committed pointer files and dvc.lock."""
 
     def git(*args):
         subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
@@ -17,6 +17,7 @@ def repo(tmp_path):
     (tmp_path / "data").mkdir()
     for d in dvc_push.TRACKED:
         (tmp_path / f"{d}.dvc").write_text("outs:\n- md5: aaa.dir\n")
+    (tmp_path / dvc_push.LOCK).write_text("schema: '2.0'\n")
     git("add", ".")
     # gpgsign=false: machines that sign commits by default would otherwise need gpg here.
     git(
@@ -31,6 +32,11 @@ def test_changed_pointers_lists_only_modified_pointer_files(repo):
     (repo / "data/raw.dvc").write_text("outs:\n- md5: bbb.dir\n")
     (repo / "notes.txt").write_text("not a pointer")
     assert dvc_push.changed_pointers(repo) == ["data/raw.dvc"]
+
+
+def test_changed_pointers_include_dvc_lock(repo):
+    (repo / dvc_push.LOCK).write_text("schema: '2.0'\nstages: {}\n")
+    assert dvc_push.changed_pointers(repo) == [dvc_push.LOCK]
 
 
 @pytest.fixture
@@ -66,8 +72,16 @@ def dvc_calls(monkeypatch):
 
 def test_version_data_adds_then_pushes(credentials, dvc_calls, tmp_path):
     dvc_push.version_data(tmp_path)
-    assert dvc_calls[0] == ["dvc", "add", *dvc_push.TRACKED]
-    assert dvc_calls[1] == ["dvc", "push"]
+    assert dvc_calls[:3] == [
+        ["dvc", "add", *dvc_push.TRACKED],
+        [
+            "dvc",
+            "commit",
+            "--force",
+            "dvc.yaml",
+        ],  # records each stage's inputs in dvc.lock
+        ["dvc", "push"],
+    ]
 
 
 def test_no_credentials_fails_before_any_dvc_command(

@@ -4,8 +4,8 @@ The data pipeline guidelines ask us to slice the data, check whether some groups
 
 **Summary.**
 - The data is most uneven by place: the CBD has 5 times its share of sensors, and the outer precincts under half of theirs.
-- On held-out sensors, a baseline model is clearly worse on six groups: quiet sensors, steep paths (5% or more), sensors whose path match needs review, night, public holidays and the COVID era. Low-amenity sensors miss that cut by a hair. The thin outer precincts are not among them.
-- Reweighting the training rows lowered the average error a little but made the weak groups no better or worse, so it was rejected. Calibrating each sensor to four weeks of its own counts cut the overall error by a third and fixed the place and volume groups. Night and COVID are still worse; they need changes to the model, not to the weights.
+- On held-out sensors, a baseline model is clearly worse on quiet sensors, low-amenity sensors, three precincts outside the CBD (Southbank, Docklands and Melbourne (Remainder)), night, public holidays and the COVID era. The thin outer precincts are not among them.
+- Reweighting the training rows didn't lower the average error and moved error from some weak groups onto others, so it was rejected. Calibrating each sensor to four weeks of its own counts cut the overall error by about a third and fixed the quiet, low-amenity and Southbank sensors. Night, COVID, Docklands and Melbourne (Remainder) are still worse: their error is in the pattern, which needs changes to the model, not to the weights.
 
 ## What "bias" means here
 
@@ -34,7 +34,7 @@ Arshmehar proposed the slice list (her table, and her notebook `notebooks/04_bia
 | `source` | Archive, live, Wayback | Different collection | `source` | Arshmehar |
 | `missing_hours` | <5%, 5–20%, ≥20% of hours absent | Unreliable sensors can skew training and evaluation | Hours absent within each source's span for the sensor | Arshmehar |
 | `match_review` | Matched automatically, needs review | A sensor on the wrong segment gets the wrong place features | `needs_review` from the sensor match | Added |
-| `has_location` | Located, no location | The 18 retired sensors have no place features yet | `has_location` | Added |
+| `has_location` | Located, no location | The 18 retired sensors had no place features until their 2022 locations were added; every sensor is located now, and the slice stays as a check | `has_location` | Added |
 
 The cut-offs for rain, temperature and sensor tiers are agreed: Arshmehar's first notebook used wet above 0.2 mm, bands at 10/20/30 °C and the median count, and her notebooks now use the ones above.
 
@@ -69,23 +69,23 @@ The figures below come from `notebooks/04_bias_slicing.ipynb`, which reads these
 
 ### Findings (run of 22 October 2026)
 
-7.4M sensor-hours from 118 sensors, May 2009 to October 2026. This includes the Wayback fill for November 2022 to October 2024 (1.18M rows, 16% of the table).
+7.4M sensor-hours from 118 sensors, May 2009 to October 2026. This includes the Wayback fill for November 2022 to October 2024 (1.18M rows, 16% of the table), and every sensor now has a location: the 18 retired sensors are placed from the October 2022 copy of the sensor table.
 
 **Place is where the data is most uneven.**
 
 | Precinct | Sensors | Share of sensors | Share of walkable network | Ratio |
 |---|---|---|---|---|
-| CBD | 60 | 60% | 12% | 4.95 |
-| Docklands | 11 | 11% | 6% | 1.74 |
-| Southbank | 5 | 5% | 5% | 0.92 |
-| West Melbourne (Residential) | 4 | 4% | 4% | 0.94 |
-| Melbourne (Remainder) | 5 | 5% | 7% | 0.78 |
-| North Melbourne | 4 | 4% | 10% | 0.40 |
-| Carlton | 6 | 6% | 15% | 0.39 |
-| Parkville | 3 | 3% | 10% | 0.30 |
-| Kensington | 2 | 2% | 11% | 0.18 |
+| CBD | 73 | 62% | 12% | 5.11 |
+| Docklands | 13 | 11% | 6% | 1.74 |
+| Southbank | 6 | 5% | 5% | 0.93 |
+| West Melbourne (Residential) | 4 | 3% | 4% | 0.79 |
+| Melbourne (Remainder) | 6 | 5% | 7% | 0.79 |
+| North Melbourne | 4 | 3% | 10% | 0.34 |
+| Carlton | 6 | 5% | 15% | 0.33 |
+| Parkville | 4 | 3% | 10% | 0.33 |
+| Kensington | 2 | 2% | 11% | 0.15 |
 
-The CBD has five times its share of sensors; Carlton, North Melbourne, Parkville and Kensington have well under half of theirs. Three of those are held-out transfer precincts, with 3 to 6 sensors each, so their errors will carry wide uncertainty.
+The CBD has five times its share of sensors; Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less. Three of those are held-out transfer precincts, with 3 to 6 sensors each, so their errors will carry wide uncertainty.
 
 ![Share of sensors against share of the walkable network, by precinct](figures/precinct_sensors_vs_network.png)
 
@@ -93,7 +93,7 @@ The CBD has five times its share of sensors; Carlton, North Melbourne, Parkville
 
 ![Ratio of each group's share of rows to its share of hours](figures/ratio_by_group.png)
 
-Rain lowers counts at every time of day (median 458 dry against 320 in rain at midday), so the weather slices behave differently even though they're represented in proportion.
+Rain lowers counts at every time of day (median 459 dry against 321 in rain at midday), so the weather slices behave differently even though they're represented in proportion.
 
 ![Median count by time of day and rain](figures/heatmap_time_of_day_x_rain.png)
 
@@ -101,7 +101,7 @@ Rain lowers counts at every time of day (median 458 dry against 320 in rain at m
 
 ![Share of rows and of pedestrians by time of day](figures/time_of_day_rows_vs_pedestrians.png)
 
-**Later eras are over-represented** because the sensor network grew. Pre-COVID is 62% of the hours but 41% of the rows (ratio 0.67); the recovery era is 23% of the hours and 37% of the rows (1.56), and the post Metro Tunnel era 5% of the hours and 10% of the rows (1.95).
+**Later eras are over-represented** because the sensor network grew. Pre-COVID is 62% of the hours but 41% of the rows (ratio 0.67); the recovery era is 23% of the hours and 37% of the rows (1.56), and the post Metro Tunnel era 5% of the hours and 10% of the rows (1.94).
 
 ![Sensors and rows per year](figures/coverage_by_year.png)
 
@@ -111,13 +111,12 @@ Early years rest on 18 sensors (2009–2012, 1.4–2.1% of rows each), against 1
 
 **Other points:**
 - The busiest third of sensors carries 69% of pedestrians.
-- 12% of rows (16% of pedestrians) come from the 18 retired sensors with no location, so they're missing from every place slice.
-- The 3–5% slope band has 14 sensors against 21% of surveyed footpath length (ratio 0.66). Only 2 sensors use the DEM slope, too few to judge on their own.
+- The 3–5% slope band has 16 sensors against 21% of surveyed footpath length (ratio 0.64). Only 2 sensors use the DEM slope, too few to judge on their own.
 
   ![Share of sensors and of footpath length by slope band](figures/slope_sensors_vs_footpath.png)
-- 11 sensors are missing 20% or more of their hours. The least complete are quiet sensors: 73 (67% of hours missing), 124 (64%), 138 (42%) and 140 (41%), so quiet streets are short of data twice over.
+- 10 sensors are missing 20% or more of their hours. The least complete are quiet sensors: 73 (67% of hours missing), 124 (64%), 138 (42%) and 140 (41%), so quiet streets are short of data twice over.
 - University teaching is unknown for 14% of rows: there's no calendar before 2015.
-- 45 of the 100 located sensors have a sensor match flagged for review.
+- 52 of the 118 sensors have a sensor match flagged for review.
 
 ## Types of bias found
 
@@ -125,13 +124,13 @@ There are no demographic fields: Stoa holds no personal data (CLAUDE.md, core ru
 
 | Type | What the data shows | Slices |
 |---|---|---|
-| **Sampling bias by place** (where sensors were put) | The CBD has 60 of 100 located sensors against 12% of the walkable network (ratio 4.95). Carlton (6 sensors), North Melbourne (4), Parkville (3) and Kensington (2) have under half their share. | `precinct`, `holdout_precinct` |
+| **Sampling bias by place** (where sensors were put) | The CBD has 73 of 118 sensors against 12% of the walkable network (ratio 5.11). Carlton (6 sensors), North Melbourne (4), Parkville (4) and Kensington (2) have a third of their share or less. | `precinct`, `holdout_precinct` |
 | **Volume skew** | The busiest third of sensors (39) carries 69% of pedestrians; the quietest third (40) 6%. The least complete sensors are quiet ones. | `volume_tier`, `missing_hours` |
-| **Coverage over time** | 18 sensors in 2009–2012, 102 in 2025. Pre-COVID hours are under-represented (ratio 0.67) and post Metro Tunnel hours over-represented (1.95). Kensington, North Melbourne and West Melbourne (Residential) have no pre-COVID rows. | `era`, `sensor_start`, coverage by year |
+| **Coverage over time** | 18 sensors in 2009–2012, 102 in 2025. Pre-COVID hours are under-represented (ratio 0.67) and post Metro Tunnel hours over-represented (1.94). Kensington, North Melbourne and West Melbourne (Residential) have no pre-COVID rows. | `era`, `sensor_start`, coverage by year |
 | **Era shifts** | Median count 250 pre-COVID, 72 during COVID, 165 in recovery; only Docklands is back above its pre-COVID median. | `era`, precinct × era |
 | **Where the pedestrians are in time** | Night is 24% of rows but 2.8% of pedestrians. | `time_of_day` |
 | **Rare conditions** | Rain of 1 mm or more is 2.5% of rows, 25–30 °C 4.3%, 30 °C or hotter 1.9%. Only 2 sensors use DEM slope. | `rain`, `temperature`, `slope_source` |
-| **Data quality** | 18 retired sensors (12% of rows, 16% of pedestrians) have no location; 45 of the 100 located sensors have a match flagged for review; 11 sensors miss 20% or more of their hours. | `has_location`, `match_review`, `missing_hours` |
+| **Data quality** | 52 of the 118 sensors have a match flagged for review; 10 sensors miss 20% or more of their hours. The 18 retired sensors' locations come from a 2022 table, matched to the 2026 OSM network. | `match_review`, `missing_hours` |
 
 **Not found:** time-of-day, weekday, holiday, school-term, university-term, rain, temperature and AFL groups are each represented in proportion to the hours they cover (ratio 0.93 to 1.06).
 
@@ -153,11 +152,11 @@ Step 1 measures the **data**. Whether a model is actually worse on these groups 
 
 Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. The real flow model doesn't exist yet, so a baseline stands in for it (`src/bias/slice_errors.py`):
 - **Model:** scikit-learn gradient boosting (`HistGradientBoostingRegressor`, Poisson loss) on time, calendar, weather, slope and OSM segment features. Following core rule 9, it has no sensor or segment IDs, no coordinates and no month or day of year.
-- **Held-out sensors:** 5 folds grouped by sensor (core rule 2), so every one of the 100 located sensors gets predictions from a model that never saw it. Each fold trains on 600,000 sampled rows.
+- **Held-out sensors:** 5 folds grouped by sensor (core rule 2), so every one of the 118 sensors gets predictions from a model that never saw it. Each fold trains on 600,000 sampled rows.
 - **Error:** WAPE, the sum of absolute errors divided by the sum of counts, computed per slice group with Fairlearn's `MetricFrame` (MIT). A relative error keeps busy sensors from drowning out quiet ones, and night (2.8% of pedestrians) from disappearing.
 - **Uncertainty:** a 95% interval for each group, from resampling its sensors 300 times. Hours from one sensor aren't independent, so resampling rows would overstate the certainty.
 - **Worse:** a group is marked worse when its whole interval lies above the overall WAPE.
-- **Scored hours:** each sensor's first 28 days are left out of scoring, because step 3's calibration uses them. That leaves 6.5M sensor-hours.
+- **Scored hours:** each sensor's first 28 days are left out of scoring, because step 3's calibration uses them. That leaves 7.3M sensor-hours.
 
 It runs as `bias_errors` in the DAG, after `bias_slices`. It reruns when its last run is a week old or its settings changed, and otherwise finishes at once. Outputs, in `data/processed/bias/melbourne/`:
 
@@ -169,32 +168,37 @@ It runs as `bias_errors` in the DAG, after `bias_slices`. It reruns when its las
 
 ### Findings (run of 22 October 2026)
 
-Overall WAPE is **0.60**, and the baseline under-predicts total volume by 29%. Without any local counts it gets the shape of the day right but not how busy a place is, which is what per-site calibration is for (CLAUDE.md, "Generalization").
+Overall WAPE is **0.55**, and the baseline under-predicts total volume by 27%. Without any local counts it gets the shape of the day right but not how busy a place is, which is what per-site calibration is for (CLAUDE.md, "Generalization").
 
-**Six groups are clearly worse:**
+Placing the 18 retired sensors brought the overall error down from 0.60. They are mostly busy CBD streets, where the model does well (CBD 0.51), so the bar a group has to clear to count as worse is lower than before.
+
+**Nine groups are clearly worse:**
 
 | Group | Sensors | WAPE | 95% interval | Bias |
 |---|---|---|---|---|
-| Quiet sensors (lowest third by mean count) | 35 | 0.92 | 0.69–1.26 | +62% |
-| Steep paths (5% or more) | 13 | 0.73 | 0.62–0.89 | −25% |
-| COVID era | 60 | 0.70 | 0.65–0.76 | −19% |
-| Night (0–6) | 100 | 0.68 | 0.63–0.73 | −38% |
-| Sensor match needs review | 45 | 0.67 | 0.61–0.76 | −38% |
-| Public holidays | 100 | 0.65 | 0.61–0.72 | −29% |
+| Quiet sensors (lowest third by mean count) | 40 | 0.91 | 0.68–1.30 | +61% |
+| Kensington | 2 | 0.86 | 0.57–1.10 | +81% |
+| Southbank | 6 | 0.80 | 0.68–0.85 | −75% |
+| Low-amenity sensors | 40 | 0.72 | 0.64–0.78 | −51% |
+| COVID era | 72 | 0.68 | 0.63–0.73 | −24% |
+| Night (0–6) | 118 | 0.67 | 0.62–0.73 | −32% |
+| Docklands | 13 | 0.67 | 0.58–0.75 | −22% |
+| Melbourne (Remainder) | 6 | 0.67 | 0.59–1.16 | −39% |
+| Public holidays | 117 | 0.62 | 0.55–0.68 | −28% |
 
-Low-amenity sensors (34) come next, at 0.69 with an interval of 0.60–0.75. The bottom of that interval sits 0.001 below the overall error, so the rule doesn't mark them, but they're treated as worse below.
+Kensington has 2 sensors, so no conclusion rests on it. Steep paths (0.73, interval 0.55–0.86) and sensors whose match needs review (0.65, 0.54–0.76) come next: the bottoms of their intervals sit just under the overall error.
 
-The bias column shows two different failures. Quiet sensors are over-predicted (+62%): the model pulls every place toward a typical volume, so the quietest streets come out too busy. Low-amenity sensors are under-predicted (−43%) because the group mixes quiet streets with busy through-routes that have few shops nearby: Southbank Promenade, Southern Cross Station, Sandridge Bridge, the Convention Centre. Those routes carry most of the group's pedestrians, and amenity counts don't capture what draws people there.
+The bias column shows two different failures. Quiet sensors are over-predicted (+61%): the model pulls every place toward a typical volume, so the quietest streets come out too busy. Southbank (−75%) and the low-amenity sensors (−51%) are under-predicted. Both hold busy through-routes with few shops nearby, such as Southbank Promenade, Southern Cross Station, Sandridge Bridge and the Convention Centre. Those routes carry most of their pedestrians, and amenity counts don't capture what draws people there.
 
 **Candidates from step 1 that are not worse:**
-- **Thin precincts.** Carlton (6 sensors, WAPE 0.42) and Parkville (3, 0.49) have lower error than the CBD (60, 0.59). Kensington (2 sensors, 1.36) and North Melbourne (4, 0.56) have intervals too wide to say either way: 0.31–2.67 and 0.33–1.50.
-- **Held-out transfer precincts.** Carlton 0.41, UniMelb edge 0.49, North Melbourne 0.81 (interval 0.37–1.85). None is clearly worse than the training area (0.60). These are the K-fold errors; the formal transfer test, which trains on the CBD only, is part of model evaluation.
-- **Rare weather.** Rain of 1 mm or more (0.62), 30 °C or hotter (0.59) and cold hours (0.62) are in line with dry, mild hours.
-- **Late starters and recent hours.** Sensors that started in 2019 or later (0.63, interval 0.51–0.74), the post Metro Tunnel era (0.58) and AFL days (0.60–0.61) are not worse.
-- **The Wayback years.** Hours from the Wayback fill have WAPE 0.62 (0.55–0.68), against 0.59 for both the archive and the live table.
-- **Incomplete sensors.** The 6 scored sensors missing 20% or more of their hours have the highest WAPE of any group, 1.86, but their interval runs from 0.59 to 5.73, so they're too few to call.
+- **Thin precincts.** Carlton (6 sensors, WAPE 0.47), Parkville (4, 0.51) and North Melbourne (4, 0.52, interval 0.30–1.26) are in line with the CBD (73, 0.51). The precincts that are worse (Southbank, Docklands, Melbourne (Remainder)) are not thin: Docklands has 1.7 times its share of sensors.
+- **Held-out transfer precincts.** Carlton 0.47, UniMelb edge 0.51, North Melbourne 0.62 (interval 0.35–1.08). None is clearly worse than the training area (0.55). These are the K-fold errors; the formal transfer test, which trains on the CBD only, is part of model evaluation.
+- **Rare weather.** Rain of 1 mm or more (0.58), 30 °C or hotter (0.54) and cold hours (0.60) are in line with dry, mild hours.
+- **Late starters and recent hours.** Sensors that started in 2019 or later (0.65, interval 0.51–0.87), the post Metro Tunnel era (0.53) and AFL days (0.55–0.56) are not worse.
+- **The Wayback years.** Hours from the Wayback fill have WAPE 0.59 (0.50–0.67), against 0.54 for the archive and 0.55 for the live table.
+- **Incomplete sensors.** The 10 sensors missing 20% or more of their hours have WAPE 0.51, interval 0.34–1.37.
 
-So being thin in the data, which step 1 measured, doesn't by itself make a group worse for the model. The worse groups share something else: low volume, or a pattern the features don't describe (night, holidays, COVID).
+So being thin in the data, which step 1 measured, doesn't by itself make a group worse for the model. The worse groups share something else: low volume, through-routes the amenity features don't describe, or a pattern the features don't describe (night, holidays, COVID).
 
 ## Step 3: mitigation
 
@@ -205,32 +209,36 @@ Each mitigation is run on the same folds, the same training rows and the same sc
 
 | WAPE | Baseline | Equal sensors | Precincts to network | **Calibrated** |
 |---|---|---|---|---|
-| **Overall** | 0.60 | 0.57 | 0.58 | **0.40** |
-| Overall bias | −29% | −28% | −25% | **0%** |
-| Quiet sensors | 0.92 | 0.86 | 0.90 | **0.54** |
-| Steep paths (≥5%) | 0.73 | 0.75 | 0.78 | **0.48** |
-| Low-amenity sensors | 0.69 | 0.72 | 0.76 | **0.46** |
-| Match needs review | 0.67 | 0.68 | 0.65 | **0.43** |
-| Public holidays | 0.65 | 0.62 | 0.65 | **0.49** |
-| COVID era | 0.70 | 0.69 | 0.68 | 0.67 |
-| Night | 0.68 | 0.69 | 0.71 | 0.63 |
-| CBD | 0.59 | 0.54 | 0.55 | 0.37 |
-| Carlton (held out) | 0.41 | 0.42 | 0.45 | 0.58 |
-| North Melbourne (held out) | 0.81 | 0.68 | 0.67 | 0.30 |
+| **Overall** | 0.55 | 0.55 | 0.56 | **0.38** |
+| Overall bias | −27% | −27% | −26% | **−1%** |
+| Quiet sensors | 0.91 | 0.89 | 1.08 | **0.56** |
+| Southbank | 0.80 | 0.76 | 0.76 | **0.39** |
+| Low-amenity sensors | 0.72 | 0.70 | 0.70 | **0.50** |
+| Steep paths (≥5%) | 0.73 | 0.70 | 0.69 | **0.50** |
+| Match needs review | 0.65 | 0.62 | 0.60 | **0.40** |
+| Public holidays | 0.62 | 0.61 | 0.62 | **0.48** |
+| COVID era | 0.68 | 0.67 | 0.66 | 0.67 |
+| Night | 0.67 | 0.67 | 0.71 | 0.66 |
+| Docklands | 0.67 | 0.62 | 0.65 | 0.66 |
+| Melbourne (Remainder) | 0.67 | 0.65 | 0.61 | 0.67 |
+| CBD | 0.51 | 0.52 | 0.54 | 0.34 |
+| Carlton (held out) | 0.47 | 0.52 | 0.52 | 0.58 |
+| North Melbourne (held out) | 0.62 | 0.77 | 0.52 | 0.32 |
 
 `mitigation_summary.csv` lists the groups each mitigation leaves worse than its own overall error. Calibration lists 16 because its overall error is so much lower; the table above compares every mitigation on the same groups.
 
-**Reweighting: tried and rejected.** Both weightings lowered the average error a little, by 0.02 to 0.03, and most of the gain went to groups that were already good: the CBD, busy sensors and midday hours.
-- **Equal sensor weights** helped quiet sensors slightly (0.92 to 0.86). Low-amenity and steep paths got worse, the UniMelb edge went from 0.49 to 0.81, and the incomplete sensors from 1.86 to 3.08.
-- **Precincts to network** narrowed the gap between precincts (disparity ratio 0.31 to 0.60), almost all of it from Kensington's 2 sensors (1.36 to 0.59). Docklands, Melbourne (Remainder), low-amenity and steep paths all got worse, and the number of groups worse than overall went from 6 to 10.
+**Reweighting: tried and rejected.** Neither weighting lowered the overall error (0.55 and 0.56), and each moved error from some weak groups onto others.
+- **Equal sensor weights** helped Southbank (0.80 to 0.76), Docklands (0.67 to 0.62) and the low-amenity and steep sensors a little. The held-out precincts paid for it: Carlton went from 0.47 to 0.52, the UniMelb edge from 0.51 to 0.66 and North Melbourne from 0.62 to 0.77.
+- **Precincts to network** cut the groups worse than overall from 9 to 5, mainly by bringing Kensington (2 sensors, 0.86 to 0.64) and Melbourne (Remainder) (0.67 to 0.61) closer. Quiet sensors went from 0.91 to 1.08 and night from 0.67 to 0.71, so the gap between quiet and busy sensors widened (disparity ratio 0.57 to 0.48).
 
-On time of day, both widened the gap (disparity ratio 0.83 to 0.77). The weak groups aren't under-weighted: the features don't tell the model how busy a quiet place is, and more weight on those rows doesn't add that information.
+The weak groups aren't under-weighted: the features don't tell the model how busy a quiet place is, and more weight on those rows doesn't add that information.
 
-**Calibration: adopted where local counts exist.** It cuts the overall error by a third and removes the overall bias. The place and volume groups improve most: quiet sensors from 0.92 to 0.54, low-amenity from 0.69 to 0.46 and steep paths from 0.73 to 0.48. Calibrated forecasts are the right default wherever a few weeks of counts are available.
+**Calibration: adopted where local counts exist.** It cuts the overall error by about a third and removes the overall bias. The volume and place groups whose error is mainly in the level improve most: quiet sensors from 0.91 to 0.56, Southbank from 0.80 to 0.39, low-amenity from 0.72 to 0.50 and steep paths from 0.73 to 0.50. Calibrated forecasts are the right default wherever a few weeks of counts are available.
 
 **Not fixed:**
-- **Night and COVID.** These are errors in the pattern over the day and over the years, not in the level, so scaling can't fix them. Because calibration improves daytime hours far more, the relative gap on time of day widens (disparity ratio 0.83 to 0.55), and the same happens on era (0.82 to 0.50). Both are reported separately until the model changes (next steps).
-- **Carlton, and the UniMelb edge.** Calibration made Carlton worse, 0.41 to 0.58, and turned a small under-prediction into a 33% over-prediction. The UniMelb edge kept its error (0.49 to 0.50) but now over-predicts by 30%, and Melbourne (Remainder) went from 0.54 to 0.61. These sensors' first 28 days don't look like their later years, so a calibration window has to be chosen with care: a short count taken in an unusual month calibrates every later forecast wrongly.
+- **Night and COVID.** These are errors in the pattern over the day and over the years, not in the level, so scaling can't fix them. Because calibration improves daytime hours far more, the relative gap on time of day widens (disparity ratio 0.75 to 0.50), and the same happens on era (0.77 to 0.47). Both are reported separately until the model changes (next steps).
+- **Docklands and Melbourne (Remainder).** Calibration leaves them where they were (0.66 and 0.67) with little bias left (−2% and +9%), so their error is also in the pattern over the day or the week, not the volume.
+- **Carlton and the UniMelb edge.** Calibration made Carlton worse, 0.47 to 0.58, and turned a small under-prediction into a 29% over-prediction. The UniMelb edge kept its error (0.51 to 0.49) but now over-predicts by 27%. These sensors' first 28 days don't look like their later years, so a calibration window has to be chosen with care: a short count taken in an unusual month calibrates every later forecast wrongly.
 
 ## Mitigation plan and outcome
 
@@ -238,31 +246,31 @@ Arshmehar's plan, written before step 2, with what was found and done:
 
 | If the model is worse on... | Planned mitigation | Outcome |
 |---|---|---|
-| Thin precincts and held-out precincts | Weight training rows so each precinct or sensor counts equally; report held-out precincts separately, with sensor counts and intervals | Not worse than overall. Both weightings were tried and rejected (above). Held-out precincts are reported separately in `slice_errors.csv`. |
-| Quiet sensors | Relative error; weight sensors equally | Worse (0.92). Relative error is used throughout. Equal sensor weights helped a little (0.86); calibration far more (0.54). |
-| Night | Relative error, and night reported separately | Worse (0.68), and not fixed by weights or calibration. Reported separately; needs model changes. |
-| Early years, short sensor histories | Weight by sensor-year, or a recent-window model | Not worse: sensors from 2019 on have WAPE 0.63, interval 0.51–0.74. No action. |
-| COVID and post Metro Tunnel | Keep the flags; report post Metro Tunnel separately | COVID is worse (0.70) and unfixed; post Metro Tunnel is not worse (0.58). Both reported separately. |
+| Thin precincts and held-out precincts | Weight training rows so each precinct or sensor counts equally; report held-out precincts separately, with sensor counts and intervals | Thin and held-out precincts are not worse than overall. Three better-covered precincts are (Southbank, Docklands, Melbourne (Remainder)). Both weightings were tried and rejected (above); calibration fixes Southbank only. Held-out precincts are reported separately in `slice_errors.csv`. |
+| Quiet sensors | Relative error; weight sensors equally | Worse (0.91). Relative error is used throughout. Equal sensor weights barely helped (0.89); calibration did (0.56). |
+| Night | Relative error, and night reported separately | Worse (0.67), and not fixed by weights or calibration. Reported separately; needs model changes. |
+| Early years, short sensor histories | Weight by sensor-year, or a recent-window model | Not worse: sensors from 2019 on have WAPE 0.65, interval 0.51–0.87. No action. |
+| COVID and post Metro Tunnel | Keep the flags; report post Metro Tunnel separately | COVID is worse (0.68) and unfixed; post Metro Tunnel is not worse (0.53). Both reported separately. |
 | Rain, heat, DEM sensors | Report separately; weight up if much worse | Rain and heat not worse. The 2 DEM sensors are too few to judge. No action. |
-| Missing years | Bring the Wayback fill into the pipeline | Done (Arshmehar, PR #16): 1.18M rows for November 2022 to October 2024. Those hours are not worse (0.62). |
-| Sensors with no location | Locations for the 18 retired sensors from the October 2022 sensor table | Still to do (data fix). Until then they're not evaluated. |
-| Incomplete sensors and flagged matches | Report sensors missing 20% or more separately; hand-check the 45 flagged matches | Flagged matches are worse (0.67), so the hand check now matters for accuracy too. Calibration brings them to 0.43. The 6 incomplete sensors scored are too few to judge (interval 0.59–5.73). |
+| Missing years | Bring the Wayback fill into the pipeline | Done (Arshmehar, PR #16): 1.18M rows for November 2022 to October 2024. Those hours are not worse (0.59). |
+| Sensors with no location | Locations for the 18 retired sensors from the October 2022 sensor table | Done: `sensor_match.load_sensor_locations` places them from the Wayback copy of that table, so all 118 sensors are in every slice and in the evaluation. |
+| Incomplete sensors and flagged matches | Report sensors missing 20% or more separately; hand-check the 52 flagged matches | Flagged matches (0.65) sit just under the line for worse, and calibration brings them to 0.40; the hand check still matters for accuracy. The 10 incomplete sensors are not worse (0.51, interval 0.34–1.37). |
 | Outage zeros | Already dropped | Dropped from training and scoring. |
 
 ## Trade-offs
 
-- **Average against gap.** Reweighting bought 0.02 to 0.03 of overall WAPE and paid for it with a wider gap between groups. Since the point of the step is the weak groups, the trade isn't worth it.
+- **Average against gap.** Neither weighting lowered the overall error, and each moved error between weak groups: equal sensor weights onto the held-out precincts, precinct weights onto quiet sensors. Since the point of the step is the weak groups, neither is worth it.
 - **Calibration needs counts.** It works only where a short local count exists. Segments that have never been counted keep the uncalibrated error, which is worst on quiet, low-amenity streets. Any forecast for an uncounted place should say it is uncalibrated.
 - **Calibration widens the time gap.** It helps daytime far more than night, so night's relative disadvantage grows even though its error doesn't get worse.
 - **The calibration window matters.** Four weeks that aren't typical (Carlton) make every later forecast worse. A longer or more recent window would be safer, at the cost of needing more counts.
 - **Relative error.** WAPE makes night and quiet streets visible but understates busy-hour errors in people terms, so MAE is reported beside it (`mae` in `slice_errors.csv`).
 - **Small groups.** Groups of 2–6 sensors have wide intervals. They're reported, not optimised for: tuning a model to 2 sensors would overfit them.
-- **The Wayback fill** comes from an archived copy of the City's own export, which matched the archive on about 98.5% of overlapping hours. It filled two years and moved the results only slightly (overall WAPE 0.58 before, 0.60 after), and the `source` slice keeps it checkable.
+- **The Wayback fill** comes from an archived copy of the City's own export, which matched the archive on about 98.5% of overlapping hours. It filled two years and moved the results only slightly (overall WAPE 0.58 before, 0.60 after, before the retired sensors were placed), and the `source` slice keeps it checkable.
+- **The retired sensors' locations** come from a 2022 table and are matched to the 2026 OSM network, so a sensor whose street has since changed can land on today's layout. Their matches go through the same review flags as the others.
 
 ## Next steps
 
 1. **Rerun on the real flow model (step 4).** `slice_errors()` takes any model's out-of-fold predictions, so the flow model's evaluation can produce the same table.
-2. **Night and COVID.** Try a lockdown-stringency feature for COVID, and either a separate low-count model or a log-scale loss for night, then rerun step 3.
+2. **Night, COVID and the pattern errors.** Try a lockdown-stringency feature for COVID, and either a separate low-count model or a log-scale loss for night, then rerun step 3. Docklands and Melbourne (Remainder) need the same look: calibration doesn't reach their error.
 3. **Calibration window.** Compare 4 weeks, 8 weeks and the most recent 4 weeks, and pick the default for the per-site calibration.
-4. **Hand-check the 45 flagged sensor matches.** They're worse in step 2, so wrong segments are costing accuracy.
-5. **Data fix:** bringing the retired sensors' locations into the pipeline (Arshmehar's and Shubham's work) puts the 18 sensors into the evaluation.
+4. **Hand-check the 52 flagged sensor matches.** Flagged sensors are near the line for worse in step 2, so wrong segments may be costing accuracy.

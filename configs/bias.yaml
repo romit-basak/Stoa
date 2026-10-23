@@ -61,3 +61,37 @@ afl_venues: {Docklands: marvel, M.C.G.: mcg}
 # sensors, for place slices) is under this fraction of its reference share.
 thin_min_sensors: 5
 thin_ratio_below: 0.5
+
+# Step 2-3: per-slice error of a baseline on held-out sensors, and mitigations
+# (src/bias/slice_errors.py).
+errors:
+  folds: 5                  # grouped by sensor: a sensor is never in its own model's training
+  train_rows_per_fold: 600000
+  seed: 7
+  model:                    # HistGradientBoostingRegressor, Poisson loss
+    max_iter: 300
+    learning_rate: 0.08
+    max_leaf_nodes: 63
+    min_samples_leaf: 200
+    l2_regularization: 1.0
+    early_stopping: false
+  bootstrap_reps: 300       # sensor resamples for each group's interval
+  # A group is "worse" when its whole 95% interval is above the overall WAPE (plus this
+  # relative margin; 0 = just above).
+  worse_margin: 0
+  # Each held-out sensor's first days of counts are kept back to calibrate it (the
+  # `calibrate_from` mitigation); every mitigation is scored on the remaining hours.
+  calibration_days: 28
+  # Coverage-only slices: every evaluated sensor is located with a known slope source.
+  skip_dimensions: [has_location, slope_source]
+  # Each mitigation retrains the same folds with a different weighting of the training rows
+  # (src/bias/slice_errors.py, weights_for). "none" is the baseline the others are compared to.
+  mitigations:
+    - {name: none}
+    # Every sensor counts the same, so busy, long-running CBD sensors stop dominating the loss.
+    - {name: sensor_equal, weight: sensor_equal}
+    # Precincts weighted to their share of the walkable network (the step 1 reference).
+    - {name: precinct_to_network, weight: reference, dimension: precinct}
+    # No retraining: the baseline's predictions scaled to each sensor's first 28 days of
+    # counts (per-site calibration, CLAUDE.md "Generalization").
+    - {name: calibrated, calibrate_from: none}

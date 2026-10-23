@@ -5,6 +5,7 @@ description = "Pedestrian flow prediction and scenario planning (IE7374)"
 requires-python = ">=3.11"
 dependencies = [
     "dvc[gs]>=3.50",  # data versioning; gs = Google Cloud Storage remote
+    "fairlearn>=0.13",  # bias analysis: per-slice metrics (MIT)
     "geopandas>=1.0",
     "google-auth>=2.20",  # dvc_push finds bucket credentials the way gcloud tools do
     # Data validation. <2: GX 2.0 changes the API; >=1.9 has the Condition objects we use.
@@ -18,6 +19,7 @@ dependencies = [
     "pyyaml>=6",
     "rasterio>=1.4",
     "requests>=2.31",
+    "scikit-learn>=1.5",  # baseline model for the per-slice bias errors (BSD-3)
     "scipy>=1.13",
     "shapely>=2.0",
 ]

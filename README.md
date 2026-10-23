@@ -29,7 +29,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
 | API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
-| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics and anomaly checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)). ✅ Bias slicing: representation report per slice ([docs/bias/bias_slicing.md](docs/bias/bias_slicing.md)); per-slice model errors next. MLflow, CI/CD, Cloud Run planned |
+| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics and anomaly checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)). ✅ Bias slicing: representation per slice, a baseline's error per slice on held-out sensors, and mitigations tried ([docs/bias/bias_slicing.md](docs/bias/bias_slicing.md)). MLflow, CI/CD, Cloud Run planned |
 
 ## Setup
 
@@ -113,7 +113,8 @@ Options:
 .venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
 .venv/bin/python -m src.features.sensor_steepness         # footpath slope and elevation per sensor (~5 s)
 .venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars + slope (~30 s)
-.venv/bin/python -m src.bias.representation               # bias slices: how much data each group has (~35 s)
+.venv/bin/python -m src.bias.representation               # bias slices: how much data each group has (~40 s)
+.venv/bin/python -m src.bias.slice_errors                 # bias: baseline error per slice and mitigations (~18 min)
 ```
 
 Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md). `counts_hourly.parquet` is the hourly training table (one row per sensor and hour); see [docs/features/counts_hourly.md](docs/features/counts_hourly.md), including how it handles daylight saving. `sensor_steepness.parquet` gives each outdoor sensor its footpath slope and elevation (from Shubham Hadawle's join notebook), and the hourly table carries those columns.
@@ -140,11 +141,11 @@ The repo is mounted into the containers, so code changes apply on the next run; 
 pull_counts ────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┐
 pull_static_layers ─► sensor_steepness ───────────────────────────────────────────┤
-pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─┬─► validate ────┬─► dvc_push
-pull_calendars ───────────────────────────────────────────────────────────────────┘             └─► bias_slices ─┘
+pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─┬─► validate ───────────────────┬─► dvc_push
+pull_calendars ───────────────────────────────────────────────────────────────────┘             └─► bias_slices ─► bias_errors ─┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM, the CLUE areas and the AFL crowds only when they aren't held yet, and also feeds `bias_slices`. `bias_slices` reports how much data each bias slice has; see [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 6 minutes in Docker; `validate` and `bias_slices`, which run side by side over the whole hourly table (7.4M rows), and `join_all` are the slowest tasks (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM, the CLUE areas and the AFL crowds only when they aren't held yet, and also feeds `bias_slices`. `bias_slices` reports how much data each bias slice has, and `bias_errors` a baseline model's error per slice with and without mitigations; `bias_errors` takes about 18 minutes, so it reruns weekly or when its settings change and otherwise finishes at once. See [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily so no day of the counts' rolling window is missed; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below). `dvc_push` saves the result as a new DVC version (below). A daily run takes about 6 minutes in Docker; `validate` and `bias_slices`, which run side by side over the whole hourly table (7.4M rows), and `join_all` are the slowest tasks (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
@@ -221,6 +222,8 @@ At that point `join_all` was the slowest task. A run where `src/features/` or th
 
 The `pull_counts` fix holds (10 s against 229 s). The new bottleneck is the stretch after `join_all`: `validate` and `bias_slices` run side by side, and each reads the whole hourly table (6.2M rows in this run; 7.4M since the Wayback fill of November 2022 to October 2024, so expect both to take somewhat longer now). Run alone, `validate` takes about 85 s in Docker; beside `bias_slices` it took 218 s, likely because the two compete for the Docker VM's CPU and 8 GB of memory (an observation from these runs, not yet measured separately). We kept full-table validation on purpose: it checks every row on every run, which is the stronger data-quality guarantee, and a daily run of about 6 minutes leaves the day's data ready well within the day. If it needs to be faster, the next steps are, in order: give Docker more memory and CPUs; run `bias_slices` after `validate` instead of beside it, if the contention is confirmed; and validate the fixed 2009–2022 archive rows once and only the new rows each day (`docs/pipeline/validation.md`, "Speed").
 
+`bias_errors`, added after this run, comes after `bias_slices`. It trains the bias baseline five times per mitigation, about 18 minutes, so it reruns only when its last run is a week old or its settings changed; on other days it finishes at once and the daily run stays near 6 minutes.
+
 While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 
 ### Tests and lint
@@ -256,14 +259,14 @@ docs/
   data_cards/            one card per dataset: schema, coverage, known issues
   analysis/              write-ups of one-off analyses
   features/              feature tables: how to build, column dictionaries, joins
-  bias/                  bias analysis: slices, representation report, findings
+  bias/                  bias analysis: slices, representation, per-slice errors, mitigations, findings
   pipeline/              data validation checks, Gantt charts
   data_licenses.md       license register; check before adding any dataset
   PROJECT_CONTEXT.md     reasoning behind decisions, scope tiers, validation plan
   scoping/               project scoping document (LaTeX source; the PDF is built, not tracked)
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
 src/features/            feature pipeline (osm.py runs extract -> graph -> features -> sensors)
-src/bias/                bias slicing (slices.py) and the representation report
+src/bias/                bias slicing (slices.py), representation report, per-slice errors (slice_errors.py)
 src/pipeline/            pipeline steps that aren't ingest or features: validate, dvc_push
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)

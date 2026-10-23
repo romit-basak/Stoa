@@ -48,6 +48,7 @@ def test_has_every_stage(dag):
         "sensor_steepness",
         "join_all",
         "bias_slices",
+        "bias_errors",
         "validate",
         "dvc_push",
     }
@@ -83,7 +84,8 @@ def test_wiring(dag):
     }
     assert upstream("validate") == {"join_all"}
     assert upstream("bias_slices") == {"join_all", "pull_static_layers"}
-    assert upstream("dvc_push") == {"validate", "bias_slices"}
+    assert upstream("bias_errors") == {"bias_slices"}
+    assert upstream("dvc_push") == {"validate", "bias_errors"}
 
 
 def test_every_task_retries(dag):

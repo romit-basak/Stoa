@@ -27,6 +27,16 @@ df = df.merge(hours, on=["segment_id", "hour_of_week"], how="left")   # missing 
 
 Before 2025-11-30, set `recent_station_dist_m` to its cap (`post_metro_tunnel` is False for those rows).
 
+## Count sources
+
+| Source | File in `data/raw/melbourne_portal/` | Holds | Used for |
+|---|---|---|---|
+| `archive` | `counts_per_hour_2009-05_to_2022-12-14.csv.zip` (portal attachment) | 2009-05-01 to 2022-10-31, despite the file name | all of it |
+| `live` | `pedestrian-counting-system-monthly-counts-per-hour.parquet` | a rolling ~2-year window, merged into the rows held | all of it |
+| `wayback` | `counts_per_hour_wayback_2025-05-02.csv` | the portal's full CSV export as the Internet Archive saved it on 2025-05-02: 2021-07-01 to 2025-05-02 | only hours after the archive's last hour and before the live table's first hour |
+
+The live window had already moved past November 2022 to October 2024 by the time the pipeline started, so those months exist only in the Wayback copy (configured under `melbourne_portal.wayback` in `configs/data.yaml`; `melbourne_portal` downloads it once and keeps it). It's the City's own export, not a different collection: where it overlaps the archive (668,180 sensor-hours) and the live table (427,607), it has the same count on 98.5% of hours. Where it differs, the median difference is 24 people against the archive and 150 against the live table, so it isn't used where either of those has the hour. Taking it only for the gap gives every hour one source and leaves the archive and live rows exactly as published.
+
 ## Time handling
 
 People follow the local clock, so **hour, weekday and every calendar column use Melbourne local time, daylight saving included.** Physical quantities use the real instant: weather is joined on UTC, and sun elevation is computed from UTC.
@@ -37,6 +47,7 @@ The sources don't agree on clocks, so this matters:
 |---|---|---|
 | Counts, archive (2009–2022) | Local, with daylight saving | The weekday morning peak is at 8 a.m. in both January and July |
 | Counts, live (2024–now) | Local, with daylight saving | The October changeover day has 23 hours |
+| Counts, Wayback copy (2021–2025; used for 2022–2024) | Local, with daylight saving | The portal's own export, the same table as live |
 | Weather (Open-Meteo) | **Fixed UTC+10 all year** | Each file has one `utc_offset_seconds`, 8,760 hours a year, and radiation peaks at the same clock hour in January and July |
 
 Joining weather on the local clock would put it an hour out from October to April every year. Joining on UTC fixes that.
@@ -57,9 +68,9 @@ Within each count hour (h:00 to h+1:00):
 | `location_id` | Sensor (same ID as the archive's `Sensor_ID`). Never a model feature (core rule 9). |
 | `ts_utc`, `ts_local` | Start of the hour, in UTC and in Melbourne time |
 | `date_local`, `hour_local`, `weekday` (Monday = 0), `hour_of_week`, `is_weekend` | Local-clock time features. `hour_of_week` joins the opening-hours table. |
-| `source` | `archive` (2009-05 to 2022-12) or `live` (2024-10 onward) |
+| `source` | `archive` (2009-05 to 2022-10), `wayback` (the gap between them, 2022-11 to 2024-10) or `live` (2024-10 onward). See "Count sources" below. |
 | `pedestriancount` | Count for the hour (the target) |
-| `direction_1`, `direction_2` | Directional counts: live window only, NaN in the archive. They add up to `pedestriancount`, so **never use them as features**: they would leak the target. |
+| `direction_1`, `direction_2` | Directional counts: live and Wayback rows only, NaN in the archive. They add up to `pedestriancount`, so **never use them as features**: they would leak the target. |
 | `suspect_outage_zero` | In a run of ≥ 3 consecutive zero hours that touches 08:00–20:00. Likely a sensor fault, not an empty street. Drop these rows when training. |
 | `is_public_holiday` | Victorian public holiday (`holidays` package) |
 | `school_term` | Within a Victorian school term (student days; weekends included). Missing outside 2009–2026. |
@@ -87,18 +98,21 @@ Sensors 25 and 130 have no section within 25 m. Their elevation and slope come f
 
 Sensor 139 (Sandridge Bridge signal box, by a ramp) has 20.4%; every other sensor is under 10%. The footpath survey exists only for the City of Melbourne, so these columns belong to the Melbourne-rich model, not the portable one (CLAUDE.md, "Generalization").
 
-## Run of 16 October 2026
+## Run of 22 October 2026
+
+The first run with the Wayback fill (the 16 October run had 6,173,993 rows and no November 2022 to October 2024).
 
 | | |
 |---|---|
-| Rows | 6,173,993 (of 6,186,603 read), 118 sensors, 2009-05-01 to 2026-10-03 |
+| Rows | 7,397,628 (of 7,410,238 read), 118 sensors, 2009-05-01 to 2026-10-22 (local) |
+| Rows by source | archive 4,549,620; Wayback 1,180,314; live 1,667,694 |
 | Dropped: unplaceable duplicates | 12,240: **every hour of September 2010 is stamped midnight** in the archive, so those days can't be put in order |
 | Dropped: non-existent spring-forward hour | 370 |
-| Rows from sensors with no location | 817,199 (18 sensors, e.g. 7 Birrarung Marr, 13 Flagstaff Station). They have no `segment_id`. |
-| Suspected outage hours | 9,666 |
-| Rows without weather | 13,928, all from 2026-09-27 to 2026-10-03. The weather archive lags by about a week, and the next run fills them. |
+| Rows from sensors with no location | 865,590 (18 sensors, e.g. 7 Birrarung Marr, 13 Flagstaff Station). They have no `segment_id`. |
+| Suspected outage hours | 9,882 |
+| Rows without weather | 16,333, the newest days. The weather archive lags by about a week, and the next run fills them. |
 
 Checks on this run:
 - In January, the sun is highest and radiation peaks in the local 13:00 hour (daylight time); in July, the 12:00 hour.
 - Temperature peaks at 15:00 local in January and 14:00 in July.
-- Daytime counts average 623 an hour in rain (over 1 mm) against 800 when dry.
+- Daytime counts (08:00–20:00, outage hours left out) average 593 an hour in rain (over 1 mm) against 745 when dry.

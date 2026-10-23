@@ -1,4 +1,5 @@
-"""Pull datasets and attachments from the City of Melbourne open data portal (Opendatasoft v2.1).
+"""Pull datasets and attachments from the City of Melbourne open data portal (Opendatasoft v2.1),
+and Wayback Machine copies of portal exports the portal no longer serves.
 
 Usage: python -m src.ingest.melbourne_portal [--only DATASET_ID ...] [--large] [--full]
 """
@@ -34,6 +35,14 @@ def dataset_meta(base_url: str, dataset_id: str) -> dict:
     )
     r.raise_for_status()
     return r.json()
+
+
+def wayback_url(snapshot: str, url: str) -> str:
+    """Wayback Machine address of url as archived at snapshot (YYYYMMDDhhmmss).
+
+    The id_ suffix returns the archived bytes as they were, without the Wayback page around them.
+    """
+    return f"https://web.archive.org/web/{snapshot}id_/{url}"
 
 
 def recent_rows_filter(existing: Path, date_field: str, overlap_days: int) -> str:
@@ -139,6 +148,28 @@ def main() -> None:
         log.info("attachment %s", att["filename"])
         download(url, dest)
         record(out, dest, url, dataset=att["dataset"])
+
+    for snap in pc.get("wayback", []):
+        if args.only and snap["dataset"] not in args.only:
+            continue
+        dest = out / snap["filename"]
+        if dest.exists() and not args.full:
+            log.info(
+                "wayback copy %s held, skipped (--full re-fetches it)", snap["filename"]
+            )
+            continue
+        url = wayback_url(snap["snapshot"], snap["url"])
+        log.info("wayback copy %s (snapshot %s)", snap["filename"], snap["snapshot"])
+        download(url, dest, timeout=1800)
+        record(
+            out,
+            dest,
+            url,
+            dataset=snap["dataset"],
+            original_url=snap["url"],
+            snapshot=snap["snapshot"],
+            license=snap["license"],
+        )
 
     if args.large:
         for name, url in pc["large"].items():

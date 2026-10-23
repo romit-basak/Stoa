@@ -80,6 +80,29 @@ def test_recent_rows_filter_starts_overlap_days_before_latest_held(tmp_path):
     assert where == "sensing_date >= date'2026-10-14'"
 
 
+def test_wayback_url_asks_for_the_archived_bytes():
+    url = melbourne_portal.wayback_url(
+        "20250502183548", "https://example.org/a?format=csv"
+    )
+    assert (
+        url
+        == "https://web.archive.org/web/20250502183548id_/https://example.org/a?format=csv"
+    )
+
+
+def test_wayback_counts_copy_is_the_file_counts_hourly_reads():
+    from src.features.counts_hourly import WAYBACK
+
+    cfg = melbourne_portal.load_config()["melbourne_portal"]
+    snaps = [
+        s
+        for s in cfg["wayback"]
+        if s["dataset"] == "pedestrian-counting-system-monthly-counts-per-hour"
+    ]
+    assert [s["filename"] for s in snaps] == [WAYBACK]
+    assert len(snaps[0]["snapshot"]) == 14  # YYYYMMDDhhmmss
+
+
 def test_counts_table_is_configured_as_rolling_on_a_composite_key():
     cfg = melbourne_portal.load_config()["melbourne_portal"]
     rolling = cfg["rolling_window"][

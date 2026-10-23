@@ -7,8 +7,10 @@ import pytest
 from src.features.counts_hourly import (
     covered,
     drop_unplaceable,
+    fill_gap,
     flag_outages,
     localize,
+    read_wayback,
     read_weather,
     solar_elevation,
     weather_for_counts,
@@ -63,6 +65,42 @@ def test_duplicate_sensor_hours_are_dropped_entirely():
     )
     kept, n = drop_unplaceable(c)
     assert n == 2 and len(kept) == 1
+
+
+def test_wayback_export_is_read_like_the_live_table(tmp_path):
+    # The portal's CSV export is ;-separated and carries the same columns as the live table.
+    path = tmp_path / "wayback.csv"
+    path.write_text(
+        "id;location_id;sensing_date;hourday;direction_1;direction_2;pedestriancount;"
+        "sensor_name;location\n"
+        "77220230808;77;2023-08-08;2;1;0;1;HarEsP_T;-37.81441438,144.94433026\n"
+    )
+    w = read_wayback(path)
+    assert w["ts_local_naive"].iloc[0] == pd.Timestamp("2023-08-08 02:00")
+    assert w[["pedestriancount", "direction_1", "direction_2"]].iloc[0].tolist() == [
+        1,
+        1,
+        0,
+    ]
+    assert w["source"].iloc[0] == "wayback"
+
+
+def test_wayback_fills_only_the_gap_between_archive_and_live():
+    archive = counts_at("2022-10-31 22:00", "2022-10-31 23:00")
+    live = counts_at("2024-10-21 00:00", "2024-10-21 01:00")
+    wayback = counts_at(
+        "2022-10-31 23:00",  # the archive has this hour
+        "2022-11-01 00:00",
+        "2023-06-15 12:00",
+        "2024-10-20 23:00",
+        "2024-10-21 00:00",  # the live table has this hour
+    )
+    kept = fill_gap(wayback, archive, live)
+    assert kept["ts_local_naive"].dt.strftime("%Y-%m-%d %H:%M").tolist() == [
+        "2022-11-01 00:00",
+        "2023-06-15 12:00",
+        "2024-10-20 23:00",
+    ]
 
 
 def hourly(sensor, start, counts):

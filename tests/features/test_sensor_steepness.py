@@ -142,9 +142,8 @@ def test_unmatched_sensors_are_filled_from_the_dem(tilted_dem):
     assert out.iloc[1]["slope_pct"] == 1.5  # matched sensors keep the footpath value
 
 
-def test_only_outdoor_sensors_are_kept(tmp_path):
-    path = tmp_path / "sensors.geojson"
-    gpd.GeoDataFrame(
+def test_only_outdoor_sensors_are_kept():
+    table = gpd.GeoDataFrame(
         {
             "location_id": [1, 2, 2],
             "sensor_description": ["a", "b", "b"],
@@ -152,7 +151,7 @@ def test_only_outdoor_sensors_are_kept(tmp_path):
         },
         geometry=[Point(144.96, -37.81)] * 3,
         crs=4326,
-    ).to_file(path)
-    out = outdoor_sensors(path, CRS)
+    )
+    out = outdoor_sensors(table, CRS)
     assert out["location_id"].tolist() == [1]
     assert out.crs.to_epsg() == CRS

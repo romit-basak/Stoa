@@ -53,7 +53,7 @@ from src.features.counts_hourly import (
     uni_ranges,
     weather_for_counts,
 )
-from src.features.sensor_match import sensor_locations_path
+from src.features.sensor_match import load_sensor_locations
 from src.features.sensor_steepness import outdoor_sensors, usable_sections
 from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
@@ -255,7 +255,7 @@ def sliced_rows(
         / "melbourne_portal"
         / "blocks-for-census-of-land-use-and-employment-clue.geojson"
     )
-    sensors = outdoor_sensors(sensor_locations_path(data_cfg), crs)
+    sensors = outdoor_sensors(load_sensor_locations(data_cfg), crs)
     per_sensor = sensor_slices(
         hourly,
         sensor_precincts(sensors, blocks, cfg),

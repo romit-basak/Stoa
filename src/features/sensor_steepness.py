@@ -17,8 +17,8 @@ the City of Melbourne footpath-steepness survey, which gives its slope (`gradepc
   LiDAR DEM instead of being left empty. That slope is the steepest terrain gradient, not the
   grade along a footpath, so `place_source` says which method each row used.
 
-The 18 archive sensors missing from today's sensor-locations file get no row: they have no
-coordinates yet (see CLAUDE.md, "Open decisions").
+Sensors come from today's sensor-locations table plus the 18 retired archive sensors from its
+October 2022 copy (sensor_match.load_sensor_locations).
 """
 
 from __future__ import annotations
@@ -40,17 +40,16 @@ from src.features.common import (
     write_meta,
     write_parquet,
 )
-from src.features.sensor_match import sensor_locations_path
+from src.features.sensor_match import load_sensor_locations
 from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
 FOOTPATH = "footpath_steepness"
 DEM = "ga_dem_5m"
 
 
-def outdoor_sensors(path: Path, crs: int) -> gpd.GeoDataFrame:
+def outdoor_sensors(sensors: gpd.GeoDataFrame, crs: int) -> gpd.GeoDataFrame:
     """Outdoor sensors with coordinates, one row each, in the site's metric CRS."""
-    s = gpd.read_file(path)
-    s = s[s["location_type"].eq("Outdoor") & s.geometry.notna()]
+    s = sensors[sensors["location_type"].eq("Outdoor") & sensors.geometry.notna()]
     s = s.drop_duplicates("location_id").copy()
     s["location_id"] = s["location_id"].astype("int64")
     return s[["location_id", "sensor_description", "geometry"]].to_crs(crs)
@@ -178,7 +177,7 @@ def build(
                 f"{p} is missing; run `dvc pull`, or the pull_static_layers task, first"
             )
 
-    sensors = outdoor_sensors(sensor_locations_path(data_cfg), crs)
+    sensors = outdoor_sensors(load_sensor_locations(data_cfg), crs)
     sections, stats = usable_sections(
         gpd.read_file(steepness_path), crs, cfg["min_section_m"]
     )

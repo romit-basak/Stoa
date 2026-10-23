@@ -169,6 +169,5 @@ Checkpoint around weeks 5-6: if the learned model does not beat the Space Syntax
 
 - Open-source microsimulator (JuPedSim, Vadere, or other), after checking licences
 - Graph and feature-table formats (the OSM graph uses GeoParquet keyed on `segment_id`; confirm or change)
-- Locations for the 18 archive sensors missing from the current sensor-locations file (17.5% of 2009–2022 rows)
 - Weather data source (proposed: ERA5 via Open-Meteo, already pulled for all sites)
 - Ice handling for Boston: labeled hand-set rule, or omit

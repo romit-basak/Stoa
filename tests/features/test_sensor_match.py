@@ -3,7 +3,12 @@ import pandas as pd
 import pytest
 from shapely.geometry import LineString, Point
 
-from src.features.sensor_match import axis_diff, match_sensors, sensor_axis
+from src.features.sensor_match import (
+    add_retired,
+    axis_diff,
+    match_sensors,
+    sensor_axis,
+)
 from tests.features.conftest import CRS
 
 
@@ -116,3 +121,40 @@ def test_axes():
     assert sensor_axis("In", "Out") is None
     assert axis_diff(5, 175) == pytest.approx(10)
     assert axis_diff(0, 90) == pytest.approx(90)
+
+
+def test_retired_sensors_come_from_the_2022_table():
+    current = gpd.GeoDataFrame(
+        {"location_id": [1], "location_type": ["Indoor"], "sensor_description": ["a"]},
+        geometry=[Point(144.96, -37.81)],
+        crs=4326,
+    )
+    snapshot = [
+        # In both tables: today's row wins.
+        {
+            "sensor_id": "1",
+            "sensor_description": "old a",
+            "sensor_name": "A_T",
+            "status": "A",
+            "latitude": "-37.80",
+            "longitude": "144.95",
+            "direction_1": "North",
+            "direction_2": "South",
+        },
+        {
+            "sensor_id": "16",
+            "sensor_description": "Australia on Collins",
+            "sensor_name": "Col270_T",
+            "status": "R",
+            "latitude": "-37.8157",
+            "longitude": "144.9652",
+        },
+    ]
+    out = add_retired(current, snapshot).set_index("location_id")
+    assert out.index.tolist() == [1, 16]
+    assert out.loc[1, "sensor_description"] == "a"
+    assert out.loc[1, "location_source"] == "current"
+    assert out.loc[16, "location_source"] == "wayback_2022-10-24"
+    assert out.loc[16, "location_type"] == "Outdoor"
+    assert out.loc[16, "geometry"].x == pytest.approx(144.9652)
+    assert out.crs.to_epsg() == 4326

@@ -87,6 +87,18 @@ melbourne_portal:
       id: pedestrian_network_zip
       kind: alternative_exports
       filename: pedestrian_network_full.zip
+  # Portal exports saved by the Internet Archive's Wayback Machine, for rows the portal no longer
+  # serves. The counts table keeps only ~2 years and the 2009-2022 archive ends in October 2022,
+  # so November 2022 to October 2024 is in neither; this full CSV export, archived on 2025-05-02,
+  # covers 2021-07-01 to 2025-05-02. It's the City's own export, so the portal's licence applies;
+  # counts_hourly uses it only for the gap (docs/features/counts_hourly.md, "Count sources").
+  # A snapshot never changes, so a held copy is kept (--full re-fetches it).
+  wayback:
+    - dataset: pedestrian-counting-system-monthly-counts-per-hour
+      snapshot: "20250502183548"
+      url: https://data.melbourne.vic.gov.au/explore/dataset/pedestrian-counting-system-monthly-counts-per-hour/download?format=csv
+      filename: counts_per_hour_wayback_2025-05-02.csv
+      license: CC BY 4.0
   # Large bulk downloads, fetched only with --large.
   large:
     dsm_2018_0p1m: https://s3-ap-southeast-2.amazonaws.com/gis-opendata-com/2018-DSM/CoM_DSM_2018.zip

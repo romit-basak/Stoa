@@ -29,7 +29,9 @@ def make_table(sensors=(1, 2, 3), days=10) -> pd.DataFrame:
     hour = local.dt.hour  # int64: arithmetic on the int8 column would overflow
     weekday = local.dt.weekday
     df["hour_local"] = hour.astype("int8")
-    df["source"] = pd.Categorical(["live"] * len(df), categories=["archive", "live"])
+    df["source"] = pd.Categorical(
+        ["live"] * len(df), categories=["archive", "live", "wayback"]
+    )
     # A daily rhythm that never repeats one value for long and has no outliers.
     df["pedestriancount"] = (100 + 50 * hour + df.index % 7).astype("int32")
     df["direction_1"] = (df["pedestriancount"] // 2).astype("float32")
@@ -124,7 +126,24 @@ def test_value_outside_allowed_set_is_an_error(cfg):
     df = make_table()
     df["source"] = df["source"].cat.add_categories(["test"])
     df.loc[0, "source"] = "test"
-    assert "allowed: source in ['archive', 'live']" in failures(
+    assert "allowed: source in ['archive', 'live', 'wayback']" in failures(
+        run(df, cfg)[0], v.ERROR
+    )
+
+
+def test_directions_may_be_missing_only_in_archive_rows(cfg):
+    df = make_table()
+    archive = df["location_id"] == 3
+    df.loc[archive, "source"] = "archive"
+    df.loc[archive, ["direction_1", "direction_2"]] = None
+    assert failures(run(df, cfg)[0], v.ERROR) == {}
+
+    wayback = (
+        df["location_id"] == 2
+    )  # the Wayback copy of the live table has directions
+    df.loc[wayback, "source"] = "wayback"
+    df.loc[df.index[wayback][0], "direction_1"] = None
+    assert "present: direction_1 where source != archive" in failures(
         run(df, cfg)[0], v.ERROR
     )
 

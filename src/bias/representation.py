@@ -219,17 +219,28 @@ def slope_reference(sections: gpd.GeoDataFrame, cfg: dict[str, Any]) -> pd.Serie
     return sections.groupby(band)["distance"].sum()
 
 
-def build(
-    data_cfg: dict[str, Any], fcfg: dict[str, Any], cfg: dict[str, Any]
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+def sliced_rows(
+    data_cfg: dict[str, Any],
+    fcfg: dict[str, Any],
+    cfg: dict[str, Any],
+    extra_columns: list[str] | None = None,
+) -> dict[str, Any]:
+    """The hourly table with every slice attached, plus what the slices were built from.
+
+    Returns hourly (the table's columns read), rows (one row per hourly row: the slice
+    columns, location_id, pedestriancount and the outage flag), per_sensor, blocks and afl.
+    extra_columns are read from the table as well, for callers that need them (step 2).
+    """
     site = cfg["site"]
-    s = data_cfg["sites"][site]
     crs = fcfg["sites"][site]["crs"]
     raw = REPO_ROOT / data_cfg["raw_dir"]
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
 
     t = time.perf_counter()
-    hourly = pd.read_parquet(feats / "counts_hourly.parquet", columns=HOURLY_COLUMNS)
+    columns = HOURLY_COLUMNS + [
+        c for c in extra_columns or [] if c not in HOURLY_COLUMNS
+    ]
+    hourly = pd.read_parquet(feats / "counts_hourly.parquet", columns=columns)
     log.info("hourly table: %d rows in %.0f s", len(hourly), time.perf_counter() - t)
 
     afl_path = raw / "events" / "afl_attendance.csv"
@@ -267,6 +278,26 @@ def build(
     )
     dims = [d for d in ROW_DIMS + SENSOR_DIMS if d in rows.columns]
     rows[dims] = rows[dims].astype("category")
+    return {
+        "hourly": hourly,
+        "rows": rows,
+        "dims": dims,
+        "per_sensor": per_sensor,
+        "blocks": blocks,
+        "afl": afl,
+    }
+
+
+def build(
+    data_cfg: dict[str, Any], fcfg: dict[str, Any], cfg: dict[str, Any]
+) -> tuple[dict[str, pd.DataFrame], dict[str, Any]]:
+    site = cfg["site"]
+    s = data_cfg["sites"][site]
+    crs = fcfg["sites"][site]["crs"]
+    raw = REPO_ROOT / data_cfg["raw_dir"]
+    sliced = sliced_rows(data_cfg, fcfg, cfg)
+    hourly, rows, dims = sliced["hourly"], sliced["rows"], sliced["dims"]
+    per_sensor, blocks, afl = sliced["per_sensor"], sliced["blocks"], sliced["afl"]
 
     hcfg = fcfg["counts_hourly"]
     cal = REPO_ROOT / "configs" / "calendars"

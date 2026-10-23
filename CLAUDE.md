@@ -147,7 +147,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
   - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
   - Build OSM features: `.venv/bin/python -m src.features.osm [--site melbourne] [--only extract,graph,features,sensors]` (column dictionary and join recipe in `docs/features/osm_features.md`)
   - Build the hourly table: `.venv/bin/python -m src.features.sensor_steepness`, then `.venv/bin/python -m src.features.counts_hourly` (counts + time + weather + calendars + footpath slope; `docs/features/counts_hourly.md`). Time features use the local clock; weather joins on UTC.
-  - Bias slicing: `.venv/bin/python -m src.bias.representation` (data per slice), then `.venv/bin/python -m src.bias.slice_errors` (baseline error per slice on held-out sensors, and mitigations; ~11 min). Slices in `configs/bias.yaml`; method and findings in `docs/bias/bias_slicing.md`.
+  - Bias slicing: `.venv/bin/python -m src.bias.representation` (data per slice), then `.venv/bin/python -m src.bias.slice_errors` (baseline error per slice on held-out sensors, and mitigations; ~18 min). Slices in `configs/bias.yaml`; method and findings in `docs/bias/bias_slicing.md`.
   - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Run the pipeline"). The OSM extract is pinned; trigger with `refresh_osm=true` to replace it, then re-check sensor overrides.
   - Run app locally: **TBD**
 

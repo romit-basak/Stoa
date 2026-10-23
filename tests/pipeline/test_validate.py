@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import ClassVar
 
 import pandas as pd
 import pytest
@@ -157,29 +158,141 @@ def test_a_few_missing_weather_hours_pass_but_many_only_warn(cfg):
     assert failures(checks, v.ERROR) == {}
 
 
+STUCK = "anomaly: new runs of the same count (>= 10) for 6+ hours"
+OUTLIER = "anomaly: new counts above 4x the sensor's 99.9th percentile"
+
+
 def test_stuck_sensor_warns_but_small_overnight_repeats_do_not(cfg):
     df = make_table()
     s1 = df.index[df["location_id"] == 1]
-    df.loc[s1[:6], "pedestriancount"] = 1  # six quiet hours of 1: normal
+    df.loc[s1[-30:-24], "pedestriancount"] = 1  # six quiet hours of 1: normal
     assert failures(run(df, cfg)[0]) == {}
 
-    df.loc[s1[50:58], "pedestriancount"] = 420  # eight identical busy hours
-    warnings = failures(run(df, cfg)[0], v.WARNING)
-    assert (
-        "sensors [1]" in warnings["anomaly: same count (>= 10) for 6+ hours in a row"]
+    df.loc[s1[-20:-12], "pedestriancount"] = (
+        420  # eight identical busy hours, this week
     )
+    assert "sensors [1]" in failures(run(df, cfg)[0], v.WARNING)[STUCK]
 
 
-def test_outlier_warns(cfg):
+def test_stuck_run_before_the_new_hours_is_counted_but_does_not_warn(cfg):
+    df = make_table()
+    s1 = df.index[df["location_id"] == 1]
+    df.loc[s1[10:18], "pedestriancount"] = 420  # nine days ago
+    checks, _ = run(df, cfg)  # no previous run: the new hours are the last 7 days
+    assert failures(checks) == {}
+    assert next(c for c in checks if c.name == STUCK).observed["earlier_runs"] == 1
+
+
+def test_new_outlier_warns(cfg):
     # 60 days: with only a few hundred hours, the 99.9th percentile sits between the top two
     # values, so a lone outlier raises its own threshold. Real sensors have thousands.
     df = make_table(days=60)
-    df.loc[10, "pedestriancount"] = 29000  # in range, but ~20x this sensor's usual peak
-    checks, _ = run(df, cfg)
-    assert "anomaly: counts above 4x the sensor's 99.9th percentile" in failures(
-        checks, v.WARNING
+    df.loc[df.index[df["location_id"] == 1][-5], "pedestriancount"] = (
+        29000  # ~20x usual
     )
+    checks, _ = run(df, cfg)
+    assert OUTLIER in failures(checks, v.WARNING)
     assert failures(checks, v.ERROR) == {}
+
+
+def test_outlier_before_the_last_run_does_not_warn_again(cfg):
+    df = make_table(days=60)
+    df.loc[df.index[df["location_id"] == 1][-5], "pedestriancount"] = 29000
+    # The previous good run already held that hour, so it isn't new.
+    previous = v.summary(v.profile(df), NOW)
+    checks, _ = run(df, cfg, previous=previous)
+    assert OUTLIER not in failures(checks)
+    assert next(c for c in checks if c.name == OUTLIER).observed["earlier_rows"] == 1
+
+
+def test_conditions_are_gx_condition_objects():
+    cond = v.condition(["has_location", "==", True])
+    assert isinstance(cond, v.Condition)
+    assert (cond.column.name, cond.operator, cond.parameter) == (
+        "has_location",
+        "==",
+        True,
+    )
+    with pytest.raises(ValueError, match="unknown operator"):
+        v.condition(["has_location", "is", True])
+
+
+@pytest.mark.filterwarnings("error:.*row_condition:DeprecationWarning")
+@pytest.mark.filterwarnings("error:.*condition_parser:DeprecationWarning")
+def test_suite_uses_no_conditions_gx_2_removes(cfg):
+    v.run_expectations(make_table(), cfg)
+
+
+def test_warning_email_lists_only_warnings():
+    checks = [
+        v.Check("passing check", v.WARNING, True),
+        v.Check("anomaly: x", v.WARNING, False, "3 rows"),
+        v.Check("schema: columns", v.ERROR, True),
+    ]
+    subject, body = v.warning_email(checks, "scheduled__2026-10-20")
+    assert subject == "[Stoa] validate: 1 data warning"
+    assert "<b>anomaly: x</b>: 3 rows" in body
+    assert "scheduled__2026-10-20" in body
+    assert "passing check" not in body
+    assert v.warning_email(checks[:1]) is None
+
+
+class FakeHook:
+    sent: ClassVar[list[dict]] = []
+
+    def __init__(self, smtp_conn_id):
+        assert smtp_conn_id == "smtp_default"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def send_email_smtp(self, **kw):
+        FakeHook.sent.append(kw)
+
+
+@pytest.fixture
+def smtp(monkeypatch):
+    """Replace Airflow's SmtpHook (not installed in .venv) with FakeHook."""
+    import sys
+    import types
+
+    FakeHook.sent = []
+    module = types.ModuleType("airflow.providers.smtp.hooks.smtp")
+    module.SmtpHook = FakeHook
+    monkeypatch.setitem(sys.modules, "airflow.providers.smtp.hooks.smtp", module)
+    monkeypatch.setenv("STOA_ALERT_EMAILS", "a@x.edu, b@x.edu")
+    monkeypatch.setenv("STOA_SMTP_USER", "stoa@gmail.com")
+    return FakeHook
+
+
+WARNED = [v.Check("anomaly: x", v.WARNING, False, "3 rows")]
+
+
+def test_warnings_are_emailed_to_the_team(smtp):
+    assert v.send_warning_alert(WARNED) is True
+    (sent,) = smtp.sent
+    assert sent["to"] == ["a@x.edu", "b@x.edu"]
+    assert sent["from_email"] == "stoa@gmail.com"
+    assert sent["subject"] == "[Stoa] validate: 1 data warning"
+
+
+def test_no_email_without_warnings_or_recipients(smtp, monkeypatch):
+    assert v.send_warning_alert([v.Check("ok", v.WARNING, True)]) is False
+    monkeypatch.setenv("STOA_ALERT_EMAILS", "")
+    assert v.send_warning_alert(WARNED) is False
+    assert smtp.sent == []
+
+
+def test_failed_send_is_logged_not_raised(smtp, monkeypatch, caplog):
+    def broken(self, **kw):
+        raise OSError("smtp down")
+
+    monkeypatch.setattr(FakeHook, "send_email_smtp", broken)
+    assert v.send_warning_alert(WARNED) is False
+    assert "could not email the warnings" in caplog.text
 
 
 def test_missing_night_hours_are_normal_but_daytime_gaps_warn(cfg):

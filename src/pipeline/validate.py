@@ -17,7 +17,9 @@ Each run:
    appends the profile summary to a history file, so DVC versions the statistics with the data.
 
 Checks marked `error` fail the task: Airflow sends the failure email and dvc_push does not run,
-so a bad table never becomes a version. `warning` checks are logged and reported only.
+so a bad table never becomes a version. `warning` checks are logged, reported and emailed
+to STOA_ALERT_EMAILS; the run carries on. Outliers and stuck sensors only warn about hours
+added since the last good run, so a known event doesn't alert every day.
 
 `--write-schema` writes the schema from the current table instead. Run it after an intended
 change to the table's columns and commit the result.
@@ -45,6 +47,7 @@ os.environ.setdefault("GX_ANALYTICS_ENABLED", "false")
 import great_expectations as gx
 import great_expectations.expectations as gxe
 from great_expectations.data_context.types.base import ProgressBarsConfig
+from great_expectations.expectations.row_conditions import Column, Condition
 
 log = logging.getLogger("stoa.pipeline")
 
@@ -122,6 +125,26 @@ def check_schema(df: pd.DataFrame, schema: dict[str, Any]) -> list[Check]:
 
 # --- Great Expectations suite ---
 
+# Row conditions are Condition objects (Column("x") == 1): GX 2.0 removes text conditions.
+OPERATORS = {
+    "==": lambda c, v: c == v,
+    "!=": lambda c, v: c != v,
+    ">": lambda c, v: c > v,
+    ">=": lambda c, v: c >= v,
+    "<": lambda c, v: c < v,
+    "<=": lambda c, v: c <= v,
+}
+
+
+def condition(rule: list[Any]) -> Condition:
+    """[column, operator, value] from the config as a GX row condition."""
+    column, op, value = rule
+    if op not in OPERATORS:
+        raise ValueError(
+            f"unknown operator {op!r} in {rule}; use one of {list(OPERATORS)}"
+        )
+    return OPERATORS[op](Column(column), value)
+
 
 def build_suite(cfg: dict[str, Any], columns: list[str]) -> list[gxe.Expectation]:
     """Expectations from the config; meta carries each one's name and severity."""
@@ -139,12 +162,12 @@ def build_suite(cfg: dict[str, Any], columns: list[str]) -> list[gxe.Expectation
             gxe.ExpectColumnValuesToNotBeNull(column=col, meta=meta(f"present: {col}"))
         )
     for col, rule in cfg["required_when"].items():
+        where = " ".join(str(part) for part in rule)
         exps.append(
             gxe.ExpectColumnValuesToNotBeNull(
                 column=col,
-                row_condition=rule,
-                condition_parser="pandas",
-                meta=meta(f"present: {col} where {rule}"),
+                row_condition=condition(rule),
+                meta=meta(f"present: {col} where {where}"),
             )
         )
     for col, (lo, hi) in cfg["ranges"].items():
@@ -226,23 +249,39 @@ def run_expectations(df: pd.DataFrame, cfg: dict[str, Any]) -> list[Check]:
 # --- Anomalies ---
 
 
-def outliers(df: pd.DataFrame, factor: float) -> Check:
+def outliers(df: pd.DataFrame, factor: float, since: pd.Timestamp) -> Check:
+    """New hours (after `since`) above factor x their sensor's 99.9th percentile.
+
+    The percentile comes from the sensor's whole history. Older hits are known (Run Melbourne,
+    New Year's Eve) and only counted, so they don't warn, and alert, on every run.
+    """
     p999 = df.groupby("location_id")["pedestriancount"].transform(
         lambda s: s.quantile(0.999)
     )
-    hit = df[(p999 > 0) & (df["pedestriancount"] > factor * p999)]
+    hits = df[(p999 > 0) & (df["pedestriancount"] > factor * p999)]
+    hit = hits[hits["ts_utc"] > since]
     by_sensor = hit.groupby("location_id").size().sort_values(ascending=False).head(10)
     return Check(
-        f"anomaly: counts above {factor}x the sensor's 99.9th percentile",
+        f"anomaly: new counts above {factor}x the sensor's 99.9th percentile",
         WARNING,
         hit.empty,
-        f"{len(hit)} rows; most at sensors {by_sensor.to_dict()}" if len(hit) else "",
-        {"rows": len(hit), "by_sensor": {int(k): int(v) for k, v in by_sensor.items()}},
+        f"{len(hit)} rows since {since}; most at sensors {by_sensor.to_dict()}"
+        if len(hit)
+        else "",
+        {
+            "rows": len(hit),
+            "by_sensor": {int(k): int(v) for k, v in by_sensor.items()},
+            "earlier_rows": len(hits) - len(hit),
+            "since": str(since),
+        },
     )
 
 
-def stuck_sensors(df: pd.DataFrame, run_hours: int, min_count: int) -> Check:
-    """Runs of the same count (at least min_count) in consecutive hours at one sensor.
+def stuck_sensors(
+    df: pd.DataFrame, run_hours: int, min_count: int, since: pd.Timestamp
+) -> Check:
+    """Runs of the same count (at least min_count) in consecutive hours at one sensor, that
+    reach into the new hours (after `since`); older runs are only counted.
 
     Small counts repeat naturally overnight (1 an hour for six hours), so they are ignored.
     """
@@ -260,17 +299,23 @@ def stuck_sensors(df: pd.DataFrame, run_hours: int, min_count: int) -> Check:
         count=("pedestriancount", "first"),
         hours=("pedestriancount", "size"),
         start=("ts_utc", "first"),
+        end=("ts_utc", "last"),
     )
-    stuck = runs[(runs["count"] >= min_count) & (runs["hours"] >= run_hours)]
+    long_runs = runs[(runs["count"] >= min_count) & (runs["hours"] >= run_hours)]
+    stuck = long_runs[long_runs["end"] > since]
     sensors = sorted(int(s) for s in stuck["location_id"].unique())
     return Check(
-        f"anomaly: same count (>= {min_count}) for {run_hours}+ hours in a row",
+        f"anomaly: new runs of the same count (>= {min_count}) for {run_hours}+ hours",
         WARNING,
         stuck.empty,
         f"{len(stuck)} runs at sensors {sensors}, longest {stuck['hours'].max()} hours"
         if len(stuck)
         else "",
-        {"runs": len(stuck), "sensors": sensors},
+        {
+            "runs": len(stuck),
+            "sensors": sensors,
+            "earlier_runs": len(long_runs) - len(stuck),
+        },
     )
 
 
@@ -344,11 +389,23 @@ def freshness(df: pd.DataFrame, max_age_days: float, now: datetime) -> Check:
     )
 
 
-def anomaly_checks(df: pd.DataFrame, cfg: dict[str, Any], now: datetime) -> list[Check]:
+def new_since(
+    df: pd.DataFrame, previous: dict[str, Any] | None, days: int
+) -> pd.Timestamp:
+    """Where the new hours start: after the previous good run's newest hour, or, with no
+    previous run, the last `days` days."""
+    if previous is not None:
+        return pd.Timestamp(previous["last_hour_utc"])
+    return df["ts_utc"].max() - pd.Timedelta(days=days)
+
+
+def anomaly_checks(
+    df: pd.DataFrame, cfg: dict[str, Any], now: datetime, since: pd.Timestamp
+) -> list[Check]:
     a = cfg["anomalies"]
     return [
-        outliers(df, a["outlier_factor"]),
-        stuck_sensors(df, a["stuck_run_hours"], a["stuck_min_count"]),
+        outliers(df, a["outlier_factor"], since),
+        stuck_sensors(df, a["stuck_run_hours"], a["stuck_min_count"], since),
         outage_share(df, a["max_outage_share"]),
         recent_completeness(
             df,
@@ -508,7 +565,8 @@ def validate(
     """Every check on df, and its statistics profile."""
     checks = check_schema(df, schema)
     checks += run_expectations(df, cfg)
-    checks += anomaly_checks(df, cfg, now)
+    since = new_since(df, previous, cfg["anomalies"]["recent_days"])
+    checks += anomaly_checks(df, cfg, now, since)
     stats = profile(df)
     checks += drift_checks(summary(stats, now), previous, cfg)
     return checks, stats
@@ -538,6 +596,69 @@ def write_reports(
     if not errors:
         with open(out / "counts_hourly_stats_history.jsonl", "a") as f:
             f.write(json.dumps(summary(stats, now), default=str) + "\n")
+
+
+# --- Warning alert ---
+
+
+def warning_email(
+    checks: list[Check], run_id: str | None = None
+) -> tuple[str, str] | None:
+    """Subject and HTML body listing the failed warning checks, or None if there are none."""
+    warnings = [c for c in checks if not c.passed and c.severity == WARNING]
+    if not warnings:
+        return None
+    subject = (
+        f"[Stoa] validate: {len(warnings)} data warning{'s' * (len(warnings) > 1)}"
+    )
+    rows = "".join(f"<li><b>{c.name}</b>: {c.detail}</li>" for c in warnings)
+    body = (
+        "<p>The hourly table passed every error check, so the run carried on and the data "
+        "is being versioned, but these warnings need a look:</p>"
+        f"<ul>{rows}</ul>"
+        + (f"<p>Run: {run_id}</p>" if run_id else "")
+        + "<p>Full report: <code>data/processed/validation/melbourne/"
+        "counts_hourly_validation.json</code>. Checks: docs/pipeline/validation.md.</p>"
+    )
+    return subject, body
+
+
+def send_warning_alert(checks: list[Check]) -> bool:
+    """Email the warnings to STOA_ALERT_EMAILS through Airflow's smtp_default connection, the
+    one the failure emails use. Returns whether an email went out.
+
+    A failed send is logged, not raised: warnings never stop the pipeline.
+    """
+    message = warning_email(checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"))
+    recipients = [
+        e.strip()
+        for e in os.environ.get("STOA_ALERT_EMAILS", "").split(",")
+        if e.strip()
+    ]
+    if message is None:
+        return False
+    if not recipients:
+        log.info("STOA_ALERT_EMAILS is empty, so the warnings were not emailed")
+        return False
+    try:
+        from airflow.providers.smtp.hooks.smtp import SmtpHook
+    except ImportError:
+        log.info("Airflow isn't installed here, so the warnings were not emailed")
+        return False
+    subject, body = message
+    try:
+        with SmtpHook(smtp_conn_id="smtp_default") as hook:
+            hook.send_email_smtp(
+                to=recipients,
+                subject=subject,
+                html_content=body,
+                from_email=os.environ.get("STOA_SMTP_USER") or None,
+            )
+    except Exception:
+        log.exception("could not email the warnings")
+        return False
+    log.info("emailed the warnings to %s", ", ".join(recipients))
+    return True
 
 
 def log_checks(checks: list[Check]) -> None:
@@ -588,7 +709,9 @@ def main() -> None:
 
     failed = [c.name for c in checks if not c.passed and c.severity == ERROR]
     if failed:
+        # The failure email covers this run; no separate warning email.
         raise ValidationError(f"{len(failed)} checks failed: {'; '.join(failed)}")
+    send_warning_alert(checks)
 
 
 if __name__ == "__main__":

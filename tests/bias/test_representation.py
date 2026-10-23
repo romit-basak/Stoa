@@ -32,7 +32,8 @@ def edges():
             LineString([(X + 10, Y + 10), (X + 50, Y + 10)]),  # CBD East
             LineString([(X + 120, Y + 50), (X + 150, Y + 50)]),  # CBD West
             LineString([(X + 10, Y + 150), (X + 35, Y + 150)]),  # Carlton
-            # Crosses from CBD East into CBD West: counted once, where its midpoint is.
+            # Crosses from CBD East into CBD West: counted once, in the area holding its
+            # representative point (a point on the line; for a two-point line, its first end).
             LineString([(X + 80, Y + 20), (X + 140, Y + 20)]),
             LineString([(X + 900, Y + 900), (X + 1400, Y + 900)]),  # outside every area
         ],
@@ -49,6 +50,16 @@ def test_network_reference_counts_each_edge_once_and_drops_edges_outside_clue():
     ref = network_reference(edges(), blocks(), CFG)
     # The 60 m edge counts once; the 500 m one outside every area not at all.
     assert ref.sum() == 40.0 + 30.0 + 25.0 + 60.0
+
+
+def test_an_edge_on_a_boundary_between_precincts_is_never_counted_twice():
+    # Its representative point (its first end) lies on the line between CBD East and Carlton.
+    on_boundary = gpd.GeoDataFrame(
+        {"length_m": [30.0]},
+        geometry=[LineString([(X + 20, Y + 100), (X + 20, Y + 130)])],
+        crs=28355,
+    )
+    assert network_reference(on_boundary, blocks(), CFG).sum() <= 30.0
 
 
 def test_network_reference_reprojects_the_areas_to_the_network_crs():

@@ -1,3 +1,4 @@
+import smtplib
 from datetime import UTC, datetime
 from typing import ClassVar
 
@@ -256,11 +257,11 @@ def test_warning_email_lists_only_warnings():
     assert v.warning_email(checks[:1]) is None
 
 
-class FakeHook:
+class FakeSMTP:
     sent: ClassVar[list[dict]] = []
 
-    def __init__(self, smtp_conn_id):
-        assert smtp_conn_id == "smtp_default"
+    def __init__(self, host, port, timeout):
+        self.host, self.port = host, port
 
     def __enter__(self):
         return self
@@ -268,23 +269,37 @@ class FakeHook:
     def __exit__(self, *exc):
         return False
 
-    def send_email_smtp(self, **kw):
-        FakeHook.sent.append(kw)
+    def starttls(self):
+        self.tls = True
+
+    def login(self, user, password):
+        self.user = user
+
+    def send_message(self, mail):
+        FakeSMTP.sent.append(
+            {
+                "host": self.host,
+                "port": self.port,
+                "tls": self.tls,
+                "user": self.user,
+                "mail": mail,
+            }
+        )
 
 
 @pytest.fixture
 def smtp(monkeypatch):
-    """Replace Airflow's SmtpHook (not installed in .venv) with FakeHook."""
-    import sys
-    import types
-
-    FakeHook.sent = []
-    module = types.ModuleType("airflow.providers.smtp.hooks.smtp")
-    module.SmtpHook = FakeHook
-    monkeypatch.setitem(sys.modules, "airflow.providers.smtp.hooks.smtp", module)
+    """Replace smtplib.SMTP and set the smtp_default connection as docker-compose.yaml does."""
+    FakeSMTP.sent = []
+    monkeypatch.setattr(v.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setenv(
+        "AIRFLOW_CONN_SMTP_DEFAULT",
+        '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, '
+        '"login": "stoa@gmail.com", "password": "app-password", "extra": {"disable_ssl": true}}',
+    )
     monkeypatch.setenv("STOA_ALERT_EMAILS", "a@x.edu, b@x.edu")
     monkeypatch.setenv("STOA_SMTP_USER", "stoa@gmail.com")
-    return FakeHook
+    return FakeSMTP
 
 
 WARNED = [v.Check("anomaly: x", v.WARNING, False, "3 rows")]
@@ -293,25 +308,56 @@ WARNED = [v.Check("anomaly: x", v.WARNING, False, "3 rows")]
 def test_warnings_are_emailed_to_the_team(smtp):
     assert v.send_warning_alert(WARNED) is True
     (sent,) = smtp.sent
-    assert sent["to"] == ["a@x.edu", "b@x.edu"]
-    assert sent["from_email"] == "stoa@gmail.com"
-    assert sent["subject"] == "[Stoa] validate: 1 data warning"
+    assert (sent["host"], sent["port"], sent["tls"]) == ("smtp.gmail.com", 587, True)
+    assert sent["user"] == "stoa@gmail.com"
+    mail = sent["mail"]
+    assert mail["To"] == "a@x.edu, b@x.edu"
+    assert mail["From"] == "stoa@gmail.com"
+    assert mail["Subject"] == "[Stoa] validate: 1 data warning"
+    assert "<b>anomaly: x</b>" in mail.get_body(("html",)).get_content()
 
 
-def test_no_email_without_warnings_or_recipients(smtp, monkeypatch):
+def test_sending_never_imports_airflow(smtp, monkeypatch):
+    # Inside a real Airflow 3 task, importing airflow fails (the metadata database is hidden
+    # from the task's process). The email must not depend on it.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_airflow(name, *args, **kwargs):
+        if name == "airflow" or name.startswith("airflow."):
+            raise RuntimeError("airflow can't be imported inside a task")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_airflow)
+    assert v.send_warning_alert(WARNED) is True
+
+
+def test_no_email_without_warnings_recipients_or_smtp_settings(smtp, monkeypatch):
     assert v.send_warning_alert([v.Check("ok", v.WARNING, True)]) is False
     monkeypatch.setenv("STOA_ALERT_EMAILS", "")
+    assert v.send_warning_alert(WARNED) is False
+    monkeypatch.setenv("STOA_ALERT_EMAILS", "a@x.edu")
+    monkeypatch.delenv("AIRFLOW_CONN_SMTP_DEFAULT")
+    assert v.send_warning_alert(WARNED) is False
+    monkeypatch.setenv("AIRFLOW_CONN_SMTP_DEFAULT", "not json")
     assert v.send_warning_alert(WARNED) is False
     assert smtp.sent == []
 
 
 def test_failed_send_is_logged_not_raised(smtp, monkeypatch, caplog):
-    def broken(self, **kw):
-        raise OSError("smtp down")
+    def broken(self, user, password):
+        raise smtplib.SMTPAuthenticationError(535, b"bad credentials")
 
-    monkeypatch.setattr(FakeHook, "send_email_smtp", broken)
+    monkeypatch.setattr(FakeSMTP, "login", broken)
     assert v.send_warning_alert(WARNED) is False
     assert "could not email the warnings" in caplog.text
+
+
+def test_any_error_while_emailing_is_logged_not_raised(monkeypatch):
+    # Regression: a crash while emailing warnings used to fail the validate task.
+    monkeypatch.setattr(v, "warning_email", lambda *a, **k: 1 / 0)
+    assert v.send_warning_alert(WARNED) is False
 
 
 def test_missing_night_hours_are_normal_but_daytime_gaps_warn(cfg):

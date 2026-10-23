@@ -78,6 +78,8 @@ click-repl==0.4.1
     # via celery
 cligj==0.7.2
     # via rasterio
+cloudpickle==3.1.2
+    # via joblib
 colorama==0.4.6
     # via dvc
 configobj==5.0.9
@@ -130,6 +132,8 @@ dvc-task==0.40.2
     # via dvc
 entrypoints==0.4.2
     # via gto
+fairlearn==0.15.0
+    # via stoa (pyproject.toml)
 filelock==4.2.4
     # via iterative-telemetry
 flatten-dict==0.5.0
@@ -232,6 +236,8 @@ jinja2==3.1.6
     # via
     #   altair
     #   great-expectations
+joblib==1.6.0
+    # via scikit-learn
 jsonschema==4.26.0
     # via
     #   altair
@@ -264,7 +270,10 @@ multidict==7.1.0
     #   aiohttp
     #   yarl
 narwhals==2.27.1
-    # via altair
+    # via
+    #   altair
+    #   fairlearn
+    #   scikit-learn
 networkx==3.6.1
     # via
     #   stoa (pyproject.toml)
@@ -274,6 +283,7 @@ numba==0.68.0
 numpy==2.4.6
     # via
     #   contourpy
+    #   fairlearn
     #   geopandas
     #   great-expectations
     #   matplotlib
@@ -281,6 +291,7 @@ numpy==2.4.6
     #   pandas
     #   pyogrio
     #   rasterio
+    #   scikit-learn
     #   scipy
     #   shapely
 oauthlib==4.0.0
@@ -311,6 +322,7 @@ packaging==26.3
 pandas==3.0.6
     # via
     #   stoa (pyproject.toml)
+    #   fairlearn
     #   geopandas
     #   great-expectations
 pathspec==1.1.1
@@ -440,10 +452,16 @@ ruamel-yaml==0.19.1
     #   gto
 ruff==0.17.1
     # via stoa (pyproject.toml)
+scikit-learn==1.9.1
+    # via
+    #   stoa (pyproject.toml)
+    #   fairlearn
 scipy==1.17.1
     # via
     #   stoa (pyproject.toml)
+    #   fairlearn
     #   great-expectations
+    #   scikit-learn
 scmrepo==3.6.2
     # via
     #   dvc
@@ -472,6 +490,8 @@ tabulate==0.10.0
     # via
     #   dvc
     #   gto
+threadpoolctl==3.7.0
+    # via scikit-learn
 tomlkit==0.15.2
     # via dvc
 tqdm==4.70.1

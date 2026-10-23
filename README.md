@@ -123,7 +123,7 @@ Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `
 
 ### Run the pipeline (Airflow)
 
-The Melbourne pipeline runs as one Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), in Docker. Requires Docker Desktop.
+The Melbourne pipeline runs as one Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), in Docker. Requires Docker Desktop. The NYC (transfer test only) and NEU Boston (demonstration) data aren't in the DAG: they are one-off downloads of fixed snapshots, run by hand with the commands under "Pull data" and versioned with DVC like the rest.
 
 On Linux, first tell the containers to run as your user, or they can't write to `data/`. Docker Desktop on macOS and Windows handles this for you.
 
@@ -251,6 +251,8 @@ docker compose run --rm --no-deps \
 ```
 
 ## Repository layout
+
+The pipeline code lives in `src/` (as a Python package, run with `python -m src.<module>`), which plays the role of the `scripts/` folder in the course's example structure.
 
 ```
 configs/data.yaml        data sources and site bounding boxes

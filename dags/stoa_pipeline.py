@@ -203,12 +203,17 @@ def stoa_pipeline():
     joined = join_all()
     [sensors, steepness, counts, pull_weather(), pull_calendars()] >> joined
 
-    # Bias slicing runs beside validation; only data that went through both is versioned.
+    # Bias slicing runs after validation, not beside it. Both load the whole hourly table
+    # (about 3 GB each at 7.4M rows), and side by side they overran Docker Desktop's default
+    # 8 GB: validate was killed (exit -9). This order also keeps the bias reports to data that
+    # passed the checks. Only data that went through all three is versioned.
+    checked = validate()
+    joined >> checked
     slices = bias_slices()
-    [joined, static] >> slices
+    [checked, static] >> slices
     errors = bias_errors()
     slices >> errors
-    [joined >> validate(), errors] >> dvc_push()
+    [checked, errors] >> dvc_push()
 
 
 stoa_pipeline()

@@ -48,7 +48,7 @@ Rows flagged `suspect_outage_zero` are dropped before the shares are computed, a
 .venv/bin/python -m src.bias.representation    # ~40 s
 ```
 
-It runs as `bias_slices` in the DAG, next to `validate`. It needs no model, and writes to `data/processed/bias/melbourne/`:
+It runs as `bias_slices` in the DAG, after `validate`, so it only reports on data that passed the checks (side by side, the two overran Docker's default 8 GB). It needs no model, and writes to `data/processed/bias/melbourne/`:
 
 | File | One row per |
 |---|---|

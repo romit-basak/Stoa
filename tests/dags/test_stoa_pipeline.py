@@ -83,7 +83,8 @@ def test_wiring(dag):
         "pull_calendars",
     }
     assert upstream("validate") == {"join_all"}
-    assert upstream("bias_slices") == {"join_all", "pull_static_layers"}
+    # After validate, not beside it: side by side, the two overran Docker's 8 GB.
+    assert upstream("bias_slices") == {"validate", "pull_static_layers"}
     assert upstream("bias_errors") == {"bias_slices"}
     assert upstream("dvc_push") == {"validate", "bias_errors"}
 

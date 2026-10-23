@@ -4,12 +4,13 @@ Usage: python -m src.pipeline.dvc_push
 
 Runs as the last task of stoa_pipeline, after validate, so only data that passed the checks
 becomes a version. It re-hashes data/raw, data/interim and data/processed (`dvc add`), which
-rewrites their pointer files (data/*.dvc) if anything changed, then uploads the new files
+rewrites their pointer files (data/*.dvc) if anything changed, records the code, configs and
+input data of every stage in dvc.yaml into dvc.lock (`dvc commit`), then uploads the new files
 (`dvc push`).
 
-It does not commit the pointer files. Git history is what links a data version to the code
-that made it, so a person commits them (`git add data/*.dvc && git commit`); the log lists
-which ones changed. Until then, teammates' `dvc pull` still fetches the previous version.
+It does not commit the pointer files or dvc.lock. Git history is what links a data version to
+the code that made it, so a person commits them (`git add data/*.dvc dvc.lock && git commit`);
+the log lists which ones changed. Until then, teammates' `dvc pull` still fetches the previous version.
 
 Credentials are found the way the Google client libraries find them (google.auth.default):
 the service account key that GOOGLE_APPLICATION_CREDENTIALS points at (in Docker, a file in
@@ -37,6 +38,8 @@ from google.auth.exceptions import DefaultCredentialsError
 from src.ingest.common import REPO_ROOT, setup_logging
 
 TRACKED = ["data/raw", "data/interim", "data/processed"]
+# Written by `dvc commit`: each stage's inputs (dvc.yaml) for the version being pushed.
+LOCK = "dvc.lock"
 
 # @task.bash marks a task skipped (not failed) when its command exits with 99.
 SKIP_EXIT_CODE = 99
@@ -92,16 +95,18 @@ def run(cmd: list[str], cwd: Path = REPO_ROOT) -> str:
 
 
 def changed_pointers(cwd: Path = REPO_ROOT) -> list[str]:
-    """Pointer files (data/*.dvc) that differ from the last git commit."""
-    pointers = [f"{d}.dvc" for d in TRACKED]
+    """Pointer files (data/*.dvc) and dvc.lock that differ from the last git commit."""
+    pointers = [*(f"{d}.dvc" for d in TRACKED), LOCK]
     out = run(["git", "status", "--porcelain", "--", *pointers], cwd=cwd)
     return [line[3:] for line in out.splitlines() if line.strip()]
 
 
 def version_data(cwd: Path = REPO_ROOT) -> list[str]:
-    """dvc add + dvc push; return the pointer files that now need a git commit."""
+    """dvc add + dvc commit + dvc push; return the files that now need a git commit."""
     check_credentials()
     run(["dvc", "add", *TRACKED], cwd=cwd)
+    # --force: record the stages' current inputs without asking; nothing is re-run.
+    run(["dvc", "commit", "--force", "dvc.yaml"], cwd=cwd)
     run(["dvc", "push"], cwd=cwd)
     return changed_pointers(cwd)
 

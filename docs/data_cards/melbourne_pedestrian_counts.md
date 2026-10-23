@@ -5,7 +5,7 @@
 | **Role** | **Target variable.** Training and validation for the flow model; all accuracy claims rest here. |
 | **Provider** | City of Melbourne Open Data (`pedestrian-counting-system-monthly-counts-per-hour`, `pedestrian-counting-system-sensor-locations`) |
 | **License** | Sensor locations: CC BY 4.0. Counts: CC BY 4.0 under the portal-wide terms ("Our open data is provided under a creative commons licence … free to share and adapt our data for any purpose, provided you give the appropriate credit", About our data page; confirmed 2026-10-04). The dataset's own licence field is empty; every other CoM dataset lists CC BY 4.0. Credit "Source: City of Melbourne Open Data". |
-| **Access** | `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour pedestrian-counting-system-sensor-locations` |
+| **Access** | `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour pedestrian-counting-system-sensor-locations` (also fetches the two Wayback copies below) |
 | **Update cadence** | Daily (rolling window); the archive is static |
 
 ## Files (`data/raw/melbourne_portal/`)
@@ -15,6 +15,10 @@
 | `pedestrian-counting-system-monthly-counts-per-hour.parquet` | 1,624,373 | 2024-10-04 → 2026-10-03, 103 sensors, ~90% of sensor-hours present |
 | `counts_per_hour_2009-05_to_2022-12-14.csv.zip` (423 MB unzipped) | 4,562,230 | **2009-05-01 → 2022-10-31** (despite the filename), 82 sensors |
 | `pedestrian-counting-system-sensor-locations.geojson` | 134 | 100 outdoor, 34 indoor; all status `A` |
+| `counts_per_hour_wayback_2025-05-02.csv` | Wayback Machine copy of the portal's full counts export, snapshot `20250502183548` | 2021-07-01 → 2025-05-02; the hourly table takes only the rows between the archive and the live table (November 2022 to October 2024) |
+| `sensor_locations_wayback_2022-10-24.json` | Wayback Machine copy of the sensor table from the portal's old Socrata API, snapshot `20221024034400`; 91 sensors, status A/R/I | Gives the locations of the 18 archive sensors today's table no longer lists |
+
+Both Wayback copies are the City's own files, so the City's CC BY 4.0 applies (`docs/data_licenses.md`). Their URLs and snapshot times are in `configs/data.yaml` (`wayback`) and `MANIFEST.json`.
 
 `data/raw/melbourne_pedestrian/` holds the original hand-downloaded CSVs. That counts CSV is a **~9% sparse subset** (148,500 rows) and is superseded by the parquet above. Do not train on it.
 
@@ -37,7 +41,7 @@
 | 2009–2012 | 18 | Core CBD only |
 | 2013–2016 | 32–43 | |
 | 2017–2022 | 52–73 | |
-| **2022-11 → 2024-10** | — | **23-month gap: in neither the archive nor the API window** |
+| **2022-11 → 2024-10** | 86–96 | In neither the archive nor the live window; filled from the Wayback copy of the portal export |
 | 2024-10 → now | 103 | 67 of these also appear in the archive; 15 archive sensors are retired |
 
 - 57 sensors have ≥5 years of history in the archive.
@@ -54,12 +58,12 @@
 ## Known issues and handling
 
 - **Clock:** both tables use local time with daylight saving. The skipped October hour (02:00) still appears in the archive (370 rows), and the repeated April hour appears once. `src/features/counts_hourly.py` drops the first and reads the second as daylight time.
-- **September 2010 is unusable in the archive:** every hour of every day is stamped 12:00 AM, so each sensor has 24 different counts at midnight (12,240 rows). The hourly table drops them.
+- **September 2010 in the archive:** every hour of every day is stamped 12:00 AM, so each sensor has 24 different counts at midnight (12,240 rows, 510 sensor-days). The rows are still in hour order by `ID`, so `counts_hourly` numbers each sensor-day's 24 rows 0–23 by `ID` (`rehour_midnight_days`; Arshmehar's fix from `notebooks/02_combine.ipynb`).
 0. **The live table is a rolling ~2-year window.** On 2026-10-04 the portal started at 2024-10-05, a day later than our 2026-10-03 pull. Re-pulls are merged into the held rows (`rolling_window` in `configs/data.yaml`), never overwritten. A dated copy of the first pull is in `data/raw/melbourne_portal/snapshots/`. Once DVC is set up, every pull is a version.
 
-1. **The 23-month gap** splits training into two eras. Treat this as a natural temporal holdout. Ask the CoM Open Data team (`opendata@melbourne.vic.gov.au`) whether they can supply Dec 2022 – Oct 2024. Nothing public covers it.
-2. **Archive duplicates:** 11,730 duplicate (sensor, date, hour) keys, probably from the DST fall-back hour. Aggregate (sum) or drop them with a logged rule.
-3. **Retired sensors:** IDs 28, 65, 78 have counts but no metadata row. Recover their coordinates from the archive or older location snapshots, or drop them.
+1. **The 23-month gap** (November 2022 to October 2024) is filled from a Wayback Machine copy of the portal's own export, archived on 2025-05-02 (Arshmehar, PR #16). It matched the archive and live table on about 98.5% of overlapping hours; the hourly table's `source` column says which rows came from it.
+2. **Archive duplicates:** the 11,730 extra (sensor, date, hour) keys are all September 2010's midnight stamps, recovered as above. Any other duplicate would be dropped and counted in `dropped_unplaceable_duplicates`.
+3. **Retired sensors:** today's sensor table has dropped 18 sensors that the archive counts (17.5% of its rows). Their locations and direction labels come from the October 2022 copy of the same table, typed Outdoor (all street sensors by name), with `location_source = wayback_2022-10-24` in the sensor tables. For the 31 North/South sensors in both tables, the 2022 copy says direction 1 = South where today's says North, so the retired sensors' direction labels may use the older convention.
 4. **Sensor relocations/replacements:** the location `note` field records device swaps (e.g. 11 replaced 2019-03-22). Check for level shifts at replacement dates.
 5. **Outages** appear as missing rows, not zeros. Never impute missing hours as zero.
 6. **COVID (2020-03 → 2021-11)** lockdowns are a regime shift. Flag them as a feature or exclude them from the main training set, and report results with and without.

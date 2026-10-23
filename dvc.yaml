@@ -1,0 +1,145 @@
+# The stoa_pipeline stages for DVC: each Airflow task's command and the inputs it reads (code,
+# configs and data). Airflow (dags/stoa_pipeline.py) runs the pipeline; this file lets DVC
+# record which code, settings and data each stage's results came from.
+#
+# The stages list no `outs`: data/raw, data/interim and data/processed are versioned as whole
+# folders (data/*.dvc), and DVC doesn't allow a stage output inside a tracked folder. So DVC
+# can't order the stages by itself; run the pipeline with Airflow (README, "Run the pipeline").
+# Use this file to see what changed:
+#   dvc status      stages whose code, config or input data changed since dvc.lock
+#   dvc dag         the stages
+# dvc_push records the inputs of every stage in dvc.lock after each run (README, "Data
+# versioning"). dvc_push itself isn't a stage: it is the versioning step.
+
+stages:
+  # --- Ingest: downloads, so they always count as changed ---
+
+  pull_counts:
+    cmd: >-
+      python -m src.ingest.melbourne_portal --only
+      pedestrian-counting-system-monthly-counts-per-hour
+      pedestrian-counting-system-sensor-locations
+    deps:
+      - src/ingest/melbourne_portal.py
+      - src/ingest/common.py
+      - configs/data.yaml
+    always_changed: true
+
+  pull_weather:
+    cmd: python -m src.ingest.weather --site melbourne
+    deps:
+      - src/ingest/weather.py
+      - src/ingest/common.py
+      - configs/data.yaml
+    always_changed: true
+
+  pull_calendars:
+    cmd: python -m src.ingest.calendars
+    deps:
+      - src/ingest/calendars.py
+      - src/ingest/common.py
+      - configs/data.yaml
+    always_changed: true
+
+  pull_static_layers:
+    # Fixed snapshots: each is fetched only when it isn't held yet.
+    cmd: >-
+      { test -f data/raw/melbourne_portal/footpath-steepness.geojson ||
+      python -m src.ingest.melbourne_portal --only footpath-steepness; } &&
+      { test -f data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson ||
+      python -m src.ingest.melbourne_portal --only blocks-for-census-of-land-use-and-employment-clue; } &&
+      { test -f data/raw/dem/melbourne_ga_lidar_5m.tif ||
+      python -m src.ingest.dem --site melbourne; } &&
+      { test -f data/raw/events/afl_attendance.csv ||
+      python -m src.ingest.afl_attendance; }
+    deps:
+      - src/ingest/melbourne_portal.py
+      - src/ingest/dem.py
+      - src/ingest/afl_attendance.py
+      - configs/data.yaml
+
+  pull_osm:
+    cmd: python -m src.ingest.osm --site melbourne
+    deps:
+      - src/ingest/osm.py
+      - configs/data.yaml
+
+  # --- OSM features ---
+
+  osm_extract:
+    cmd: python -m src.features.osm --site melbourne --only extract --if-stale
+    deps:
+      - data/raw/osm/melbourne.osm.pbf
+      - src/features
+      - configs/features.yaml
+
+  osm_graph:
+    cmd: python -m src.features.osm --site melbourne --only graph --if-stale
+    deps:
+      - data/interim/osm/melbourne/ways.parquet
+      - src/features
+      - configs/features.yaml
+
+  osm_segment_features:
+    cmd: python -m src.features.osm --site melbourne --only features --if-stale
+    deps:
+      - data/interim/osm/melbourne/graph
+      - data/interim/osm/melbourne/pois.parquet
+      - data/interim/osm/melbourne/transit.parquet
+      - src/features
+      - configs/features.yaml
+
+  osm_sensor_match:
+    cmd: python -m src.features.osm --site melbourne --only sensors --if-stale
+    deps:
+      - data/processed/features/melbourne/osm_segment_features.parquet
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - src/features
+      - configs/features.yaml
+      - configs/sensor_overrides.yaml
+
+  sensor_steepness:
+    cmd: python -m src.features.sensor_steepness
+    deps:
+      - data/raw/melbourne_portal/footpath-steepness.geojson
+      - data/raw/dem/melbourne_ga_lidar_5m.tif
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - src/features/sensor_steepness.py
+      - configs/features.yaml
+
+  # --- Hourly table, then its checks ---
+
+  join_all:
+    cmd: python -m src.features.counts_hourly
+    deps:
+      - data/raw/melbourne_portal/counts_per_hour_2009-05_to_2022-12-14.csv.zip
+      - data/raw/melbourne_portal/pedestrian-counting-system-monthly-counts-per-hour.parquet
+      - data/raw/weather
+      - data/raw/calendars/melbourne_public_holidays.csv
+      - configs/calendars
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/features/melbourne/sensor_steepness.parquet
+      - src/features/counts_hourly.py
+      - src/features/common.py
+      - configs/features.yaml
+
+  bias_slices:
+    cmd: python -m src.bias.representation
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/features/melbourne/sensor_steepness.parquet
+      - data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
+      - data/raw/melbourne_portal/footpath-steepness.geojson
+      - data/raw/events/afl_attendance.csv
+      - data/interim/osm/melbourne/graph/edges.parquet
+      - src/bias
+      - configs/bias.yaml
+
+  validate:
+    cmd: python -m src.pipeline.validate
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - src/pipeline/validate.py
+      - configs/validation.yaml
+      - configs/schemas/counts_hourly.yaml

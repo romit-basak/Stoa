@@ -1,0 +1,95 @@
+# Data validation for the hourly counts table (src/pipeline/validate.py, task `validate`).
+# See docs/pipeline/validation.md. Every check has a severity:
+#   error   - the data is wrong: the task fails, the team gets the failure email and dvc_push
+#             does not run, so the bad table never becomes a DVC version.
+#   warning - worth a look but not wrong (a big event, a sensor fault): logged and written to
+#             the report; the run carries on.
+# Paths are relative to the repo root.
+
+table: data/processed/features/melbourne/counts_hourly.parquet
+# Generated from the data with `python -m src.pipeline.validate --write-schema`; review the diff
+# before committing it.
+schema: configs/schemas/counts_hourly.yaml
+reports_dir: data/processed/validation/melbourne
+
+keys: [location_id, ts_utc]
+
+# Columns that must never be missing (error). school_term is left out: it is missing outside
+# the years configs/calendars/ covers.
+never_missing:
+  [location_id, ts_utc, ts_local, date_local, hour_local, source, pedestriancount,
+   suspect_outage_zero, weekday, hour_of_week, is_weekend, is_public_holiday, sun_elevation_deg,
+   covid_period, post_metro_tunnel, has_location]
+
+# Value ranges (error). Counts: the highest hour on record is ~16k, so 30k is a broken value,
+# not a crowd. Slope: the steepest sensor is 20.4% (doc), 40% would be a bad match.
+ranges:
+  pedestriancount: [0, 30000]
+  direction_1: [0, 30000]
+  direction_2: [0, 30000]
+  hour_local: [0, 23]
+  weekday: [0, 6]
+  hour_of_week: [0, 167]
+  sun_elevation_deg: [-90, 90]
+  wx_temperature_2m: [-10, 50]
+  wx_apparent_temperature: [-20, 55]
+  wx_relative_humidity_2m: [0, 100]
+  wx_cloud_cover: [0, 100]
+  wx_wind_speed_10m: [0, 200]
+  wx_is_day: [0, 1]
+  wx_precipitation: [0, 200]
+  wx_rain: [0, 200]
+  wx_shortwave_radiation: [0, 1500]
+  slope_pct: [0, 40]
+  slope_pct_local_mean: [0, 40]
+  elevation_m: [-5, 100]
+
+allowed_values:
+  source: [archive, live]
+  place_source: [footpath_steepness, ga_dem_5m]
+
+# Columns that may be missing only in documented cases (docs/features/counts_hourly.md). Each
+# rule is [column, operator, value] and selects the rows where the column must be present
+# (error). Operators: == != > >= < <=. Dates are compared as "YYYY-MM-DD" strings.
+required_when:
+  segment_id: [has_location, "==", true]
+  location_type: [has_location, "==", true]
+  sensor_description: [has_location, "==", true]
+  slope_pct: [has_location, "==", true]
+  elevation_m: [has_location, "==", true]
+  uni_teaching: [date_local, ">=", "2015-01-01"]
+  uni_exams: [date_local, ">=", "2015-01-01"]
+  direction_1: [source, "==", live]
+  direction_2: [source, "==", live]
+
+# Weather lags about a week behind the counts, so the newest rows have none yet (warning).
+weather_min_present: 0.99
+
+anomalies:
+  # An hour above this many times its sensor's 99.9th percentile (warning). Big events reach
+  # 2-3x; much more than that is usually a sensor glitch.
+  outlier_factor: 4
+  # A sensor reporting the same count this many hours in a row is likely stuck (warning). Small
+  # counts repeat naturally overnight (1 an hour), so only counts of at least stuck_min_count.
+  stuck_run_hours: 6
+  stuck_min_count: 10
+  # Share of suspected outage hours (suspect_outage_zero) above which to warn.
+  max_outage_share: 0.01
+  # Per-sensor completeness over the most recent days of live data (warning). The live portal
+  # leaves out hours with no one counted, so only daytime hours [start, end) are expected; same
+  # window as counts_hourly.outage_daytime_hours in configs/features.yaml.
+  recent_days: 7
+  daytime_hours: [8, 20]
+  min_recent_completeness: 0.9
+  # The newest hour should be at most this old when the pipeline runs (warning; the portal
+  # publishes with a delay of a day or two).
+  max_age_days: 5
+
+# Comparison with the previous run's statistics (drift over time).
+drift:
+  # Rows only grow (held rows are kept, new hours are added): a drop means rows were lost (error).
+  max_row_drop_share: 0.01
+  # More missing values in any column than last time, in percentage points (warning).
+  max_null_increase_pp: 5
+  # Change in the mean hourly count (warning).
+  max_mean_count_change: 0.2

@@ -7,6 +7,8 @@ dependencies = [
     "dvc[gs]>=3.50",  # data versioning; gs = Google Cloud Storage remote
     "geopandas>=1.0",
     "google-auth>=2.20",  # dvc_push finds bucket credentials the way gcloud tools do
+    # Data validation. <2: GX 2.0 changes the API; >=1.9 has the Condition objects we use.
+    "great-expectations>=1.9,<2",
     "holidays==0.105",  # pinned: holiday rules change between releases
     "numba>=0.60",
     "osmium>=4.0",

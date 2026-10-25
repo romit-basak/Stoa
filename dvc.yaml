@@ -259,3 +259,14 @@ stages:
     do:
       cmd: python -m src.pipeline.validate_segments --site ${item}
       deps: [src/pipeline/validate_segments.py, src/features/schema.py, configs/features.yaml]
+
+  # --- Monitoring (stoa_osm_watch) ---
+
+  watch_osm_changes:
+    cmd: python -m src.pipeline.osm_watch
+    deps:
+      - data/raw/osm/melbourne.osm.pbf
+      - src/pipeline/osm_watch.py
+      - configs/data.yaml
+      - configs/features.yaml
+    always_changed: true

@@ -62,7 +62,7 @@ The pipeline's `dvc_push` task saves and uploads a new version after every run t
 git add data/*.dvc dvc.lock && git commit -m "..."
 ```
 
-**Protecting the bucket.** Soft delete is on (a deleted object can be restored for 7 days). Object versioning is off; a project owner should turn it on, with a rule that keeps old versions from piling up (the per-minute archive rewrites its day files every 15 minutes):
+**Protecting the bucket.** Soft delete is on (a deleted object can be restored for 7 days), and so is object versioning (since 25 October 2026), with a rule that keeps old versions from piling up, since the per-minute archive rewrites its day files every 15 minutes. These are the commands that set it up, run by a project owner:
 
 ```bash
 gcloud storage buckets update gs://stoa-dvc-data --versioning
@@ -74,6 +74,8 @@ cat > /tmp/stoa-lifecycle.json <<'JSON'
 JSON
 gcloud storage buckets update gs://stoa-dvc-data --lifecycle-file=/tmp/stoa-lifecycle.json
 ```
+
+To check them: `gcloud storage buckets describe gs://stoa-dvc-data --format="yaml(versioning_enabled,lifecycle_config)"`.
 
 The count days that have left the portal's window, the pinned OSM extracts and the validation history exist only in our copies; where a second copy lives is still to decide.
 

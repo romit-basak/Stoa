@@ -31,7 +31,7 @@ The work below was done on `ext/pipeline` (plan: data side and training frame; t
 | Melbourne-rich layers unused | Done for CLUE jobs, businesses and canopy; CLUE floor space isn't held | `src/features/surroundings.py` |
 | No feature schema | Done | `src/features/schema.py` |
 | Leak trap left to the user | Done: the training frame applies it, tested | `src/features/training_frame.py` |
-| Bucket protection unknown | Soft delete (7 days) is on; object versioning is off and needs an owner to turn on | README |
+| Bucket protection unknown | Done: soft delete (7 days), object versioning, and a rule deleting old versions once 3 newer exist or after 30 days | README |
 | Irreplaceable data has one remote | Open: where the second copy lives is a team decision | |
 | `.dvc` pointers committed by hand | Still by hand: committing from Airflow needs a deploy key, a team decision | |
 | No drift against training data | Done: PSI per feature against the training frame's reference | `src/pipeline/validate.py` |

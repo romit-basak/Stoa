@@ -28,7 +28,7 @@ def make_table(sensors=(1, 2, 3), days=10) -> pd.DataFrame:
     df["ts_local"] = local
     df["date_local"] = local.dt.tz_localize(None).dt.normalize()
     hour = local.dt.hour  # int64: arithmetic on the int8 column would overflow
-    weekday = local.dt.weekday
+    weekday = local.dt.day_of_week
     df["hour_local"] = hour.astype("int8")
     df["source"] = pd.Categorical(
         ["live"] * len(df), categories=["archive", "live", "wayback"]

@@ -223,7 +223,7 @@ def flag_outages(
 def solar_elevation(ts_utc: pd.Series, lat: float, lon: float) -> np.ndarray:
     """Sun elevation in degrees (NOAA's simplified solar position; accurate to well under 1 degree)."""
     t = pd.DatetimeIndex(ts_utc)
-    doy = t.dayofyear.to_numpy()
+    doy = t.day_of_year.to_numpy()
     hours = t.hour.to_numpy() + t.minute.to_numpy() / 60.0
     gamma = 2 * np.pi / 365 * (doy - 1 + (hours - 12) / 24)
     eqtime = 229.18 * (

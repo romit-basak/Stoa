@@ -7,6 +7,8 @@ sites:
     bbox: [144.892, -37.856, 144.997, -37.770]
     center: [144.9631, -37.8136]
     timezone: Australia/Melbourne
+    # The City's counting sensors are matched to the graph (src/features/sensor_match.py).
+    count_sensors: true
   neu_boston:
     # Northeastern Boston campus (~lon -71.095 to -71.082, lat 42.333 to 42.345) + ~400 m buffer.
     bbox: [-71.100, 42.329, -71.077, 42.349]

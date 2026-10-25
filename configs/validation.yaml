@@ -6,11 +6,13 @@
 #             the report; the run carries on.
 # Paths are relative to the repo root.
 
-table: data/processed/features/melbourne/counts_hourly.parquet
+site: melbourne
+# {site} in the two paths below is replaced by the site above.
+table: data/processed/features/{site}/counts_hourly.parquet
 # Generated from the data with `python -m src.pipeline.validate --write-schema`; review the diff
 # before committing it.
 schema: configs/schemas/counts_hourly.yaml
-reports_dir: data/processed/validation/melbourne
+reports_dir: data/processed/validation/{site}
 
 keys: [location_id, ts_utc]
 

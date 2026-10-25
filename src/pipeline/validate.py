@@ -72,8 +72,12 @@ class Check:
 
 
 def load_validation_config(path: Path | None = None) -> dict[str, Any]:
+    """The validation settings, with {site} in the table and reports paths filled in."""
     with open(path or REPO_ROOT / "configs" / "validation.yaml") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    for key in ("table", "reports_dir"):
+        cfg[key] = cfg[key].format(site=cfg["site"])
+    return cfg
 
 
 # --- Schema ---
@@ -605,7 +609,7 @@ def write_reports(
 
 
 def warning_email(
-    checks: list[Check], run_id: str | None = None
+    checks: list[Check], run_id: str | None = None, report: str | None = None
 ) -> tuple[str, str] | None:
     """Subject and HTML body listing the failed warning checks, or None if there are none."""
     warnings = [c for c in checks if not c.passed and c.severity == WARNING]
@@ -620,8 +624,8 @@ def warning_email(
         "is being versioned, but these warnings need a look:</p>"
         f"<ul>{rows}</ul>"
         + (f"<p>Run: {run_id}</p>" if run_id else "")
-        + "<p>Full report: <code>data/processed/validation/melbourne/"
-        "counts_hourly_validation.json</code>. Checks: docs/pipeline/validation.md.</p>"
+        + (f"<p>Full report: <code>{report}</code>. " if report else "<p>")
+        + "Checks: docs/pipeline/validation.md.</p>"
     )
     return subject, body
 
@@ -646,14 +650,16 @@ def smtp_settings() -> dict[str, Any] | None:
     return conn
 
 
-def send_warning_alert(checks: list[Check]) -> bool:
+def send_warning_alert(checks: list[Check], report: str | None = None) -> bool:
     """Email the warnings to STOA_ALERT_EMAILS through the smtp_default settings. Returns
     whether an email went out.
 
     Nothing here raises: warnings never stop the pipeline, so a failed send is only logged.
     """
     try:
-        message = warning_email(checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"))
+        message = warning_email(
+            checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"), report
+        )
         recipients = [
             e.strip()
             for e in os.environ.get("STOA_ALERT_EMAILS", "").split(",")
@@ -742,7 +748,7 @@ def main() -> None:
     if failed:
         # The failure email covers this run; no separate warning email.
         raise ValidationError(f"{len(failed)} checks failed: {'; '.join(failed)}")
-    send_warning_alert(checks)
+    send_warning_alert(checks, f"{cfg['reports_dir']}/counts_hourly_validation.json")
 
 
 if __name__ == "__main__":

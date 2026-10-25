@@ -127,9 +127,10 @@ def main() -> None:
     unknown = set(stages) - set(STAGES)
     if unknown:
         raise SystemExit(f"unknown stage(s): {', '.join(sorted(unknown))}")
-    if "sensors" in stages and site.name != "melbourne":
+    if "sensors" in stages and not data_cfg["sites"][site.name].get("count_sensors"):
         log.warning(
-            "sensor matching uses the City of Melbourne sensors; skipped for %s",
+            "%s has no count sensors to match (sites.%s.count_sensors); skipped",
+            site.name,
             site.name,
         )
         stages = [s for s in stages if s != "sensors"]

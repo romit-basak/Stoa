@@ -120,6 +120,9 @@ minute_feed:
   dataset: pedestrian-counting-system-past-hour-counts-per-minute
   license: CC BY 4.0
   gcs: gs://stoa-dvc-data/minute_feed
+  # A poll fetches only the last few hours (well over the 15 minutes between polls), except the
+  # first poll of each hour, which fetches the whole day so far.
+  recent_hours: 3
 
 osm:
   # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.

@@ -205,3 +205,36 @@ def test_no_credentials_skips_instead_of_failing(monkeypatch):
     with pytest.raises(SystemExit) as stop:
         mf.main()
     assert stop.value.code == mf.SKIP_EXIT_CODE
+
+
+def test_each_hour_starts_with_a_full_poll_and_the_rest_fetch_recent_hours():
+    assert mf.poll_since(datetime(2026, 10, 25, 7, 0, tzinfo=UTC), 3) is None
+    assert mf.poll_since(datetime(2026, 10, 25, 7, 14, tzinfo=UTC), 3) is None
+    since = mf.poll_since(datetime(2026, 10, 25, 7, 30, 42, tzinfo=UTC), 3)
+    assert since == datetime(2026, 10, 25, 4, 30, tzinfo=UTC)
+
+
+def test_a_recent_poll_asks_the_portal_only_for_rows_since(monkeypatch, tmp_path):
+    asked = {}
+
+    def fake_download(url, dest, params=None, **kw):
+        asked["params"] = params
+        export((61, "2026-10-25 05:00", "2026-10-25", 1, 1)).to_parquet(dest)
+        return dest
+
+    monkeypatch.setattr(mf, "download", fake_download)
+    cfg = {
+        "minute_feed": {"dataset": "d"},
+        "melbourne_portal": {"base_url": "https://example.org"},
+    }
+    mf.fetch_poll(cfg, datetime(2026, 10, 25, 4, 30, tzinfo=UTC))
+    assert asked["params"] == {
+        "where": "sensing_datetime >= date'2026-10-25T04:30:00+00:00'"
+    }
+    mf.fetch_poll(cfg)
+    assert asked["params"] is None
+
+
+def test_an_empty_poll_writes_nothing(tmp_path):
+    empty = poll(T0, (61, "2026-10-25 05:00", "2026-10-25", 1, 1)).iloc[:0]
+    assert mf.add_poll(mf.LocalStore(tmp_path), empty) == {}

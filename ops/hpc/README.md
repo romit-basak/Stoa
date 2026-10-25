@@ -22,6 +22,19 @@ srun --partition=sharing --time=00:05:00 --mem=1G -c 1 ops/hpc/poll_minute_feed.
 scrontab ops/hpc/scrontab.txt
 ```
 
+## How much of the cluster it uses
+
+One CPU core and 1 GB on one `sharing` node for about 20 seconds every 15 minutes: about 32 core-minutes a day, and no GPUs. It counts toward your fair-share usage like any job, but at this size it shouldn't change your priority noticeably.
+
+## Pause and resume
+
+```bash
+scrontab -r                              # pause: removes the schedule (a running poll finishes)
+scrontab ~/stoa/ops/hpc/scrontab.txt     # resume
+```
+
+While it's paused, the feed keeps only the current Melbourne day, so a pause that crosses Melbourne midnight (8 am Boston from November, 9 am before) loses the rest of that day unless someone's `stoa_minute_feed` DAG is running.
+
 ## Check on it
 
 ```bash

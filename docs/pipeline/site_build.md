@@ -25,3 +25,26 @@ Errors fail the task, so a broken table is never versioned: the columns and type
 | Build time | about 25 s for the OSM stages |
 
 Massachusetts Avenue and Ruggles Street lead angular choice, as expected for the campus edge.
+
+## NYC, 25 October 2026
+
+The transfer test needs features only at NYC DOT's 114 count locations, so the build is clipped (`sites.nyc.feature_mask` in `configs/features.yaml`). The extract keeps everything within 1.9 km of a count location: the 200 m mask radius, plus the largest metric radius (1,600 m), plus 100 m. A segment inside the mask therefore gets the same network metrics it would get from a city-wide graph. Segments in the mask are flagged `in_feature_mask`, and shade is computed only for them. NYC's DEM is USGS 3DEP at 10 m, fetched in tiles of at most 2,500 pixels a side.
+
+| | |
+|---|---|
+| Walkable ways in the clip | 251,306 |
+| Segments | 594,712, of which 33,013 are in the mask |
+| Length in the main network | 90.5% (the clip cuts the network into islands at its edge) |
+| Left out of the metric graph | 19,690 segments |
+| Inferred crossings, plaza edges | 68, 13,146 |
+| Entrances | 6,201 (3,984 linked in the routing graph, 2,080 edges split) |
+| OSM building heights | 583,669 tagged, 843 from levels, 9,893 at the 9 m default |
+
+| Stage | Time | Peak memory |
+|---|---|---|
+| Extract | 104 s | 3.1 GB |
+| Graph | 102 s | 1.6 GB |
+| Features | 12 min (angular choice at 1,600 m takes 7 of them) | 4.8 GB |
+| Shade | 5 min | 3.1 GB |
+
+All segment checks pass. The NYC counts are never read by the training frame (`check_site` rejects every site except the one the hourly table is built for, Melbourne).

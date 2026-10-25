@@ -30,7 +30,7 @@ The columns are generic: there is never one per venue, which would amount to a l
 | Column | Variant | Meaning |
 |---|---|---|
 | `wc_tree_share`, `wc_grass_share`, `wc_built_share` | Portable | Share of ESA WorldCover 2021 pixels (10 m) of each class in a window about 50 m around the segment. Too coarse for the path itself; it describes the setting |
-| `dem_slope_mean_pct`, `dem_slope_max_pct` | Portable | Grade along the segment, sampled every 10 m from the site's DEM, so the GA 5 m, USGS 1 m and USGS 10 m DEMs are measured the same way. The CoM footpath survey slope (`slope_pct`, per sensor) stays Melbourne-only |
+| `dem_slope_mean_pct`, `dem_slope_max_pct` | Portable | Grade along the segment, sampled every 10 m from the site's DEM, so the GA 5 m, USGS 1 m and USGS 10 m DEMs are measured the same way. The rise is taken over at least 10 m, so a kerb or wall between two close samples doesn't read as a cliff. Empty on bridges and in tunnels, and where the DEM has no data: the GA LiDAR tile fills ground outside its survey with 0 and declares no nodata, so `dem_nodata: 0` in `configs/features.yaml` marks it. The CoM footpath survey slope (`slope_pct`, per sensor) stays Melbourne-only |
 | `canopy_cover` | Melbourne | Share of a 25 m buffer under the CoM 2021 tree canopy |
 | `clue_jobs_400`, `clue_jobs_800` | Melbourne | Jobs in CLUE blocks (latest census year) within 400 or 800 m along the network |
 | `businesses_200`, `businesses_400` | Melbourne | Business establishments (latest year) within 200 or 400 m along the network |

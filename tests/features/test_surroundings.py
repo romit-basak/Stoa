@@ -98,3 +98,13 @@ def test_bridges_get_no_ground_slope(tmp_path):
         np.isnan(out.loc[0, "dem_slope_mean_pct"])
         and out.loc[1, "dem_slope_mean_pct"] > 5
     )
+
+
+def test_ground_outside_the_dem_survey_is_missing_not_a_cliff(tmp_path):
+    dem = np.full((100, 100), 40.0, dtype="float32")
+    dem[:, 50:] = 0.0  # the fill outside the survey, with no nodata declared
+    path = raster(tmp_path / "filled.tif", dem)
+    edges = segments([(10, 50), (90, 50)], [(60, 20), (90, 20)])
+    out = su.segment_slope(edges, path, 10.0, nodata=0)
+    assert out.loc[0, "dem_slope_max_pct"] == pytest.approx(0.0, abs=1e-6)
+    assert np.isnan(out.loc[1, "dem_slope_max_pct"])

@@ -7,7 +7,9 @@ Portable (any city has the inputs):
 - dem_slope_mean_pct, dem_slope_max_pct: the segment's grade from the site's DEM, sampled every
   `slope_step_m` along it (and measured over at least that distance), so DEMs of different
   resolution (GA 5 m, USGS 1 m or 10 m) are measured the same way. Empty on bridges and in
-  tunnels, where a bare-earth DEM doesn't describe the walkway.
+  tunnels, where a bare-earth DEM doesn't describe the walkway, and off the DEM's coverage
+  (its nodata value, or the site's `dem_nodata`: the GA LiDAR tile fills uncovered ground
+  with 0 and declares no nodata).
 
 Melbourne-rich (City of Melbourne layers; empty at other sites):
 - canopy_cover: share of a `canopy_buffer_m` buffer under tree canopy (2021 urban forest);
@@ -51,18 +53,28 @@ def _points_along(
 
 
 def _sample(
-    path, pts: np.ndarray, crs: int, array: np.ndarray | None = None
+    path,
+    pts: np.ndarray,
+    crs: int,
+    array: np.ndarray | None = None,
+    nodata: float | None = None,
 ) -> np.ndarray:
-    """Raster values (band 1, or `array` on the raster's grid) at points given in `crs`."""
+    """Raster values (band 1, or `array` on the raster's grid) at points given in `crs`.
+
+    NaN outside the raster and where band 1 holds the raster's nodata or `nodata`.
+    """
     with rasterio.open(path) as src:
         tf = Transformer.from_crs(crs, src.crs, always_xy=True)
         x, y = tf.transform(shapely.get_x(pts), shapely.get_y(pts))
         rows, cols = rasterio.transform.rowcol(src.transform, x, y)
         rows, cols = np.asarray(rows), np.asarray(cols)
         data = src.read(1) if array is None else array
+        missing = [v for v in (src.nodata, nodata) if v is not None]
     inside = (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     out = np.full(len(pts), np.nan)
     out[inside] = data[rows[inside], cols[inside]]
+    if missing and array is None:
+        out[np.isin(out, missing)] = np.nan
     return out
 
 
@@ -98,14 +110,16 @@ def landcover_shares(edges: gpd.GeoDataFrame, path, radius_m: float) -> pd.DataF
     return out
 
 
-def segment_slope(edges: gpd.GeoDataFrame, path, step_m: float) -> pd.DataFrame:
+def segment_slope(
+    edges: gpd.GeoDataFrame, path, step_m: float, nodata: float | None = None
+) -> pd.DataFrame:
     """Mean and steepest grade along each segment, in percent, from the DEM."""
     out = pd.DataFrame({"segment_id": edges["segment_id"].to_numpy()})
     if path is None or not path.exists():
         out["dem_slope_mean_pct"] = out["dem_slope_max_pct"] = np.nan
         return out
     pts, rows, dist = _points_along(edges, step_m, 2)
-    z = _sample(path, pts, edges.crs.to_epsg())
+    z = _sample(path, pts, edges.crs.to_epsg(), nodata=nodata)
     same = rows[1:] == rows[:-1]
     # Rise over at least step_m: on a 2 m segment, two samples either side of a DEM pixel edge
     # (a wall, a kerb) would otherwise read as a cliff.
@@ -185,7 +199,8 @@ def surroundings(
     path = lambda key: raw / files[key] if key in files else None
     out = landcover_shares(edges, path("worldcover"), cfg["landcover_radius_m"])
     out = out.merge(
-        segment_slope(edges, path("dem"), cfg["slope_step_m"]), on="segment_id"
+        segment_slope(edges, path("dem"), cfg["slope_step_m"], files.get("dem_nodata")),
+        on="segment_id",
     )
 
     canopy = (

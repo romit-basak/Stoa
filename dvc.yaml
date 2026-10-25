@@ -173,3 +173,74 @@ stages:
       - src/pipeline/validate.py
       - configs/validation.yaml
       - configs/schemas/counts_hourly.yaml
+
+  # --- Per-minute counts (stoa_minute_feed): written to the bucket, not to data/ ---
+
+  poll_minute_feed:
+    cmd: python -m src.ingest.minute_feed --bucket
+    deps:
+      - src/ingest/minute_feed.py
+      - configs/data.yaml
+    always_changed: true
+
+  # --- Site builds (stoa_site_build), one stage per site ---
+
+  site_pull_osm:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.osm --site ${item}
+      deps: [src/ingest/osm.py, configs/data.yaml]
+
+  site_pull_dem:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.dem --site ${item}
+      deps: [src/ingest/dem.py, configs/data.yaml]
+
+  site_pull_worldcover:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.worldcover --site ${item}
+      deps: [src/ingest/worldcover.py, configs/data.yaml]
+
+  site_pull_weather:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.weather --site ${item}
+      deps: [src/ingest/weather.py, configs/data.yaml]
+      always_changed: true
+
+  site_pull_calendars:
+    cmd: python -m src.ingest.calendars
+    deps: [src/ingest/calendars.py, configs/data.yaml]
+    always_changed: true
+
+  site_pull_extras:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.pipeline.site_extras --site ${item}
+      deps: [src/pipeline/site_extras.py, src/ingest, configs/data.yaml]
+
+  site_osm_extract:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only extract --if-stale
+      deps: ["data/raw/osm/${item}.osm.pbf", src/features, configs/features.yaml]
+
+  site_osm_graph:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only graph --if-stale
+      deps: [src/features, configs/features.yaml]
+
+  site_osm_segment_features:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only features --if-stale
+      deps: [src/features, configs/features.yaml]
+
+  site_validate_segments:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.pipeline.validate_segments --site ${item}
+      deps: [src/pipeline/validate_segments.py, src/features/schema.py, configs/features.yaml]

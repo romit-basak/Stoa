@@ -32,7 +32,8 @@ def main() -> None:
     lon_min, lat_min, lon_max, lat_max = site["bbox"]
     out = raw_dir(cfg, SOURCE)
 
-    if args.site == "melbourne":
+    source = site.get("dem", {}).get("source")
+    if source == "ga_5m":
         res = dem["ga_5m_res_deg"]
         params = {
             "service": "WCS",
@@ -48,14 +49,14 @@ def main() -> None:
         dest = out / f"{args.site}_ga_lidar_5m.tif"
         download(dem["ga_5m_wcs"], dest, params=params)
         record(out, dest, dem["ga_5m_wcs"], params=params, license="CC-BY-4.0")
-    elif "utm_epsg" in site:
-        # USGS 3DEP 1 m clip in the site's UTM zone, sized so pixels are exactly res metres.
+    elif source == "usgs_3dep":
+        # USGS 3DEP clip in the site's UTM zone, sized so pixels are exactly res metres.
         epsg = site["utm_epsg"]
         to_utm = Transformer.from_crs(4326, epsg, always_xy=True)
         xmin, ymin, xmax, ymax = to_utm.transform_bounds(
             lon_min, lat_min, lon_max, lat_max
         )
-        res = dem["usgs_3dep_res_m"]
+        res = site["dem"]["res_m"]
         width, height = math.ceil((xmax - xmin) / res), math.ceil((ymax - ymin) / res)
         params = {
             "bbox": f"{xmin},{ymin},{xmin + width * res},{ymin + height * res}",
@@ -67,7 +68,7 @@ def main() -> None:
             "interpolation": "RSP_BilinearInterpolation",
             "f": "image",
         }
-        dest = out / f"{args.site}_usgs_3dep_1m.tif"
+        dest = out / f"{args.site}_usgs_3dep_{res:g}m.tif"
         download(dem["usgs_3dep_imageserver"], dest, params=params)
         record(
             out,
@@ -75,6 +76,11 @@ def main() -> None:
             dem["usgs_3dep_imageserver"],
             params=params,
             license="public domain (USGS)",
+        )
+    else:
+        raise SystemExit(
+            f"sites.{args.site}.dem.source in configs/data.yaml is {source!r}: "
+            "set it to ga_5m (Australia) or usgs_3dep (US)"
         )
 
     for name, url in dem["global_tiles"].get(args.site, {}).items():

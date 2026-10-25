@@ -112,15 +112,14 @@ melbourne_portal:
     dsm_2018_0p1m: https://s3-ap-southeast-2.amazonaws.com/gis-opendata-com/2018-DSM/CoM_DSM_2018.zip
     point_cloud_2018: https://opendatasoft-s3.s3.ap-southeast-2.amazonaws.com/attachments/CoM_Point_Cloud_2018_LAS.zip
 
-# Per-minute counts. The portal keeps only the latest stretch (refreshed every 15 minutes), so
-# a scheduled GitHub Actions workflow archives every poll as one file per local day in the
-# repo's GitHub Releases (src/ingest/minute_feed.py, .github/workflows/minute_feed.yml).
+# Per-minute counts. The portal keeps only the current Melbourne day (from about 01:00), so the
+# stoa_minute_feed DAG polls it every 15 minutes and merges each poll into one file per local day
+# in the project bucket (src/ingest/minute_feed.py). The prefix sits outside DVC's own folders
+# (files/md5/ and the two-letter legacy ones), so `dvc gc --cloud` never touches it.
 minute_feed:
   dataset: pedestrian-counting-system-past-hour-counts-per-minute
   license: CC BY 4.0
-  github_repo: romit-basak/Stoa
-  # One release per year: minute-feed-2026, minute-feed-2027, ...
-  release_prefix: minute-feed-
+  gcs: gs://stoa-dvc-data/minute_feed
 
 osm:
   # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.

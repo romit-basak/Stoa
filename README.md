@@ -87,7 +87,7 @@ Every source is configured in `configs/data.yaml`. Each script writes to `data/r
 .venv/bin/python -m src.ingest.events             # AFL fixtures (Squiggle)
 .venv/bin/python -m src.ingest.afl_attendance     # AFL crowd figures (AFL Tables)
 .venv/bin/python -m src.ingest.calendars          # public holidays per site + Vic Important Dates
-.venv/bin/python -m src.ingest.minute_feed --sync # per-minute counts archived since 25 Oct 2026 (below)
+.venv/bin/python -m src.ingest.minute_feed --sync # per-minute counts archived in the bucket since 25 Oct 2026 (below)
 
 # NEU Boston (demonstration)
 .venv/bin/python -m src.ingest.dem --site neu_boston          # USGS 3DEP 1 m clip
@@ -109,7 +109,7 @@ Options:
 - `osm` keeps an existing extract (graph segment IDs belong to one extract); `--refresh` downloads the latest.
 - `weather` re-fetches only missing years and the last two; `--full` re-fetches every year.
 - School terms and university teaching periods are hand-maintained in `configs/calendars/`.
-- **Per-minute counts.** The portal's per-minute feed keeps only the latest stretch of minutes, so the scheduled workflow `.github/workflows/minute_feed.yml` polls it every 15 minutes and keeps one parquet file per Melbourne day in this repo's GitHub Releases (`minute-feed-2026`, and one per later year). It runs on GitHub's servers, so no one's machine has to be on. `minute_feed --sync` copies the files into `data/raw/melbourne_portal/minute_feed/`. See [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
+- **Per-minute counts.** The portal's per-minute feed keeps only the current Melbourne day (from about 01:00), so the `stoa_minute_feed` DAG polls it every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. A poll has to happen before each Melbourne midnight (7–8 am in Boston from November) or the rest of that day is lost. Every teammate's Airflow can run the DAG at the same time: writes are checked against the file's version, so nobody overwrites anyone else. Without bucket credentials it's skipped. `minute_feed --sync` copies the files into `data/raw/melbourne_portal/minute_feed/`. See [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
 
 ### Build features
 

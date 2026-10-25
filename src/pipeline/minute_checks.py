@@ -2,8 +2,9 @@
 
 All are warnings, since the archive is extra evidence and not the training table:
 - missing days: every Melbourne day since the archive began has a file;
-- late polls: each finished day's last minute is no earlier than `min_last_local`. A later
-  first minute is normal: the feed starts its day at about 01:00;
+- late polls: each finished day's last minute is no earlier than `min_last_local`. The feed
+  keeps a day until a reset at about 02:00 the next morning, so a short last day means no poll
+  landed between midnight and the reset (which also costs the next day's first 55 minutes);
 - duplicates: rows sharing a sensor and minute (the portal publishes some);
 - hourly sums: summed minutes per sensor-hour against the hourly table, for hours the archive
   covers. Minutes with no one counted are absent from the feed, so a close match also says the

@@ -122,6 +122,16 @@ minute_feed:
   # One release per year: minute-feed-2026, minute-feed-2027, ...
   release_prefix: minute-feed-
 
+# Stanford Drone Dataset: trajectories on a university campus, for route-choice validation only.
+# CC BY-NC-SA 3.0 (the original's licence; the mirror's label is wrong): no model fitted to it is
+# shipped or distributed (CLAUDE.md core rule 5). Annotations only, no video.
+stanford_drone:
+  kaggle_dataset: aryashah2k/stanford-drone-dataset
+  original_url: https://cvgl.stanford.edu/projects/uav_data/
+  license: CC BY-NC-SA 3.0
+  # Count window: 1,800 frames, a minute at the videos' 30 frames per second.
+  frames_per_window: 1800
+
 osm:
   # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.
   extracts:

@@ -9,9 +9,7 @@ Writes to data/processed/bias/melbourne/:
 - sensor_slices.csv: one row per sensor with its slices and the values behind them;
 - slice_representation_meta.json.
 It needs no model: it shows which places, times and conditions the training data
-under-represents, before any error is measured. The count distribution per group (median,
-90th percentile, zero share), coverage by year and the cross-tables follow Arshmehar's notebook
-(04_bias_slicing.ipynb).
+under-represents, before any error is measured.
 
 Each group is compared with a reference where one exists:
 - time, calendar, weather, era and AFL slices: every hour of the study period, so a ratio

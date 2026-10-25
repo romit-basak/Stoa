@@ -6,11 +6,6 @@ Settings are in configs/bias.yaml. The same slices feed the representation repor
 The data has no demographic attributes: Stoa holds no personal data (CLAUDE.md, core rule 6).
 Bias here means the data, or a model, serving some places, times and conditions worse than
 others, so the slices are places, times, weather, eras, data sources and sensor quality.
-
-The slice list follows Arshmehar's proposal and her notebook (04_bias_slicing.ipynb): precinct,
-sensor volume, time of day, weekday or weekend, weather, era, data source, slope and data
-quality, plus the held-out sensor lists and the sensor start period. Calendar flags, AFL
-days, the amenity tier, the match-review flag and the place references were added here.
 """
 
 from __future__ import annotations

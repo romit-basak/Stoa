@@ -45,8 +45,9 @@ on_failure_alert = (
 @dag(
     dag_id="stoa_pipeline",
     start_date=datetime(2026, 10, 1, tzinfo=UTC),
-    # The portal adds new counts daily and keeps only ~2 years, so pull daily and never
-    # miss a window. catchup=False: a missed day is covered by the next run's merge.
+    # Counts and weather arrive daily, and validation should catch a dead sensor or a stale
+    # feed within a day. catchup=False: each run re-fetches from two days before the newest
+    # held date, so a missed day is covered by the next run's merge.
     schedule="@daily",
     catchup=False,
     max_active_runs=1,  # two runs merging into the same parquet at once would clash
@@ -163,7 +164,7 @@ def stoa_pipeline():
     @task.bash
     def bias_errors():
         # Bias steps 2-3: a baseline's error per slice on held-out sensors, with and without
-        # reweighting. About 10 minutes, so it reruns only weekly or when its settings change.
+        # reweighting. About 15-20 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
 
     # No retries: bad data fails the same way every time, so retrying would only delay the

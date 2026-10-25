@@ -281,9 +281,10 @@ def sensor_osm_features(fcfg: dict[str, Any]) -> list[Column]:
     return SENSOR_COLUMNS + [c for c in segment_features(fcfg) if c.name not in skip]
 
 
-def tables(site: str = "melbourne") -> dict[str, list[Column]]:
+def tables(site: str | None = None) -> dict[str, list[Column]]:
+    """Every table's columns for a site (default: the site the hourly table is built for)."""
     data_cfg, fcfg = load_config(), load_features_config()
-    tz = data_cfg["sites"][site]["timezone"]
+    tz = data_cfg["sites"][site or fcfg["counts_hourly"]["site"]]["timezone"]
     return {
         "counts_hourly": counts_hourly(tz),
         "osm_segment_features": segment_features(fcfg),

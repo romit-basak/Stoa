@@ -6,7 +6,7 @@
 | **Provider** | City of Melbourne Open Data, `pedestrian-counting-system-past-hour-counts-per-minute` |
 | **License** | CC BY (the dataset's licence field). Credit "Source: City of Melbourne Open Data". |
 | **Access** | `python -m src.ingest.minute_feed --sync` copies the archive into `data/raw/melbourne_portal/minute_feed/` (needs bucket credentials, like `dvc pull`). |
-| **Archive** | The portal keeps only the current Melbourne day, so the `stoa_minute_feed` DAG (`dags/stoa_minute_feed.py`) polls it every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. Each write goes through only if the file hasn't changed since it was read, so several machines can poll at once. Archived from 2026-10-25; nothing earlier exists anywhere. |
+| **Archive** | The portal keeps only the current Melbourne day, so the `stoa_minute_feed` DAG (`dags/stoa_minute_feed.py`) polls it every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. The same poll runs every 15 minutes on Northeastern's Explorer cluster through Slurm's `scrontab` (`ops/hpc/`), so the archive doesn't depend on anyone's laptop being awake. Each write goes through only if the file hasn't changed since it was read, so several machines can poll at once. Archived from 2026-10-25; nothing earlier exists anywhere. |
 | **Update cadence** | The portal says every 15 minutes. |
 
 ## Schema
@@ -30,5 +30,5 @@ One file per local day, `minute_feed_YYYY-MM-DD.parquet`:
 
 ## Known issues
 
-- The DAG runs only where someone's Airflow is up. Missed polls during a Melbourne day cost nothing as long as one comes before its restart; a day with no late poll keeps only what earlier polls saw.
+- Polls can be late or missed (a queue wait on the cluster, a sleeping laptop). That costs nothing as long as one comes before the day's restart; a day with no late poll keeps only what earlier polls saw.
 - The portal's description is from 2020 and still mentions an issue with sensors 67-69.

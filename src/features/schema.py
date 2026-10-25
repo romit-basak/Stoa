@@ -269,6 +269,26 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
             False,
             "Metro Tunnel stations; the training frame caps it before they opened",
         ),
+        _f(
+            "wc_tree_share",
+            "float64",
+            "worldcover",
+            True,
+            "Tree share, about 50 m around",
+        ),
+        _f("wc_grass_share", "float64", "worldcover", True),
+        _f("wc_built_share", "float64", "worldcover", True),
+        _f("dem_slope_mean_pct", "float64", "dem", True, "Grade along it, every 10 m"),
+        _f("dem_slope_max_pct", "float64", "dem", True),
+        _f("canopy_cover", "float64", "com_canopy", False, "Tree canopy within 25 m"),
+        *[
+            _f(f"clue_jobs_{r}", "float64", "com_clue", False, f"Jobs within {r} m")
+            for r in fcfg["surroundings"]["jobs_radii_m"]
+        ],
+        *[
+            _f(f"businesses_{r}", "float64", "com_business", False)
+            for r in fcfg["surroundings"]["business_radii_m"]
+        ],
         _f("degree_min", "int64", o, True),
         _f("degree_max", "int64", o, True),
     ]

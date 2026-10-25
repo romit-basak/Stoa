@@ -29,6 +29,8 @@ from src.features.common import Site, config_hash, log, write_meta, write_parque
 from src.features.graph import node_table
 from src.features.network_metrics import network_metrics, primal_csr
 from src.features.opening_hours import parse_opening_hours
+from src.features.surroundings import surroundings
+from src.ingest.common import load_config
 
 HIGHWAY_CLASSES = [
     "footway",
@@ -355,6 +357,9 @@ def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
     t = time.perf_counter()
     trans = transit_features(edges, nodes, transit, fcfg, csr)
     runtimes["transit"] = time.perf_counter() - t
+    t = time.perf_counter()
+    surr = surroundings(edges, nodes, site.name, load_config(), fcfg, csr)
+    runtimes["surroundings"] = time.perf_counter() - t
     # Metrics on the metric graph only (graph.py): edges left out get none, not zeros.
     in_metric = (
         edges["in_metric_graph"].to_numpy(dtype=bool)
@@ -381,7 +386,7 @@ def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
     )
     metrics = metrics.drop(columns=["degree_min", "degree_max"])
 
-    for part in (amen, built, trans, degree, metrics):
+    for part in (amen, built, trans, surr, degree, metrics):
         feats = feats.merge(part, on="segment_id", how="left", validate="one_to_one")
     feats.insert(1, "way_id", edges["way_id"].to_numpy())
     feats.insert(2, "name", edges["name"].to_numpy())

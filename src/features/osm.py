@@ -83,7 +83,16 @@ def fingerprints(
     }
     fp["graph"] = _hash(fp["extract"], "graph")
     events_log = REPO_ROOT / "configs" / "events.yaml"
-    fp["features"] = _hash(fp["graph"], "features", _file_hash(events_log))
+    surroundings = fcfg.get("surroundings", {}).get("sites", {}).get(site.name, {})
+    inputs = [
+        REPO_ROOT / data_cfg["raw_dir"] / p for p in sorted(surroundings.values())
+    ]
+    fp["features"] = _hash(
+        fp["graph"],
+        "features",
+        _file_hash(events_log),
+        *(_file_hash(p) for p in inputs),
+    )
     heights = fcfg.get("shade", {}).get("city_heights", {}).get(site.name, {})
     fp["shade"] = _hash(
         fp["graph"],

@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import numpy as np
 import osmium
 import pandas as pd
 import pyogrio
-from shapely.geometry import LineString
+from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from src.features.common import (
     Site,
@@ -117,6 +118,59 @@ def read_walkable_ways(pbf: Path, bbox, fcfg: dict[str, Any]) -> gpd.GeoDataFram
     return gpd.GeoDataFrame(rows, geometry="geometry", crs=4326)
 
 
+def is_plaza(tags: dict[str, str], from_way: bool) -> bool:
+    """A pedestrian area: highway=pedestrian on a closed way tagged area=yes or a multipolygon
+    relation, or area:highway=pedestrian."""
+    if tags.get("area:highway") == "pedestrian":
+        return True
+    return tags.get("highway") == "pedestrian" and (
+        tags.get("area") == "yes" or not from_way
+    )
+
+
+def read_plazas(pbf: Path, bbox) -> gpd.GeoDataFrame:
+    """Pedestrian areas with the node IDs of their outlines (WGS84).
+
+    GDAL's polygon layer drops node IDs, which the graph needs to find where paths reach a
+    plaza, so the areas are assembled with pyosmium instead.
+    """
+    rows = []
+    fp = osmium.FileProcessor(str(pbf)).with_areas()
+    for obj in fp:
+        if not obj.is_area():
+            continue
+        tags = dict(obj.tags)
+        if not is_plaza(tags, obj.from_way()):
+            continue
+        polys, refs = [], []
+        for outer in obj.outer_rings():
+            shell = [(n.lon, n.lat) for n in outer]
+            refs += [n.ref for n in outer]
+            holes = [
+                [(n.lon, n.lat) for n in inner] for inner in obj.inner_rings(outer)
+            ]
+            polys.append(Polygon(shell, holes))
+        if not polys:
+            continue
+        geom = polys[0] if len(polys) == 1 else MultiPolygon(polys)
+        c = geom.centroid
+        if not _in_bbox(c.x, c.y, bbox):
+            continue
+        rows.append(
+            {
+                "osm_id": obj.orig_id(),
+                "osm_type": "way" if obj.from_way() else "relation",
+                "name": tags.get("name"),
+                "node_ids": sorted(set(refs)),
+                "geometry": geom,
+            }
+        )
+    cols = ["osm_id", "osm_type", "name", "node_ids"]
+    if not rows:
+        return gpd.GeoDataFrame(columns=cols, geometry=gpd.GeoSeries([], crs=4326))
+    return gpd.GeoDataFrame(rows, geometry="geometry", crs=4326)
+
+
 def _read_layer(
     pbf: Path, layer: str, bbox, where: str | None = None
 ) -> gpd.GeoDataFrame:
@@ -160,6 +214,42 @@ def build_pois(points, polys, fcfg: dict[str, Any], crs: int) -> gpd.GeoDataFram
     # Buildings tagged as a POI and a node POI inside them are both kept: they are often
     # distinct (a mall and its shops). Exact duplicates (same OSM object) cannot occur.
     return _finish(df, crs, ["name", "opening_hours", "amenity", "shop"])
+
+
+def build_entrances(points, cfg: dict[str, Any], crs: int) -> gpd.GeoDataFrame:
+    """Entrances people walk through: building entrances (entrance=*) and station entrances
+    (railway=subway_entrance), without the ones for vehicles or emergencies."""
+    skip = set(cfg.get("exclude_values", []))
+    tags = points["tags"]
+    station = tags.map(lambda t: t.get("railway") == "subway_entrance")
+    building = tags.map(lambda t: "entrance" in t and t["entrance"] not in skip)
+    df = points[station | building].copy()
+    df["kind"] = np.where(station[station | building], "station", "building")
+    return _finish(df, crs, ["entrance", "name"])
+
+
+def add_station_entrances(
+    transit: gpd.GeoDataFrame, entrances: gpd.GeoDataFrame, within_m: float
+) -> gpd.GeoDataFrame:
+    """Station entrances as extra rail access points, dated like the station they belong to.
+
+    An entrance takes the opening date of the nearest rail station within `within_m`, so the
+    entrances of a station that opened during the count record are capped before it opened,
+    like the station itself (training frame, Metro Tunnel cap).
+    """
+    ent = entrances[entrances["kind"] == "station"]
+    stations = transit[transit["mode"] == "rail_station"]
+    if ent.empty or stations.empty:
+        return transit
+    near = gpd.sjoin_nearest(
+        ent[["osm_type", "osm_id", "tags", "name", "geometry"]],
+        stations[["opened", "geometry"]],
+        how="left",
+        max_distance=within_m,
+    )
+    near = near[~near.index.duplicated()]
+    added = near.drop(columns="index_right").assign(mode="rail_station")
+    return pd.concat([transit, added[transit.columns]], ignore_index=True)
 
 
 def build_transit(
@@ -217,6 +307,9 @@ def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
     )
     write_parquet(ped, out / "ped_areas.parquet")
 
+    plazas = read_plazas(site.pbf, bbox).to_crs(crs)
+    write_parquet(plazas, out / "plazas.parquet")
+
     # GDAL only turns closed ways into polygons for some tags; a station mapped as a closed way
     # (most underground ones, e.g. Melbourne Central) lands in the line layer instead.
     station_lines = _read_layer(
@@ -229,6 +322,11 @@ def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
     transit = build_transit(
         points, pd.concat([polys, station_lines]), fcfg, crs, recent
     )
+    entrances = build_entrances(points, fcfg.get("entrances", {}), crs)
+    write_parquet(entrances, out / "entrances.parquet")
+    transit = add_station_entrances(
+        transit, entrances, fcfg.get("entrances", {}).get("station_within_m", 300)
+    )
     write_parquet(transit, out / "transit.parquet")
 
     counts = {
@@ -237,6 +335,8 @@ def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
         "buildings": len(buildings),
         "green": len(green),
         "ped_areas": len(ped),
+        "plazas": len(plazas),
+        "entrances": len(entrances),
         "transit": len(transit),
     }
     write_meta(

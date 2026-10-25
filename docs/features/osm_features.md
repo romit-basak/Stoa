@@ -47,6 +47,27 @@ df = df.merge(hours, on=["segment_id", "hour_of_week"], how="left").fillna(
 - Filter or check rows where `needs_review` is true until the sensor matches have been hand-checked (see below).
 - For predictions on segments with no sensor, use `osm_segment_features.parquet` directly. It has the same columns, keyed on `segment_id`.
 
+## What the graph adds to the OSM ways
+
+Settings are in `configs/features.yaml` (`graph`, `entrances`); the code is `src/features/graph.py`.
+
+**The metric graph.** Some streets are mapped twice: as a road centreline tagged `sidewalk=separate`, and as the two sidewalks beside it. Network metrics computed over all of them count every route along such a street three times and send walkers down the middle of the road. So betweenness, closeness and angular choice are computed on the *metric graph*, which leaves those centrelines out (`in_metric_graph` false; their metric columns are empty, not zero). Leaving a road out would cut its two sidewalks apart wherever no crossing is mapped, so first:
+- **Crossings are inferred** at junctions of those roads: between the closest pair of sidewalk ends on opposite sides, within 20 m of the junction, at most 30 m apart, when the straight link crosses the road, no mapped crossing is within 30 m, and the sidewalks aren't already joined by a walk under three times the link. They are `xing-<u>-<v>` segments, flagged `is_inferred` (and `is_crossing`).
+- **Bridging roads stay in.** A road piece goes back into the metric graph if the network would otherwise fall apart there, so the main connected network keeps its share of length.
+
+Walking distances (amenities, transit) use every edge, including the left-out roads: people do walk along them.
+
+**Plazas.** Pedestrian areas (`highway=pedestrian` with `area=yes`, or `area:highway=pedestrian`) aren't ways a walker follows, so the walk filter drops them. Instead, every place a path reaches the plaza's outline (a shared OSM node, or a path end within 2 m) is joined to its six nearest others by a straight edge, where the edge stays inside the plaza: a concave plaza is never crossed outside its shape. They are `area-<osm_id>-<u>-<v>` segments, flagged `is_area_edge`. The outlines come from pyosmium, which keeps node IDs (`plazas.parquet` in the extract).
+
+**Entrances** (`entrances.parquet`): building entrances (`entrance=*`, except garage, emergency, service and `no`) and station entrances (`railway=subway_entrance`). They join a separate **routing graph** (`graph/routing_edges.parquet`), for walkers and store siting, so the metric graph and its segment IDs don't change:
+- an entrance that is a node of a path splits that path at itself;
+- otherwise it gets a link `ent-<osm_id>` to the nearest node within 10 m, or to the nearest point of an edge within 30 m, which splits the edge into `<segment_id>.0`, `<segment_id>.1` and so on (`graph/segment_lineage.parquet` maps each piece to its parent and the fraction of it it covers);
+- entrances farther than 30 m stay unconnected.
+
+Station entrances are also rail access points: `rail_station_dist_m` measures to the nearest station or station entrance. Each entrance takes the opening date of the nearest rail station within 300 m, so the Metro Tunnel's entrances are capped before 30 November 2025 like its stations (`recent_station_dist_m`).
+
+**Detected paths.** If `data/interim/osm/<site>/detected_paths.parquet` exists (lines, with an optional `surface_class`), each line becomes a `det-<n>` edge flagged `is_detected`, its ends joined to the nearest node within 5 m. This is where the path segmentation model's output will enter; nothing writes the file yet.
+
 ## Melbourne run (extract of 2026-09-26)
 
 | | |
@@ -82,6 +103,7 @@ One row per segment. `segment_id` is `<OSM way id>-<k>`, where `k` numbers the p
 | `name`, `highway` | OSM street name (65% missing: most footways have none) and raw highway tag |
 | `length_m`, `bearing_deg` | Length; direction from north folded to 0–180 |
 | `in_main_component` | On the main connected network (false for islands such as isolated indoor corridors) |
+| `in_metric_graph` | False for separate-sidewalk road centrelines left out of the network metrics (above) |
 | `geometry` | LineString, site CRS |
 
 **Path type and tags.** Booleans, except where noted.
@@ -90,6 +112,7 @@ One row per segment. `segment_id` is `<OSM way id>-<k>`, where `k` numbers the p
 |---|---|
 | `hw_<class>` | One-hot highway class: footway, path, pedestrian, steps, corridor, living_street, residential, service, unclassified, tertiary, secondary, primary, trunk, cycleway (only those open to pedestrians), track, other. `_link` roads count as their main class. |
 | `is_sidewalk`, `is_crossing`, `is_steps`, `is_indoor`, `is_bridge`, `is_tunnel`, `is_covered` | From `footway`, `highway`, `indoor`, `bridge`, `tunnel` and `covered` tags |
+| `is_inferred`, `is_area_edge`, `is_detected` | Segments the graph adds: inferred crossings, edges across plazas, paths detected in imagery (above) |
 | `sidewalk_both`, `sidewalk_one_side`, `sidewalk_none`, `sidewalk_separate`, `sidewalk_missing` | Sidewalk tagging on roads. `separate` means the footpaths are their own segments. |
 | `surface_paved`, `lit` | 1/0, NaN when untagged; paired with `surface_paved_missing` and `lit_missing` |
 | `width_m`, `width_missing` | Tagged width (97% missing) |

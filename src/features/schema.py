@@ -173,6 +173,8 @@ FLAGS = [
     "is_tunnel",
     "is_covered",
     "is_inferred",
+    "is_area_edge",
+    "is_detected",
 ]
 SIDEWALK = [
     "sidewalk_both",

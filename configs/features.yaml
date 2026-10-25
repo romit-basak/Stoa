@@ -100,6 +100,21 @@ graph:
   # The build fails if leaving the roads out shrinks the main component's share of length by
   # more than this (the guard that keeps bridging roads should prevent it).
   max_main_component_drop: 0.01
+  # Edges across pedestrian plazas (highway=pedestrian areas), which the walk filter drops as
+  # ways: straight lines between where paths reach the plaza, kept inside its outline.
+  plaza_edges:
+    enabled: true
+    access_tolerance_m: 2   # a path ending this close to the outline reaches the plaza
+    max_neighbours: 6       # each access point joins at most this many others
+
+# Entrances (src/features/osm_extract.py, graph.py): building and station entrances, joined to
+# the walking network in a separate routing graph. Station entrances are also rail access
+# points for the transit distances.
+entrances:
+  exclude_values: [garage, emergency, "no", service]
+  station_within_m: 300   # an entrance belongs to the nearest station this close
+  node_snap_m: 10         # join an entrance to an existing node this close
+  max_link_m: 30          # else to the nearest edge this close, splitting it
 
 network_metrics:
   radii_m: [400, 800, 1600]

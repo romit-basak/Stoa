@@ -54,7 +54,9 @@ def _file_hash(path: Path) -> str:
 def stage_outputs(site: Site) -> dict[str, list[Path]]:
     p, g = site.processed, site.graph_dir
     return {
-        "extract": [site.interim / f"{n}.parquet" for n in ("ways", "pois", "transit")],
+        "extract": [
+            site.interim / f"{n}.parquet" for n in ("ways", "pois", "transit", "plazas")
+        ],
         "graph": [g / "edges.parquet", g / "nodes.parquet"],
         "features": [
             p / "osm_segment_features.parquet",

@@ -65,9 +65,8 @@ def tag_features(edges: pd.DataFrame) -> pd.DataFrame:
     out["is_bridge"] = edges["bridge"].notna() & edges["bridge"].ne("no")
     out["is_tunnel"] = edges["tunnel"].notna() & edges["tunnel"].ne("no")
     out["is_covered"] = edges["covered"].isin(["yes", "arcade", "colonnade"])
-    out["is_inferred"] = (
-        edges["is_inferred"].astype(bool) if "is_inferred" in edges else False
-    )
+    for flag in ("is_inferred", "is_area_edge", "is_detected"):
+        out[flag] = edges[flag].fillna(False).astype(bool) if flag in edges else False
     sw = edges["sidewalk_state"]
     out["sidewalk_both"] = sw.eq("both")
     out["sidewalk_one_side"] = sw.isin(["left", "right"])

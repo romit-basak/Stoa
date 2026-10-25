@@ -4,8 +4,9 @@ Usage:
     python -m src.ingest.minute_feed [--bucket | --dest gs://BUCKET/PREFIX | --dest DIR]
     python -m src.ingest.minute_feed --sync [--archive-dir DIR]
 
-The portal's "past hour (counts per minute)" dataset is refreshed every 15 minutes and holds only
-the current Melbourne day so far (from about 01:00), so anything not saved is gone. The
+The portal's "past hour (counts per minute)" dataset is refreshed every 15 minutes and holds counts
+from 00:55 Melbourne time until a reset at about 02:00 the next morning, so anything not saved by
+then is gone. The
 `stoa_minute_feed` DAG polls it every 15 minutes and merges each poll into one parquet file per
 Melbourne day in the project bucket (--bucket: `minute_feed.gcs` in configs/data.yaml). Without
 --bucket or --dest the day files go to data/raw/melbourne_portal/minute_feed/. --sync copies the bucket's day files

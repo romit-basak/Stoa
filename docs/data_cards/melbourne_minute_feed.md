@@ -24,12 +24,13 @@ One file per local day, `minute_feed_YYYY-MM-DD.parquet`:
 
 ## What was found on 25 October 2026
 
-- The feed holds the current Melbourne day so far, much more than the "past hour" in the title: at 16:04 Melbourne time it held 24,078 rows from 99 sensors, starting at 00:55. The start stayed at 00:55 while the end moved on, so it restarts once a day. A poll must happen before the restart, or the rest of that day is lost; the exact restart time and whether 00:00–00:55 is ever published are being checked.
+- The feed holds far more than the "past hour" in its title. At 16:04 Melbourne time on 25 October it held 24,078 rows from 99 sensors, starting at 00:55 that day. The start stayed put while the end moved on.
+- **It resets once a day at about 02:00 Melbourne time, not at midnight.** At 01:25 on the 26th it still held all of the 25th and the new day's first hour (42,073 rows). Between 02:00 and 02:20 it emptied (a query at about 02:10 came back empty) and restarted from 00:55 on the 26th. So a day's last minutes and the next day's first 55 minutes are published only until that reset. One poll between midnight and about 02:00 Melbourne time catches both: 11 am in Boston until 1 November, 10 am after, and an hour later again once Melbourne's daylight saving ends in April. The archive's 26 October file starts at 00:00 (981 rows before 00:55); the 25th starts at 00:55 because the archive began after that day's reset.
 - **Minutes with no one counted are absent, not zero.** No row has a total of 0. A missing minute is either a zero or no reading; summing a sensor's minutes and comparing with its hourly count tells which.
 - **Two different rows for one sensor and minute** happen (2 of 24,078 rows that day; the portal's description mentions sensors 67-69). The archive keeps both as published and merges only rows identical in every column.
 - `direction_1 + direction_2 = total_of_directions` on every row.
 
 ## Known issues
 
-- Polls can be late or missed (a queue wait on the cluster, a sleeping laptop). That costs nothing as long as one comes before the day's restart; a day with no late poll keeps only what earlier polls saw.
+- Polls can be late or missed (a queue wait on the cluster, a sleeping laptop). That costs nothing as long as one comes between midnight and the reset at about 02:00 Melbourne time; without one, the archive keeps only what earlier polls saw of the day before and none of the new day's first hour.
 - The portal's description is from 2020 and still mentions an issue with sensors 67-69.

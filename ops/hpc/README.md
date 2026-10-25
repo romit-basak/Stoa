@@ -1,6 +1,6 @@
 # Per-minute feed poller on Northeastern's Explorer cluster
 
-The portal's per-minute counts keep only the current Melbourne day, so they have to be polled before each Melbourne midnight. Laptops sleep; the cluster doesn't. Slurm's `scrontab` runs `poll_minute_feed.sh` every 15 minutes as a tiny job (one core, 1 GB, a few seconds) on the `sharing` CPU partition. That's the same `src.ingest.minute_feed --bucket` command the `stoa_minute_feed` DAG runs, so the cluster and anyone's Airflow can poll side by side: writes are checked against the day file's version, so none overwrites another.
+The portal's per-minute counts are kept only until a reset at about 02:00 Melbourne time each morning, so a poll has to land between Melbourne midnight and the reset. Laptops sleep; the cluster doesn't. Slurm's `scrontab` runs `poll_minute_feed.sh` every 15 minutes as a tiny job (one core, 1 GB, a few seconds) on the `sharing` CPU partition. That's the same `src.ingest.minute_feed --bucket` command the `stoa_minute_feed` DAG runs, so the cluster and anyone's Airflow can poll side by side: writes are checked against the day file's version, so none overwrites another.
 
 ## Access
 
@@ -33,7 +33,7 @@ scrontab -r                              # pause: removes the schedule (a runnin
 scrontab ~/stoa/ops/hpc/scrontab.txt     # resume
 ```
 
-While it's paused, the feed keeps only the current Melbourne day, so a pause that crosses Melbourne midnight (8 am Boston from November, 9 am before) loses the rest of that day unless someone's `stoa_minute_feed` DAG is running.
+A pause that covers the whole stretch from Melbourne midnight to the reset at about 02:00 (9 to 11 am in Boston until 1 November, 8 to 10 am after) loses the end of the day before and the new day's first hour, unless someone's `stoa_minute_feed` DAG is running. A pause outside those two hours costs nothing.
 
 ## Check on it
 

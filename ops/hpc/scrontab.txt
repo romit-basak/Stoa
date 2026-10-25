@@ -1,0 +1,10 @@
+# Slurm cron for the per-minute feed (install with: scrontab ops/hpc/scrontab.txt).
+# Every 15 minutes, one core and 1 GB on the `sharing` partition; each poll takes a few seconds.
+#SCRON --partition=sharing
+#SCRON --time=00:05:00
+#SCRON --mem=1G
+#SCRON --cpus-per-task=1
+#SCRON --job-name=stoa-minute-feed
+#SCRON --output=/home/%u/stoa-minute-feed.log
+#SCRON --open-mode=append
+*/15 * * * * $HOME/stoa/ops/hpc/poll_minute_feed.sh

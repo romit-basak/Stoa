@@ -87,6 +87,7 @@ Every source is configured in `configs/data.yaml`. Each script writes to `data/r
 .venv/bin/python -m src.ingest.events             # AFL fixtures (Squiggle)
 .venv/bin/python -m src.ingest.afl_attendance     # AFL crowd figures (AFL Tables)
 .venv/bin/python -m src.ingest.calendars          # public holidays per site + Vic Important Dates
+.venv/bin/python -m src.ingest.minute_feed --sync # per-minute counts archived in the bucket since 25 Oct 2026 (below)
 
 # NEU Boston (demonstration)
 .venv/bin/python -m src.ingest.dem --site neu_boston          # USGS 3DEP 1 m clip
@@ -108,6 +109,7 @@ Options:
 - `osm` keeps an existing extract (graph segment IDs belong to one extract); `--refresh` downloads the latest.
 - `weather` re-fetches only missing years and the last two; `--full` re-fetches every year.
 - School terms and university teaching periods are hand-maintained in `configs/calendars/`.
+- **Per-minute counts.** The portal's per-minute feed keeps counts from 00:55 Melbourne time until a reset at about 02:00 the next morning, so the `stoa_minute_feed` DAG polls it every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. One poll has to land between Melbourne midnight and that reset (about 11 am in Boston, 10 am from 1 November), or the end of the day before and the new day's first hour are lost. A Slurm `scrontab` job on Northeastern's Explorer cluster runs the same poll around the clock ([ops/hpc/README.md](ops/hpc/README.md)), and every teammate's Airflow can run the DAG alongside it: writes are checked against the file's version, so nobody overwrites anyone else. Without bucket credentials it's skipped. `minute_feed --sync` copies the files into `data/raw/melbourne_portal/minute_feed/`. See [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
 
 ### Build features
 

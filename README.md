@@ -235,7 +235,22 @@ The `pull_counts` fix holds (10 s against 229 s). The new bottleneck is the stre
 
 **Great Expectations was most of `validate`.** Profiling `validate` on the 7.4M-row table on a laptop: the Great Expectations suite took about 28 s, against about 6 s for every other check together and 1 s to read the table. Two things in Great Expectations 1.x made it slow. Its numpy range check only runs when a column is exactly `int64` or `float64`; for our `int8`, `int32` and `float32` columns it called a Python function per row. And before each check it filtered the whole frame it was given, copying every column. Now each expectation runs on a frame of just the columns it reads, with the range-checked ones widened to 64-bit: the suite takes 17 s instead of 28, peaks at 3.9 GB instead of 5.0, and gives the same results (`run_expectations` in `src/pipeline/validate.py`).
 
-`bias_errors`, added after this run, comes after `bias_slices`. It trains the bias baseline five times per mitigation, about 18 minutes, so it reruns only when its last run is a week old or its settings changed; on other days it finishes at once and the daily run stays near 6 minutes.
+**The pipeline with `bias_errors` (25 October).** `bias_errors` comes after `bias_slices` and trains the bias baseline five times per mitigation, so it reruns only when its last run is a week old or its settings changed; on other days it finishes at once. Two runs on the same day show both cases (7,416,763 rows, Docker Desktop's default 8 GB, every task green on its first try):
+
+| Task | `gantt_2026_10_25` (daily, `bias_errors` skipped) | `gantt_2026_10_25_bias` (weekly, `bias_errors` trains) |
+|---|---|---|
+| `bias_errors` | 1 s | 950 s |
+| `validate` | 41 s | 47 s |
+| `join_all` | 40 s | 34 s |
+| `bias_slices` | 29 s | 32 s |
+| `pull_counts` | 6 s | 6 s |
+| `dvc_push` | 4 s | 6 s |
+| Other ingest and OSM tasks (OSM skipped) | 3 s or less each | 3 s or less each |
+| **Whole run** | **127 s** | **1,081 s** |
+
+![Gantt with bias_errors](docs/pipeline/gantt_bias_errors.png)
+
+With `validate` and `bias_slices` in sequence and the faster Great Expectations step, a daily run takes about 2 minutes instead of 6. Once a week `bias_errors` adds about 16 minutes and is the whole bottleneck. That is acceptable for a weekly fairness report; if it needs to be faster, the next step is fewer folds or mitigations per run, or running it on a schedule of its own.
 
 While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 

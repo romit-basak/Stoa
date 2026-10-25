@@ -33,6 +33,13 @@ stages:
       - configs/data.yaml
     always_changed: true
 
+  pull_minute_feed:
+    cmd: python -m src.ingest.minute_feed --sync
+    deps:
+      - src/ingest/minute_feed.py
+      - configs/data.yaml
+    always_changed: true
+
   pull_calendars:
     cmd: python -m src.ingest.calendars
     deps:
@@ -165,6 +172,27 @@ stages:
       - src/bias
       - configs/bias.yaml
       - configs/features.yaml
+
+  minute_profiles:
+    cmd: python -m src.features.minute_profiles
+    deps:
+      - data/raw/melbourne_portal/minute_feed
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - configs/features.yaml
+      - src/features/minute_profiles.py
+
+  minute_coverage:
+    cmd: python -m src.bias.minute_coverage
+    deps:
+      - data/processed/features/melbourne/minute_hour_status.parquet
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/bias/melbourne/sensor_slices.csv
+      - data/raw/melbourne_portal/minute_feed
+      - data/raw/events/afl_attendance.csv
+      - configs/bias.yaml
+      - configs/features.yaml
+      - src/bias
+      - src/features/minute_profiles.py
 
   validate:
     cmd: python -m src.pipeline.validate

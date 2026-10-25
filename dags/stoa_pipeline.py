@@ -81,6 +81,13 @@ def stoa_pipeline():
     def pull_weather():
         return f"{STOA} src.ingest.weather --site melbourne"
 
+    # Exit 99 (no bucket credentials) skips it, as for dvc_push.
+    @task.bash(skip_on_exit_code=99)
+    def pull_minute_feed():
+        # The per-minute archive (stoa_minute_feed writes it to the bucket) into data/raw,
+        # where DVC versions it and validate checks it.
+        return f"{STOA} src.ingest.minute_feed --sync"
+
     @task.bash
     def pull_calendars():
         return f"{STOA} src.ingest.calendars"
@@ -166,9 +173,25 @@ def stoa_pipeline():
         # reweighting. About 10 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
 
+    @task.bash
+    def minute_profiles():
+        # Within-hour profiles from the per-minute archive, for sensor-hours whose minutes add
+        # up to the hourly table (src/features/minute_profiles.py). A few seconds.
+        return f"{STOA} src.features.minute_profiles"
+
+    @task.bash
+    def minute_coverage():
+        # Bias in the per-minute data: which slices the archive and its profiles under-cover
+        # (src/bias/minute_coverage.py). A few seconds.
+        return f"{STOA} src.bias.minute_coverage"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
-    @task.bash(retries=0)
+    # none_failed: pull_minute_feed is skipped on a clone without bucket credentials, and by
+    # default a skipped upstream task skips everything after it, so validate, the bias steps
+    # and dvc_push would quietly not run while the DAG still showed success. A failed upstream
+    # task (join_all, say) still stops validate.
+    @task.bash(retries=0, trigger_rule="none_failed")
     def validate():
         # Schema, Great Expectations suite, anomalies and drift on the hourly table. Fails on
         # any error-level check, so dvc_push never versions bad data.
@@ -208,12 +231,16 @@ def stoa_pipeline():
     # 8 GB: validate was killed (exit -9). This order also keeps the bias reports to data that
     # passed the checks. Only data that went through all three is versioned.
     checked = validate()
-    joined >> checked
+    [joined, pull_minute_feed()] >> checked
     slices = bias_slices()
     [checked, static] >> slices
     errors = bias_errors()
     slices >> errors
-    [checked, errors] >> dvc_push()
+    profiles = minute_profiles()
+    checked >> profiles
+    covered = minute_coverage()
+    [profiles, slices] >> covered
+    [checked, errors, covered] >> dvc_push()
 
 
 stoa_pipeline()

@@ -1,0 +1,127 @@
+# Events near the Melbourne sensors that aren't AFL games (AFL comes from src.ingest.events and
+# src.ingest.afl_attendance). Hand-kept, started 2026-10-25 so the per-minute archive
+# (src/ingest/minute_feed.py) has labelled event days from its first weeks.
+#
+# Rules (tests/configs/test_events.py checks them):
+# - Every event cites a source in `sources`, and every source has an archived copy, because
+#   listing pages disappear after the event.
+# - Only what the source says. Times are Melbourne local clock time; `end` and `expected_crowd`
+#   stay null when the source doesn't give them. Features fill gaps with labelled defaults later.
+# - One row per day for multi-day events.
+# - Venues are named by their OSM object in the pinned extract (data/raw/osm/melbourne.osm.pbf),
+#   so their location comes from the map, not from typed-in coordinates. `scope: citywide` rows
+#   (an observance like Halloween) have no venue.
+#
+# Kinds: cricket, football (soccer), basketball, netball, concert, graduation, halloween.
+
+venues:
+  mcg: {name: Melbourne Cricket Ground, osm: way/210337258}
+  marvel: {name: Marvel Stadium, osm: way/22971441}
+  aami_park: {name: AAMI Park, osm: way/60116158}
+  rod_laver_arena: {name: Rod Laver Arena, osm: way/45738964}
+  john_cain_arena: {name: John Cain Arena, osm: way/7243452}
+  margaret_court_arena: {name: Margaret Court Arena, osm: way/126844336}
+  old_melbourne_gaol: {name: Old Melbourne Gaol, osm: way/26564392}
+  the_district: {name: The District Docklands, osm: way/37667836}
+  # A street, not a building: the road ways named Harbour Esplanade in the extract.
+  harbour_esplanade: {name: Harbour Esplanade, osm_name: Harbour Esplanade}
+
+sources:
+  mcg_events:
+    url: https://www.mcg.org.au/events
+    archived: https://web.archive.org/web/20261025054940/https://www.mcg.org.au/events
+    retrieved: 2026-10-25
+  marvel_events:
+    url: https://www.marvelstadium.com.au/local-community-information-special-events
+    archived: https://web.archive.org/web/20261025055003/https://www.marvelstadium.com.au/local-community-information-special-events
+    retrieved: 2026-10-25
+    note: Gate times are "TBC" for every event, so no start times are recorded.
+  aami_park_events:
+    url: https://aamipark.com.au/events/
+    archived: https://web.archive.org/web/20261025055034/https://aamipark.com.au/events/
+    retrieved: 2026-10-25
+    note: First page of the listing only.
+  melbourne_park_events:
+    url: https://www.melbournepark.com.au/events/
+    archived: https://web.archive.org/web/20261025055103/https://www.melbournepark.com.au/events/
+    retrieved: 2026-10-25
+    note: First page of 7 only; later November and December events are still to add.
+  whatson_halloween:
+    url: https://whatson.melbourne.vic.gov.au/article/the-best-halloween-events-in-melbourne
+    archived: https://web.archive.org/web/20261025055126/https://whatson.melbourne.vic.gov.au/article/the-best-halloween-events-in-melbourne
+    retrieved: 2026-10-25
+    note: City of Melbourne's What's On. Gives dates but no times.
+  melbourning_district_halloween:
+    url: https://www.melbourning.com.au/2026/10/23/a-giant-halloween-trail-made-by-kids-is-coming-to-docklands/
+    archived: https://web.archive.org/web/20261025055201/https://www.melbourning.com.au/2026/10/23/a-giant-halloween-trail-made-by-kids-is-coming-to-docklands/
+    retrieved: 2026-10-25
+
+events:
+  # --- Halloween (Saturday 31 October) ---
+  - {name: Halloween, kind: halloween, scope: citywide, venue: null, start: "2026-10-31T00:00", end: "2026-11-01T00:00", expected_crowd: null, source: whatson_halloween}
+  - {name: "Melbourne's Biggest Trick or Treat (trail)", kind: halloween, venue: the_district, start: "2026-10-31T15:00", end: "2026-10-31T17:00", expected_crowd: null, crowd_note: "over 1,000 children registered by 23 Oct", source: melbourning_district_halloween}
+  - {name: "The Street Social: Halloween", kind: halloween, venue: harbour_esplanade, start: "2026-10-31T00:00", end: null, expected_crowd: null, time_note: date only, source: whatson_halloween}
+  - {name: "The Street Social: Halloween", kind: halloween, venue: harbour_esplanade, start: "2026-11-01T00:00", end: null, expected_crowd: null, time_note: date only, source: whatson_halloween}
+  - {name: A Spooky Escape at the Old Melbourne Gaol, kind: halloween, venue: old_melbourne_gaol, start: "2026-10-31T00:00", end: null, expected_crowd: null, time_note: "date only (daytime)", source: whatson_halloween}
+  - {name: Halloween at the Old Melbourne Gaol, kind: halloween, venue: old_melbourne_gaol, start: "2026-10-31T00:00", end: null, expected_crowd: null, time_note: "date only (after dark)", source: whatson_halloween}
+
+  # --- MCG ---
+  - {name: "Sheffield Shield: Victoria v Western Australia, day 1", kind: cricket, venue: mcg, start: "2026-11-11T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Western Australia, day 2", kind: cricket, venue: mcg, start: "2026-11-12T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Western Australia, day 3", kind: cricket, venue: mcg, start: "2026-11-13T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Western Australia, day 4", kind: cricket, venue: mcg, start: "2026-11-14T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "T20 International: Australia v England", kind: cricket, venue: mcg, start: "2026-11-21T19:15", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Queensland, day 1", kind: cricket, venue: mcg, start: "2026-12-03T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Queensland, day 2", kind: cricket, venue: mcg, start: "2026-12-04T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Queensland, day 3", kind: cricket, venue: mcg, start: "2026-12-05T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Sheffield Shield: Victoria v Queensland, day 4", kind: cricket, venue: mcg, start: "2026-12-06T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "BBL|16: Melbourne Stars v Adelaide Strikers", kind: cricket, venue: mcg, start: "2026-12-18T19:15", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Boxing Day Test: Australia v New Zealand, day 1", kind: cricket, venue: mcg, start: "2026-12-26T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Boxing Day Test: Australia v New Zealand, day 2", kind: cricket, venue: mcg, start: "2026-12-27T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Boxing Day Test: Australia v New Zealand, day 3", kind: cricket, venue: mcg, start: "2026-12-28T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Boxing Day Test: Australia v New Zealand, day 4", kind: cricket, venue: mcg, start: "2026-12-29T10:30", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "Boxing Day Test: Australia v New Zealand, day 5", kind: cricket, venue: mcg, start: "2026-12-30T10:30", end: null, expected_crowd: null, source: mcg_events}
+
+  # --- Marvel Stadium (dates only: gates TBC) ---
+  - {name: Robbie Williams, kind: concert, venue: marvel, start: "2026-11-11T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: Foo Fighters, kind: concert, venue: marvel, start: "2026-11-14T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: Harry Styles, kind: concert, venue: marvel, start: "2026-11-27T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: Harry Styles, kind: concert, venue: marvel, start: "2026-11-28T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: Harry Styles, kind: concert, venue: marvel, start: "2026-12-02T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: Harry Styles, kind: concert, venue: marvel, start: "2026-12-04T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: "Guns N' Roses", kind: concert, venue: marvel, start: "2026-12-11T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+  - {name: RMIT Graduation, kind: graduation, venue: marvel, start: "2026-12-16T00:00", end: null, expected_crowd: null, time_note: date only, source: marvel_events}
+
+  # --- AAMI Park ---
+  - {name: "A-League: Melbourne City v Sydney FC", kind: football, venue: aami_park, start: "2026-10-31T17:00", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne Victory v Central Coast Mariners", kind: football, venue: aami_park, start: "2026-11-01T15:00", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "ACL Two: Melbourne Victory v Persib Bandung", kind: football, venue: aami_park, start: "2026-11-04T18:45", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne City v Western Sydney Wanderers", kind: football, venue: aami_park, start: "2026-11-07T19:40", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: Iron Maiden, kind: concert, venue: aami_park, start: "2026-11-13T17:30", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne Victory v Newcastle Jets", kind: football, venue: aami_park, start: "2026-12-12T19:40", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne City v Melbourne Victory", kind: football, venue: aami_park, start: "2026-12-19T19:40", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne City v Auckland FC", kind: football, venue: aami_park, start: "2026-12-27T18:00", end: null, expected_crowd: null, source: aami_park_events}
+  - {name: "A-League: Melbourne Victory v Wellington Phoenix", kind: football, venue: aami_park, start: "2026-12-29T19:00", end: null, expected_crowd: null, source: aami_park_events}
+
+  # --- Melbourne Park ---
+  - {name: "Hans Zimmer Live: The Next Level", kind: concert, venue: rod_laver_arena, start: "2026-10-25T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "NBL: Melbourne United v Sydney Kings", kind: basketball, venue: john_cain_arena, start: "2026-10-25T17:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Hilary Duff, kind: concert, venue: rod_laver_arena, start: "2026-10-26T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Hilary Duff, kind: concert, venue: rod_laver_arena, start: "2026-10-27T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Lily Allen, kind: concert, venue: rod_laver_arena, start: "2026-10-28T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "Constellation Cup, game 4", kind: netball, venue: john_cain_arena, start: "2026-10-28T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Lily Allen, kind: concert, venue: rod_laver_arena, start: "2026-10-29T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "NBL: South East Melbourne Phoenix v Tasmania JackJumpers", kind: basketball, venue: john_cain_arena, start: "2026-11-01T15:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Richie Jen, kind: concert, venue: margaret_court_arena, start: "2026-11-01T20:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: 5 Seconds of Summer, kind: concert, venue: rod_laver_arena, start: "2026-11-02T19:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "NBL: Melbourne United v New Zealand Breakers", kind: basketball, venue: john_cain_arena, start: "2026-11-02T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "NBL: Melbourne United v Brisbane Bullets", kind: basketball, venue: john_cain_arena, start: "2026-11-07T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Daniel Caesar, kind: concert, venue: rod_laver_arena, start: "2026-11-08T19:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Daniel Caesar, kind: concert, venue: rod_laver_arena, start: "2026-11-09T19:00", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Benson Boone, kind: concert, venue: rod_laver_arena, start: "2026-11-12T19:50", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Benson Boone, kind: concert, venue: rod_laver_arena, start: "2026-11-13T19:50", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: Benson Boone, kind: concert, venue: rod_laver_arena, start: "2026-11-14T19:50", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "A$AP Rocky", kind: concert, venue: rod_laver_arena, start: "2026-12-05T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "A$AP Rocky", kind: concert, venue: rod_laver_arena, start: "2026-12-06T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: "A$AP Rocky", kind: concert, venue: rod_laver_arena, start: "2026-12-07T19:30", end: null, expected_crowd: null, source: melbourne_park_events}
+  - {name: SUPAGLOO, kind: concert, venue: margaret_court_arena, start: "2026-12-10T19:00", end: null, expected_crowd: null, source: melbourne_park_events}

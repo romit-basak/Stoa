@@ -62,6 +62,21 @@ The pipeline's `dvc_push` task saves and uploads a new version after every run t
 git add data/*.dvc dvc.lock && git commit -m "..."
 ```
 
+**Protecting the bucket.** Soft delete is on (a deleted object can be restored for 7 days). Object versioning is off; a project owner should turn it on, with a rule that keeps old versions from piling up (the per-minute archive rewrites its day files every 15 minutes):
+
+```bash
+gcloud storage buckets update gs://stoa-dvc-data --versioning
+cat > /tmp/stoa-lifecycle.json <<'JSON'
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "numNewerVersions": 3}},
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "daysSinceNoncurrentTime": 30}}
+]}
+JSON
+gcloud storage buckets update gs://stoa-dvc-data --lifecycle-file=/tmp/stoa-lifecycle.json
+```
+
+The count days that have left the portal's window, the pinned OSM extracts and the validation history exist only in our copies; where a second copy lives is still to decide.
+
 **Pipeline stages (`dvc.yaml`).** `dvc.yaml` lists the pipeline's stages, one per Airflow task, with each stage's command and inputs: its code, configs and the data it reads. `dvc.lock` records the exact version of every input for the data version committed with it, so a data version can be traced to the code and settings that produced it. To see which stages' results are out of date, and why:
 
 ```bash

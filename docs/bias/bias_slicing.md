@@ -147,7 +147,7 @@ Step 1 measures the **data**. Whether a model is actually worse on these groups 
 ## Step 2: where a model is worse
 
 ```bash
-.venv/bin/python -m src.bias.slice_errors     # ~18 min; the DAG runs it weekly
+.venv/bin/python -m src.bias.slice_errors     # ~16 min; the DAG runs it weekly
 ```
 
 Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. The real flow model doesn't exist yet, so a baseline stands in for it (`src/bias/slice_errors.py`):

@@ -47,4 +47,6 @@ The transfer test needs features only at NYC DOT's 114 count locations, so the b
 | Features | 12 min (angular choice at 1,600 m takes 7 of them) | 4.8 GB |
 | Shade | 5 min | 3.1 GB |
 
+Memory doesn't follow segment count: Melbourne's 111,465 segments peak at 3.3 GB in the features stage, because its dense centre reaches more segments within 1,600 m. So the stage's preflight is a plain limit, `network_metrics.max_segments` (800,000). A site over it stops at once and needs a feature mask or a larger machine.
+
 All segment checks pass. The NYC counts are never read by the training frame (`check_site` rejects every site except the one the hourly table is built for, Melbourne).

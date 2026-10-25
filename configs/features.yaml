@@ -124,3 +124,8 @@ sensor_steepness:
   min_section_m: 5       # shorter sections are skipped: their grades reach 580%
   local_radius_m: 25     # length-weighted mean slope over sections this close
   dem_offset_m: 10       # DEM fallback: terrain slope from samples this far to each side
+
+# Within-hour profiles from the per-minute archive (src/features/minute_profiles.py).
+minute_profiles:
+  sum_tolerance: 0.05     # an hour is kept when its minutes add up to the hourly count within 5% (or 2 people)
+  min_hour_count: 30      # quieter hours give noisy shares and are left out

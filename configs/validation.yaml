@@ -94,3 +94,11 @@ drift:
   max_null_increase_pp: 5
   # Change in the mean hourly count (warning).
   max_mean_count_change: 0.2
+
+# The per-minute counts archive (src/pipeline/minute_checks.py); every check is a warning.
+minute_feed:
+  dir: data/raw/melbourne_portal/minute_feed
+  min_last_local: "23:00"     # a finished day whose last minute is earlier was polled too early
+  max_duplicates: 50
+  sum_tolerance: 0.05         # minutes and hourly count agree within 5% (or 2 people)
+  max_mismatch_share: 0.05

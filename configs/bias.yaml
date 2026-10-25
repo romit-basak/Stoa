@@ -95,3 +95,13 @@ errors:
     # No retraining: the baseline's predictions scaled to each sensor's first 28 days of
     # counts (per-site calibration, CLAUDE.md "Generalization").
     - {name: calibrated, calibrate_from: none}
+
+# Bias in the per-minute data (src/bias/minute_coverage.py): which kinds of hours the archive
+# and its within-hour profiles cover. A group is "under" when its share of sensor-hours kept for
+# the profiles is below low_ratio times the overall share, with at least min_hours sensor-hours.
+minute_coverage:
+  low_ratio: 0.5
+  min_hours: 48
+  # Mitigation: profiles pooled by volume tier, day type and local hour are used once a cell
+  # holds this many people in total.
+  pooled_min_people: 100

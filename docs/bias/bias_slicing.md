@@ -276,7 +276,15 @@ The plan, written before step 2, with what was found and done:
 - **The Wayback fill** comes from an archived copy of the City's own export, which matched the archive on about 98.5% of overlapping hours. It filled two years and moved the results only slightly (overall WAPE 0.58 before, 0.60 after, before the retired sensors were placed), and the `source` slice keeps it checkable.
 - **The retired sensors' locations** come from a 2022 table and are matched to the 2026 OSM network, so a sensor whose street has since changed can land on today's layout. Their matches go through the same review flags as the others.
 
-## Next steps
+## The per-minute data (`src/bias/minute_coverage.py`)
+
+The per-minute archive (`docs/data_cards/melbourne_minute_feed.md`) goes through the same slices. Its within-hour profiles keep only sensor-hours whose minutes add up to the hourly count and that have at least 30 people (`src/features/minute_profiles.py`). The first filter is needed for clean data. The second drops quiet hours on purpose, because a share computed from a handful of people is noise, so the profiles lean towards busy places and busy times.
+
+- **Detection.** For each group, `minute_coverage.csv` gives the sensor-hours of the hourly table inside the archive's span, the share the archive has, the share whose minutes add up, and the share kept for the profiles. A group is `under` when its kept share is below half the overall kept share and it has at least 48 sensor-hours (`minute_coverage` in `configs/bias.yaml`).
+- **First run (25 October 2026, two night hours, 270 sensor-hours).** Every archived hour after the feed's 00:55 start added up to the hourly count. The filter kept 66% of busy sensors' hours, 37% of medium and 7% of quiet ones, so `volume_tier=quiet` is flagged. Low-amenity sensors (20%) and the precincts outside the CBD were thin too. These are night hours, so the numbers will change as daytime hours arrive.
+- **Mitigation: pooled profiles.** Every hour that adds up, however quiet, is summed with the others of its volume tier, day type and local hour, and a pooled cell is used once it holds 100 people (`minute_profiles_by_tier.parquet`). On the first run the share of quiet sensors' hours that feed a usable profile rose from 7% to 65%, level with busy sensors (67%). The remaining third is the hour before the archive's first 00:55 start, which nothing can recover. `pooled_share` in `minute_coverage.csv` reports this per group.
+- **Trade-off.** A pooled profile describes a tier, not a street. Walkers on an uncounted quiet street need the tier profile anyway, since no sensor-level profile exists for it. Where a sensor has its own profile with enough hours, that profile stays more specific.
+
 
 1. **Rerun on the real flow model (step 4).** `slice_errors()` takes any model's out-of-fold predictions, so the flow model's evaluation can produce the same table.
 2. **Night, COVID and the pattern errors.** Try a lockdown-stringency feature for COVID, and either a separate low-count model or a log-scale loss for night, then rerun step 3. Docklands and Melbourne (Remainder) need the same look: calibration doesn't reach their error.

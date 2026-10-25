@@ -775,6 +775,12 @@ def main() -> None:
     checks, stats = validate(
         df, cfg, schema, last_summary(out / "counts_hourly_stats_history.jsonl"), now
     )
+    if "minute_feed" in cfg:
+        from src.pipeline.minute_checks import minute_checks, read_archive
+
+        minutes = read_archive(REPO_ROOT / cfg["minute_feed"]["dir"])
+        hourly = df[["location_id", "ts_local", "pedestriancount"]]
+        checks += minute_checks(minutes, hourly, cfg["minute_feed"], now)
     write_reports(out, checks, stats, now)
     log_checks(checks)
     log.info(

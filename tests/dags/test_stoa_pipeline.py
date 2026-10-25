@@ -39,6 +39,7 @@ def test_has_every_stage(dag):
         "pull_counts",
         "pull_weather",
         "pull_calendars",
+        "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
         "osm_extract",
@@ -49,6 +50,8 @@ def test_has_every_stage(dag):
         "join_all",
         "bias_slices",
         "bias_errors",
+        "minute_profiles",
+        "minute_coverage",
         "validate",
         "dvc_push",
     }
@@ -60,6 +63,7 @@ def test_ingest_tasks_run_in_parallel(dag):
         "pull_counts",
         "pull_weather",
         "pull_calendars",
+        "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
     ):
@@ -82,11 +86,13 @@ def test_wiring(dag):
         "pull_weather",
         "pull_calendars",
     }
-    assert upstream("validate") == {"join_all"}
+    assert upstream("validate") == {"join_all", "pull_minute_feed"}
     # After validate, not beside it: side by side, the two overran Docker's 8 GB.
     assert upstream("bias_slices") == {"validate", "pull_static_layers"}
     assert upstream("bias_errors") == {"bias_slices"}
-    assert upstream("dvc_push") == {"validate", "bias_errors"}
+    assert upstream("minute_profiles") == {"validate"}
+    assert upstream("minute_coverage") == {"minute_profiles", "bias_slices"}
+    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_coverage"}
 
 
 def test_every_task_retries(dag):
@@ -98,6 +104,18 @@ def test_every_task_retries(dag):
 def test_validate_fails_without_retrying(dag):
     # Bad data fails the same way on every try; retrying would only delay the alert.
     assert dag.get_task("validate").retries == 0
+
+
+def test_a_task_skipped_for_missing_credentials_never_skips_the_rest(dag):
+    # pull_minute_feed is skipped without bucket credentials (exit 99), as on a grader's
+    # clone. Under the default all_success rule that skip spreads to every task after it.
+    # (BashOperator gives every task skip_on_exit_code=99 by default, so the tasks that exit 99
+    # for missing credentials are named here rather than found by that attribute.)
+    tolerant = {"none_failed", "none_failed_min_one_success", "all_done"}
+    for task_id in ("pull_minute_feed", "dvc_push"):
+        for after in dag.get_task(task_id).downstream_list:
+            assert after.trigger_rule in tolerant, (task_id, after.task_id)
+    assert dag.get_task("validate").trigger_rule == "none_failed"
 
 
 def test_dvc_push_skips_without_credentials(dag):

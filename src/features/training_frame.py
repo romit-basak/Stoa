@@ -53,6 +53,8 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging, sha256
 
 VARIANTS = ("rich", "portable")
 QUANTILES = [0.0, 0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99, 1.0]
+# A column with at most this many distinct values is compared by category, not by bins.
+MAX_CATEGORIES = 30
 
 
 # --------------------------------------------------------------------------------------------
@@ -302,18 +304,66 @@ def event_days(
 
 
 def reference_quantiles(values: pd.DataFrame) -> dict[str, dict[str, Any]]:
-    """Per column: quantiles and missing share, the reference later drift checks compare to."""
+    """Per column: quantiles, missing share and a distribution later drift checks compare to.
+
+    The distribution is ten bins at the deciles for a numeric column, or each value's share for
+    one with few distinct values (flags, hours, weekdays), where deciles would tie.
+    """
     out = {}
     for c in values.columns:
         v = pd.to_numeric(values[c].astype("float64"), errors="coerce")
         q = v.quantile(QUANTILES)
-        out[c] = {
+        ref: dict[str, Any] = {
             "quantiles": {
                 str(k): (None if pd.isna(x) else float(x)) for k, x in q.items()
             },
             "null_share": float(v.isna().mean()),
         }
+        present = v.dropna()
+        if present.nunique() <= MAX_CATEGORIES:
+            shares = present.value_counts(normalize=True).sort_index()
+            ref["categories"] = {str(float(k)): float(s) for k, s in shares.items()}
+        elif len(present):
+            edges = np.unique(present.quantile(np.linspace(0, 1, 11)).to_numpy())
+            ref["edges"] = [float(x) for x in edges]
+            ref["shares"] = [float(s) for s in bin_shares(present, edges)]
+        out[c] = ref
     return out
+
+
+def bin_shares(values: pd.Series, edges: np.ndarray) -> np.ndarray:
+    """Share of values in each bin between edges; values outside go to the end bins."""
+    inner = np.asarray(edges, dtype=float)[1:-1]
+    idx = np.searchsorted(inner, values.to_numpy(dtype=float), side="right")
+    counts = np.bincount(idx, minlength=len(edges) - 1)
+    return counts / max(counts.sum(), 1)
+
+
+def psi(expected: np.ndarray, actual: np.ndarray, floor: float = 1e-4) -> float:
+    """Population stability index between two sets of bin shares."""
+    e = np.maximum(np.asarray(expected, dtype=float), floor)
+    a = np.maximum(np.asarray(actual, dtype=float), floor)
+    return float(np.sum((a - e) * np.log(a / e)))
+
+
+def drift_from_reference(values: pd.Series, ref: dict[str, Any]) -> float | None:
+    """PSI of a column against its reference distribution (None when there is none)."""
+    v = pd.to_numeric(values.astype("float64"), errors="coerce").dropna()
+    if not len(v):
+        return None
+    if "categories" in ref:
+        cats = [float(k) for k in ref["categories"]]
+        expected = np.array(list(ref["categories"].values()))
+        shares = v.value_counts(normalize=True)
+        actual = np.array([shares.get(k, 0.0) for k in cats])
+        # Values the reference never saw count against the drift too.
+        unseen = 1.0 - actual.sum()
+        if unseen > 0:
+            expected, actual = np.append(expected, 0.0), np.append(actual, unseen)
+        return psi(expected, actual)
+    if "edges" in ref:
+        return psi(np.array(ref["shares"]), bin_shares(v, np.array(ref["edges"])))
+    return None
 
 
 def dvc_version(pointer: Path) -> str | None:

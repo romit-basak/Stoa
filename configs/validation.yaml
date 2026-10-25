@@ -96,3 +96,9 @@ drift:
   max_null_increase_pp: 5
   # Change in the mean hourly count (warning).
   max_mean_count_change: 0.2
+  # Each feature's distribution in the rows a model may use, against the training reference
+  # (src/features/training_frame.py): population stability index above this is a warning.
+  # Point training_reference at the frame_spec.json a deployed model was trained from; by
+  # default it is the latest frame, so the check catches a change in how features are built.
+  psi_warn: 0.25
+  training_reference: data/processed/training/{site}/frame_spec.json

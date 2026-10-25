@@ -78,6 +78,9 @@ def load_validation_config(path: Path | None = None) -> dict[str, Any]:
         cfg = yaml.safe_load(f)
     for key in ("table", "reports_dir"):
         cfg[key] = cfg[key].format(site=cfg["site"])
+    ref = cfg["drift"].get("training_reference")
+    if ref:
+        cfg["drift"]["training_reference"] = ref.format(site=cfg["site"])
     return cfg
 
 
@@ -564,6 +567,44 @@ def last_summary(history: Path) -> dict[str, Any] | None:
 # --- Run ---
 
 
+def training_drift_checks(
+    df: pd.DataFrame, reference: dict[str, Any] | None, psi_warn: float
+) -> list[Check]:
+    """Each feature's PSI in the eligible rows against the training reference."""
+    if reference is None:
+        return [
+            Check(
+                "drift: against the training reference",
+                WARNING,
+                True,
+                "no training reference yet (src/features/training_frame.py)",
+            )
+        ]
+    from src.features.training_frame import drift_from_reference, eligible
+
+    rows = (
+        df.iloc[eligible(df)]
+        if {"has_location", "location_type"} <= set(df.columns)
+        else df
+    )
+    scores = {}
+    for col, ref in reference.get("rows", {}).items():
+        if col in rows.columns:
+            score = drift_from_reference(rows[col], ref)
+            if score is not None:
+                scores[col] = round(score, 4)
+    high = {c: s for c, s in scores.items() if s > psi_warn}
+    return [
+        Check(
+            "drift: against the training reference",
+            WARNING,
+            not high,
+            ", ".join(f"{c} PSI {s:.2f}" for c, s in sorted(high.items())),
+            {"psi": scores, "over": high},
+        )
+    ]
+
+
 def validate(
     df: pd.DataFrame,
     cfg: dict[str, Any],
@@ -578,7 +619,17 @@ def validate(
     checks += anomaly_checks(df, cfg, now, since)
     stats = profile(df)
     checks += drift_checks(summary(stats, now), previous, cfg)
+    checks += training_drift_checks(
+        df, training_reference(cfg), cfg["drift"].get("psi_warn", 0.25)
+    )
     return checks, stats
+
+
+def training_reference(cfg: dict[str, Any]) -> dict[str, Any] | None:
+    path = cfg["drift"].get("training_reference")
+    if not path or not (REPO_ROOT / path).is_file():
+        return None
+    return json.loads((REPO_ROOT / path).read_text()).get("reference")
 
 
 def write_reports(

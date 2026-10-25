@@ -458,3 +458,25 @@ def test_config_only_names_columns_in_the_committed_schema(cfg):
         *cfg["allowed_values"],
     }
     assert named <= set(schema)
+
+
+def test_training_drift_warns_only_when_a_feature_moves():
+    import numpy as np
+
+    from src.features.training_frame import reference_quantiles
+
+    rng = np.random.default_rng(0)
+    base = pd.DataFrame({"t": rng.normal(15, 5, 5000), "h": rng.integers(0, 24, 5000)})
+    ref = {"rows": reference_quantiles(base)}
+    same = pd.DataFrame({"t": rng.normal(15, 5, 5000), "h": rng.integers(0, 24, 5000)})
+    (check,) = v.training_drift_checks(same, ref, psi_warn=0.25)
+    assert check.passed and set(check.observed["psi"]) == {"t", "h"}
+
+    shifted = same.assign(t=same["t"] + 10)  # every hour 10 degrees warmer
+    (check,) = v.training_drift_checks(shifted, ref, psi_warn=0.25)
+    assert not check.passed and list(check.observed["over"]) == ["t"]
+
+
+def test_training_drift_passes_without_a_reference():
+    (check,) = v.training_drift_checks(make_table(), None, psi_warn=0.25)
+    assert check.passed and "no training reference" in check.detail

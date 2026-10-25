@@ -480,3 +480,48 @@ def test_training_drift_warns_only_when_a_feature_moves():
 def test_training_drift_passes_without_a_reference():
     (check,) = v.training_drift_checks(make_table(), None, psi_warn=0.25)
     assert check.passed and "no training reference" in check.detail
+
+
+def test_range_checks_see_widened_columns_with_the_same_values():
+    df = pd.DataFrame(
+        {
+            "a": pd.array([1, 2], dtype="int8"),
+            "b": pd.array([1.5, None], dtype="Float32"),
+            "c": pd.array([3, None], dtype="Int16"),
+            "s": ["x", "y"],
+        }
+    )
+    out = v.for_range_checks(df, ["a", "b", "c", "s", "missing"])
+    assert (out["a"].dtype, out["b"].dtype, out["c"].dtype) == (
+        "int64",
+        "float64",
+        "float64",
+    )
+    assert out["a"].tolist() == [1, 2] and out["b"].iloc[0] == 1.5
+    assert out["b"].isna().iloc[1] and out["c"].isna().iloc[1]
+    assert df["a"].dtype == "int8"  # the caller's table is left alone
+    assert out["s"].tolist() == ["x", "y"]
+
+
+def test_a_value_out_of_range_in_a_narrow_column_still_fails(cfg):
+    df = make_table()
+    df.loc[df.index[0], "hour_local"] = 30  # an int8 column
+    df.loc[df.index[1], "sun_elevation_deg"] = 95.0  # a float32 column
+    checks = {c.name: c for c in v.run_expectations(df, cfg)}
+    hour = checks["range: hour_local in [0, 23]"]
+    sun = checks["range: sun_elevation_deg in [-90, 90]"]
+    assert not hour.passed and hour.observed["unexpected_count"] == 1
+    assert not sun.passed and sun.observed["unexpected_count"] == 1
+
+
+def test_each_expectation_reads_only_its_own_columns(cfg):
+    cols = ["location_id", "ts_utc", "has_location", "segment_id", "hour_local"]
+    by_name = {
+        e.meta["name"]: v.columns_read(e, cols) for e in v.build_suite(cfg, cols)
+    }
+    assert by_name["keys: unique location_id+ts_utc"] == ["location_id", "ts_utc"]
+    assert by_name["range: hour_local in [0, 23]"] == ["hour_local"]
+    assert by_name["present: segment_id where has_location == True"] == [
+        "segment_id",
+        "has_location",
+    ]

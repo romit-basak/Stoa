@@ -210,29 +210,72 @@ def build_suite(cfg: dict[str, Any], columns: list[str]) -> list[gxe.Expectation
     return [e for e in exps if getattr(e, "column", None) in (None, *columns)]
 
 
+def for_range_checks(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """df with the range-checked numeric columns widened to int64 or float64.
+
+    Great Expectations 1.x checks a range with numpy only when a column's dtype is exactly int64
+    or float64 (`column.dtype in [int, float]`). For int8, int32, float32 or nullable columns it
+    calls a Python function per row, which took about 60 of validate's 70 seconds on 7.4M rows.
+    Widening only these columns gives the same results; the other columns are shared, not copied.
+    """
+    out = df.copy(deep=False)
+    for col in columns:
+        if col not in out or not pd.api.types.is_numeric_dtype(out[col]):
+            continue
+        if pd.api.types.is_integer_dtype(out[col]) and not out[col].hasnans:
+            out[col] = out[col].astype("int64")
+        else:
+            out[col] = out[col].astype("float64")
+    return out
+
+
+def columns_read(exp: gxe.Expectation, all_columns: list[str]) -> list[str]:
+    """The columns an expectation reads: its column or columns and its row condition's."""
+    cols: list[str] = []
+    for attr in ("column", "column_list"):
+        value = getattr(exp, attr, None)
+        if value:
+            cols += [value] if isinstance(value, str) else list(value)
+    cond = getattr(exp, "row_condition", None)
+    if cond is not None:
+        name = getattr(getattr(cond, "column", None), "name", None)
+        if name is None:
+            return all_columns  # a condition shape we don't parse: give it every column
+        cols.append(name)
+    return list(dict.fromkeys(cols)) or all_columns
+
+
 def run_expectations(df: pd.DataFrame, cfg: dict[str, Any]) -> list[Check]:
+    """Run the suite, each expectation on a frame of only the columns it reads.
+
+    Great Expectations' pandas engine filters the whole frame it is given for every metric
+    (dropping nulls, applying a row condition), so on the full 7.4M-row table each expectation
+    copied every column. On frames of one or two columns the suite runs several times faster,
+    with the same results.
+    """
     context = gx.get_context(mode="ephemeral")
     context.variables.progress_bars = ProgressBarsConfig(globally=False)
-    batch = (
+    rows = (
         context.data_sources.add_pandas("stoa")
         .add_dataframe_asset("counts_hourly")
         .add_batch_definition_whole_dataframe("all_rows")
-        .get_batch(batch_parameters={"dataframe": df})
     )
     suite = context.suites.add(gx.ExpectationSuite(name="counts_hourly"))
     for exp in build_suite(cfg, list(df.columns)):
         suite.add_expectation(exp)
-    # BOOLEAN_ONLY is about twice as fast on 6M rows; only failures need counts and examples,
-    # so those are re-run with SUMMARY.
-    result = batch.validate(suite, result_format="BOOLEAN_ONLY")
-    results = [
-        r
-        if r.success or r.exception_info.get("raised_exception")
-        else batch.validate(
-            r.expectation_config.to_domain_obj(), result_format="SUMMARY"
+
+    results = []
+    for exp in suite.expectations:
+        frame = for_range_checks(
+            df[columns_read(exp, list(df.columns))], list(cfg["ranges"])
         )
-        for r in result.results
-    ]
+        batch = rows.get_batch(batch_parameters={"dataframe": frame})
+        # BOOLEAN_ONLY is about twice as fast; only failures need counts and examples, so
+        # those are re-run with SUMMARY.
+        r = batch.validate(exp, result_format="BOOLEAN_ONLY")
+        if not r.success and not r.exception_info.get("raised_exception"):
+            r = batch.validate(exp, result_format="SUMMARY")
+        results.append(r)
 
     checks = []
     for r in results:

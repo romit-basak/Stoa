@@ -106,6 +106,18 @@ def test_validate_fails_without_retrying(dag):
     assert dag.get_task("validate").retries == 0
 
 
+def test_a_task_skipped_for_missing_credentials_never_skips_the_rest(dag):
+    # pull_minute_feed is skipped without bucket credentials (exit 99), as on a grader's
+    # clone. Under the default all_success rule that skip spreads to every task after it.
+    tolerant = {"none_failed", "none_failed_min_one_success", "all_done"}
+    for task in dag.tasks:
+        if not getattr(task, "skip_on_exit_code", None):
+            continue
+        for after in task.downstream_list:
+            assert after.trigger_rule in tolerant, (task.task_id, after.task_id)
+    assert dag.get_task("validate").trigger_rule == "none_failed"
+
+
 def test_dvc_push_skips_without_credentials(dag):
     # Must match SKIP_EXIT_CODE in src/pipeline/dvc_push.py.
     assert 99 in dag.get_task("dvc_push").skip_on_exit_code

@@ -48,8 +48,10 @@ def check_metrics(df: pd.DataFrame, radii: list[int]) -> list[Check]:
     present = [f"met_betweenness_{r}" for r in radii] + [
         f"met_reach_{r}" for r in radii
     ]
+    # Roads left out of the metric graph (graph.py) have no metrics by design.
+    m = df[df["in_metric_graph"]] if "in_metric_graph" in df else df
     missing = {
-        c: int(df[c].isna().sum()) for c in present if c in df and df[c].isna().any()
+        c: int(m[c].isna().sum()) for c in present if c in m and m[c].isna().any()
     }
     checks.append(
         Check(

@@ -86,6 +86,21 @@ built_form:
   buffer_m: 25            # building coverage around each segment
   max_distance_m: 2000    # distance features are capped here (and flagged as "none nearby")
 
+# The metric graph (src/features/graph.py): network metrics leave out road centrelines whose
+# sidewalks are mapped as their own ways, after inferring crossings where none is mapped.
+graph:
+  exclude_separate_roads: true
+  road_classes: [living_street, residential, service, unclassified, tertiary, secondary,
+                 primary, trunk]
+  inferred_crossings:
+    junction_radius_m: 20        # sidewalk ends this close to the junction are candidates
+    max_length_m: 30             # no wider than this
+    mapped_crossing_radius_m: 30 # none if a mapped crossing is this close to the link
+    detour_factor: 3             # none if the sidewalks already join within 3x the link
+  # The build fails if leaving the roads out shrinks the main component's share of length by
+  # more than this (the guard that keeps bridging roads should prevent it).
+  max_main_component_drop: 0.01
+
 network_metrics:
   radii_m: [400, 800, 1600]
   workers: 8              # processes for the source loop; 0 = os.cpu_count()

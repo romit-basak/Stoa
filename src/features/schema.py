@@ -172,6 +172,7 @@ FLAGS = [
     "is_bridge",
     "is_tunnel",
     "is_covered",
+    "is_inferred",
 ]
 SIDEWALK = [
     "sidewalk_both",
@@ -266,6 +267,15 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
         cols += [_f(f"{m}_{r}", "float64", o, True) for m in METRIC + ANGULAR]
     cols.append(
         _f("in_main_component", "bool", o, True, "In the largest connected part")
+    )
+    cols.append(
+        Column(
+            "in_metric_graph",
+            "bool",
+            "meta",
+            o,
+            description="False for separate-sidewalk roads left out of network metrics",
+        )
     )
     cols.append(Column("geometry", "geometry", "meta", o, description="Segment line"))
     return cols

@@ -26,6 +26,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 
 from src.features.common import Site, config_hash, log, write_meta, write_parquet
+from src.features.graph import node_table
 from src.features.network_metrics import network_metrics, primal_csr
 from src.features.opening_hours import parse_opening_hours
 
@@ -64,6 +65,9 @@ def tag_features(edges: pd.DataFrame) -> pd.DataFrame:
     out["is_bridge"] = edges["bridge"].notna() & edges["bridge"].ne("no")
     out["is_tunnel"] = edges["tunnel"].notna() & edges["tunnel"].ne("no")
     out["is_covered"] = edges["covered"].isin(["yes", "arcade", "colonnade"])
+    out["is_inferred"] = (
+        edges["is_inferred"].astype(bool) if "is_inferred" in edges else False
+    )
     sw = edges["sidewalk_state"]
     out["sidewalk_both"] = sw.eq("both")
     out["sidewalk_one_side"] = sw.isin(["left", "right"])
@@ -352,15 +356,39 @@ def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
     t = time.perf_counter()
     trans = transit_features(edges, nodes, transit, fcfg, csr)
     runtimes["transit"] = time.perf_counter() - t
-    metrics, metric_rt = network_metrics(edges, nodes, fcfg["network_metrics"])
+    # Metrics on the metric graph only (graph.py): edges left out get none, not zeros.
+    in_metric = (
+        edges["in_metric_graph"].to_numpy(dtype=bool)
+        if "in_metric_graph" in edges
+        else np.ones(len(edges), dtype=bool)
+    )
+    metric_edges = edges[in_metric].reset_index(drop=True)
+    metrics, metric_rt = network_metrics(
+        metric_edges, node_table(metric_edges)[0], fcfg["network_metrics"]
+    )
     runtimes.update(metric_rt)
+    # Degree describes the junctions on the ground, so it comes from the whole graph.
+    deg = nodes.set_index("node_id")["degree"]
+    degree = pd.DataFrame(
+        {
+            "segment_id": edges["segment_id"].to_numpy(),
+            "degree_min": np.minimum(
+                deg[edges["u"]].to_numpy(), deg[edges["v"]].to_numpy()
+            ),
+            "degree_max": np.maximum(
+                deg[edges["u"]].to_numpy(), deg[edges["v"]].to_numpy()
+            ),
+        }
+    )
+    metrics = metrics.drop(columns=["degree_min", "degree_max"])
 
-    for part in (amen, built, trans, metrics):
+    for part in (amen, built, trans, degree, metrics):
         feats = feats.merge(part, on="segment_id", how="left", validate="one_to_one")
     feats.insert(1, "way_id", edges["way_id"].to_numpy())
     feats.insert(2, "name", edges["name"].to_numpy())
     feats.insert(3, "highway", edges["highway"].to_numpy())
     feats["in_main_component"] = edges["in_main_component"].to_numpy()
+    feats["in_metric_graph"] = in_metric
     feats = gpd.GeoDataFrame(feats, geometry=edges.geometry.to_numpy(), crs=edges.crs)
 
     write_parquet(feats, site.processed / "osm_segment_features.parquet")

@@ -42,8 +42,14 @@ KEYS = ["location_id", "ts_local"]
 def read_archive(folder) -> pd.DataFrame:
     files = sorted(folder.glob("minute_feed_*.parquet"))
     if not files:
+        # Typed, so the steps after it work on an empty archive (a clone without bucket
+        # credentials, where pull_minute_feed is skipped) as on a full one.
         return pd.DataFrame(
-            columns=["location_id", "sensing_datetime", "total_of_directions"]
+            {
+                "location_id": pd.Series(dtype="int32"),
+                "sensing_datetime": pd.Series(dtype="datetime64[s, UTC]"),
+                "total_of_directions": pd.Series(dtype="int32"),
+            }
         )
     return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
@@ -73,7 +79,16 @@ def hour_status(
     """
     cols = [*KEYS, "count", "minute_sum", "in_archive", "adds_up", "kept"]
     if m.empty:
-        return pd.DataFrame(columns=cols)
+        # Typed, so filtering on the flags and the saved file work with no rows too.
+        return pd.DataFrame(
+            {
+                "location_id": pd.Series(dtype="int64"),
+                "ts_local": pd.Series(dtype=f"datetime64[ns, {TZ}]"),
+                "count": pd.Series(dtype="int64"),
+                "minute_sum": pd.Series(dtype="float64"),
+                **{c: pd.Series(dtype=bool) for c in ["in_archive", "adds_up", "kept"]},
+            }
+        )[cols]
     first, newest = m["ts_local"].min(), m["ts_local"].max()
     h = hourly.assign(location_id=hourly["location_id"].astype("int64"))
     # The hourly table's newest hour is left out too: the portal publishes it before the hour
@@ -111,7 +126,7 @@ def minute_grid(
     status = hour_status(m, hourly, cfg)
     kept = status[status[which]].set_index(KEYS).sort_index()
     if kept.empty:
-        return pd.DataFrame(columns=[*KEYS, "count"]), np.zeros((0, 60))
+        return kept[["count"]].reset_index(), np.zeros((0, 60))
     grid = (
         m.set_index(KEYS)
         .loc[lambda d: d.index.isin(kept.index)]

@@ -32,7 +32,7 @@ import pandas as pd
 import shapely
 from shapely import STRtree
 
-from src.features.common import Site, log, write_meta, write_parquet
+from src.features.common import Site, in_feature_mask, log, write_meta, write_parquet
 from src.features.sun import solar_position
 from src.ingest.common import REPO_ROOT
 
@@ -218,6 +218,8 @@ def shade(site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]) -> dict[st
     cfg = fcfg["shade"]
     t = time.perf_counter()
     edges = gpd.read_parquet(site.graph_dir / "edges.parquet")
+    # At a masked site (NYC) only the segments near the mask points need shade.
+    edges = edges[in_feature_mask(edges, site, fcfg)].reset_index(drop=True)
     osm = osm_heights(gpd.read_parquet(site.interim / "buildings.parquet"), cfg)
     variants = {"portable": osm, "rich": city_heights(site, data_cfg, cfg)}
     lon, lat = data_cfg["sites"][site.name]["center"]

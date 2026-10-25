@@ -25,7 +25,14 @@ from numba import njit
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 
-from src.features.common import Site, config_hash, log, write_meta, write_parquet
+from src.features.common import (
+    Site,
+    config_hash,
+    in_feature_mask,
+    log,
+    write_meta,
+    write_parquet,
+)
 from src.features.graph import node_table
 from src.features.network_metrics import network_metrics, primal_csr
 from src.features.opening_hours import parse_opening_hours
@@ -393,6 +400,7 @@ def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
     feats.insert(3, "highway", edges["highway"].to_numpy())
     feats["in_main_component"] = edges["in_main_component"].to_numpy()
     feats["in_metric_graph"] = in_metric
+    feats["in_feature_mask"] = in_feature_mask(edges, site, fcfg)
     feats = gpd.GeoDataFrame(feats, geometry=edges.geometry.to_numpy(), crs=edges.crs)
 
     write_parquet(feats, site.processed / "osm_segment_features.parquet")

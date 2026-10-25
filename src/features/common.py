@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import numpy as np
 import yaml
 
 from src.ingest.common import REPO_ROOT, load_config
@@ -61,6 +62,45 @@ def site_settings(
         processed=REPO_ROOT / feat_cfg["processed_dir"] / "features" / name,
         pbf=REPO_ROOT / data_cfg["raw_dir"] / "osm" / f"{name}.osm.pbf",
     )
+
+
+def feature_mask(site: Site, feat_cfg: dict[str, Any]) -> tuple[Any, float] | None:
+    """(points, radius_m) where a site needs features only near some points, else None.
+
+    NYC's transfer test needs features only at its count locations, not across the city, so
+    its build is clipped around them (`sites.<site>.feature_mask` in configs/features.yaml).
+    """
+    spec = feat_cfg["sites"][site.name].get("feature_mask")
+    if not spec:
+        return None
+    data_cfg = load_config()
+    pts = gpd.read_file(REPO_ROOT / data_cfg["raw_dir"] / spec["points"]).to_crs(
+        site.crs
+    )
+    return pts, float(spec["radius_m"])
+
+
+def clip_area(site: Site, feat_cfg: dict[str, Any]) -> Any:
+    """The area a masked site is built over: the mask plus the largest metric radius.
+
+    Any shortest path of up to r metres that passes a segment stays within r of it, so metrics
+    of segments inside the mask are exact on a graph clipped this far out.
+    """
+    mask = feature_mask(site, feat_cfg)
+    if mask is None:
+        return None
+    pts, radius = mask
+    margin = radius + max(feat_cfg["network_metrics"]["radii_m"]) + 100
+    return pts.buffer(margin).union_all()
+
+
+def in_feature_mask(edges: Any, site: Site, feat_cfg: dict[str, Any]) -> np.ndarray:
+    """True for segments within the mask's radius of a mask point (everywhere without one)."""
+    mask = feature_mask(site, feat_cfg)
+    if mask is None:
+        return np.ones(len(edges), dtype=bool)
+    pts, radius = mask
+    return edges.geometry.dwithin(pts.geometry.union_all(), radius).to_numpy()
 
 
 def write_parquet(gdf: Any, path: Path) -> Path:

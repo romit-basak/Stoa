@@ -71,6 +71,15 @@ def stage_outputs(site: Site) -> dict[str, list[Path]]:
     }
 
 
+def mask_points(site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]) -> Path:
+    spec = fcfg["sites"][site.name].get("feature_mask")
+    return (
+        REPO_ROOT / data_cfg["raw_dir"] / spec["points"]
+        if spec
+        else Path("/nonexistent")
+    )
+
+
 def fingerprints(
     site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]
 ) -> dict[str, str]:
@@ -78,15 +87,20 @@ def fingerprints(
     code = _hash(*(_file_hash(f) for f in sorted(FEATURE_CODE.glob("*.py"))))
     fp = {
         "extract": _hash(
-            _file_hash(site.pbf), str(site.bbox), str(site.crs), config_hash(fcfg), code
+            _file_hash(site.pbf),
+            str(site.bbox),
+            str(site.crs),
+            config_hash(fcfg),
+            code,
+            _file_hash(mask_points(site, fcfg, data_cfg)),
         )
     }
     fp["graph"] = _hash(fp["extract"], "graph")
     events_log = REPO_ROOT / "configs" / "events.yaml"
     surroundings = fcfg.get("surroundings", {}).get("sites", {}).get(site.name, {})
-    inputs = [
-        REPO_ROOT / data_cfg["raw_dir"] / p for p in sorted(surroundings.values())
-    ]
+    # The file entries; settings such as dem_nodata are in the config hash already.
+    files = sorted(v for v in surroundings.values() if isinstance(v, str))
+    inputs = [REPO_ROOT / data_cfg["raw_dir"] / p for p in files]
     fp["features"] = _hash(
         fp["graph"],
         "features",

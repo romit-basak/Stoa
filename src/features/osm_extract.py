@@ -25,6 +25,7 @@ from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from src.features.common import (
     Site,
+    clip_area,
     config_hash,
     log,
     pbf_sha256,
@@ -277,16 +278,30 @@ def build_transit(
     return _finish(df, crs, ["name"])
 
 
+def _clip(df: gpd.GeoDataFrame, area, crs: int) -> gpd.GeoDataFrame:
+    """Rows that touch the area (given in the site CRS); geometry left in its own CRS."""
+    projected = (
+        df.geometry.to_crs(crs) if df.crs and df.crs.to_epsg() != crs else df.geometry
+    )
+    return df[projected.intersects(area).to_numpy()].reset_index(drop=True)
+
+
 def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
     """Run the extract stage for one site and return row counts per layer."""
     bbox, crs, out = site.bbox, site.crs, site.interim
     log.info("reading walkable ways from %s", site.pbf.name)
     ways = read_walkable_ways(site.pbf, bbox, fcfg).to_crs(crs)
+    area = clip_area(site, fcfg)
+    if area is not None:
+        ways = _clip(ways, area, crs)
+        log.info("clipped to the feature mask: %d ways", len(ways))
     write_parquet(ways, out / "ways.parquet")
 
     log.info("reading points and polygons")
     points = _read_layer(site.pbf, "points", bbox)
     polys = _read_layer(site.pbf, "multipolygons", bbox)
+    if area is not None:
+        points, polys = _clip(points, area, crs), _clip(polys, area, crs)
 
     pois = build_pois(points, polys, fcfg, crs)
     write_parquet(pois, out / "pois.parquet")
@@ -308,6 +323,8 @@ def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
     write_parquet(ped, out / "ped_areas.parquet")
 
     plazas = read_plazas(site.pbf, bbox).to_crs(crs)
+    if area is not None:
+        plazas = _clip(plazas, area, crs)
     write_parquet(plazas, out / "plazas.parquet")
 
     # GDAL only turns closed ways into polygons for some tags; a station mapped as a closed way

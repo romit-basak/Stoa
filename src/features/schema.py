@@ -306,6 +306,15 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
             description="False for separate-sidewalk roads left out of network metrics",
         )
     )
+    cols.append(
+        Column(
+            "in_feature_mask",
+            "bool",
+            "meta",
+            o,
+            description="Near a mask point at a site built only there (NYC); true elsewhere",
+        )
+    )
     cols.append(Column("geometry", "geometry", "meta", o, description="Segment line"))
     return cols
 

@@ -17,6 +17,9 @@ sites:
     crs: 26919  # NAD83 / UTM 19N
   nyc:
     crs: 32618  # WGS 84 / UTM 18N
+    # The transfer test needs features only at the 114 count locations: build within 200 m of
+    # them (and clip the graph far enough out that their metrics stay exact).
+    feature_mask: {points: nyc/bi_annual_pedestrian_counts.geojson, radius_m: 200}
 
 walk_filter:
   # Based on OSMnx's "walk" network filter. A way is walkable if it has a highway tag not listed
@@ -160,6 +163,7 @@ surroundings:
     melbourne:
       worldcover: worldcover/melbourne_worldcover_2021.tif
       dem: dem/melbourne_ga_lidar_5m.tif
+      dem_nodata: 0         # the tile fills ground outside the survey with 0
       canopy: melbourne_portal/tree-canopies-2021-urban-forest.geojson
       clue_blocks: melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
       clue_jobs: melbourne_portal/employment-by-block-by-clue-industry.parquet

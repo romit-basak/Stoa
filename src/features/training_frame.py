@@ -134,10 +134,8 @@ def add_derived(
     """hourly with the derived columns added (needs location_id, ts_local and the sun).
 
     Shade comes from osm_segment_shade.parquet at the row's sun bin (fully shaded when the sun
-    is down, empty when the site has no shade table); events from the venue distances and the
-    event log (src/features/events.py; never near an event at a site without them).
+    is down, empty when the site has no shade table); events from `event_columns`.
     """
-    from src.features import events as ev
     from src.features import shade as sh
 
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
@@ -168,6 +166,27 @@ def add_derived(
         out["shade_portable"] = np.float32(np.nan)
         out["shade_rich"] = np.float32(np.nan)
 
+    cols = event_columns(hourly["ts_local"], seg, site, data_cfg, fcfg)
+    for c in cols.columns:
+        out[c] = cols[c].to_numpy()
+    return out
+
+
+def event_columns(
+    ts_local: pd.Series,
+    segment: pd.Series,
+    site: str,
+    data_cfg: dict[str, Any],
+    fcfg: dict[str, Any],
+) -> pd.DataFrame:
+    """The event columns for rows given by their local time stamp and segment.
+
+    From the venue distances and the event log (src/features/events.py); never near an event
+    at a site without them.
+    """
+    from src.features import events as ev
+
+    feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
     ecfg = fcfg.get("events", {})
     cap = float(ecfg.get("max_distance_m", 3000))
     dist_path = feats / "osm_segment_venue_dist.parquet"
@@ -182,22 +201,20 @@ def add_derived(
             else pd.DataFrame(columns=["date", "local_time", "venue"])
         )
         timed = ev.timed_events(log_, afl, load_bias_config()["afl_venues"], ecfg)
-        hour_local = hourly["ts_local"].dt.tz_localize(None).dt.floor("h")
-        cols = ev.hourly_event_features(
+        hour_local = ts_local.dt.tz_localize(None).dt.floor("h")
+        return ev.hourly_event_features(
             hour_local,
-            seg,
+            segment,
             ev.venue_hours(timed, ecfg),
             ev.event_days(log_, timed),
             pd.read_parquet(dist_path),
             cap,
         )
-        for c in cols.columns:
-            out[c] = cols[c].to_numpy()
-    else:
-        for p in ev.PHASES:
-            out[f"event_{p}"] = False
-        out["event_dist_m"] = np.float32(cap)
-        out["event_day_dist_m"] = np.float32(cap)
+    out = pd.DataFrame(index=ts_local.index)
+    for p in ev.PHASES:
+        out[f"event_{p}"] = False
+    out["event_dist_m"] = np.float32(cap)
+    out["event_day_dist_m"] = np.float32(cap)
     return out
 
 

@@ -97,6 +97,10 @@ Every source is configured in `configs/data.yaml`. Each script writes to `data/r
 # NYC (cross-city transfer test only)
 .venv/bin/python -m src.ingest.nyc                            # NYC DOT counts (~150 MB)
 
+# Stanford Drone Dataset (route-choice validation only; CC BY-NC-SA 3.0)
+.venv/bin/python -m src.ingest.stanford_drone                 # 60 annotation files from a Kaggle mirror, no video (~45 MB)
+.venv/bin/python -m src.ingest.stanford_drone --parse         # tracks and per-minute counts tables
+
 # OSM, land cover and weather for the other sites
 .venv/bin/python -m src.ingest.osm --site neu_boston          # likewise worldcover, weather; and --site nyc
 ```

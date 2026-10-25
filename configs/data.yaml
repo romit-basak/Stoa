@@ -7,6 +7,7 @@ sites:
     bbox: [144.892, -37.856, 144.997, -37.770]
     center: [144.9631, -37.8136]
     timezone: Australia/Melbourne
+    dem: {source: ga_5m}
     # The City's counting sensors are matched to the graph (src/features/sensor_match.py).
     count_sensors: true
   neu_boston:
@@ -15,11 +16,17 @@ sites:
     center: [-71.0892, 42.3398]
     timezone: America/New_York
     utm_epsg: 26919
+    dem: {source: usgs_3dep, res_m: 1.0}
+    # Site layers beyond OSM, DEM, land cover, weather and calendars (stoa_site_build).
+    extra_ingest: [boston_buildings, imagery]
   nyc:
     # Extent of the 114 NYC DOT bi-annual count locations (transfer test only).
     bbox: [-74.170, 40.565, -73.745, 40.885]
     center: [-73.9855, 40.7580]
     timezone: America/New_York
+    utm_epsg: 32618
+    # 10 m, not 1 m: the city-wide bbox at 1 m would be a ~36,000 x 35,000 pixel request.
+    dem: {source: usgs_3dep, res_m: 10.0}
     # Bi-annual counts start May 2007.
     weather_start: "2007-01-01"
 
@@ -162,7 +169,6 @@ dem:
   # (MA_CentralEastern_2021_B21 x32y469/x32y470). It is a dynamic mosaic: source project per pixel
   # is not reported.
   usgs_3dep_imageserver: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage
-  usgs_3dep_res_m: 1.0
 
 weather:
   # ERA5-based reanalysis via Open-Meteo archive API (hourly, local time).

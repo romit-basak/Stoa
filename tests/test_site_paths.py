@@ -42,6 +42,4 @@ def test_no_site_name_is_written_into_code():
         for line, s in code_strings(path):
             if s in SITES or any(f"/{site}" in s or f"{site}/" in s for site in SITES):
                 found.append(f"{path.relative_to(REPO_ROOT)}:{line} {s!r}")
-    # dem.py still picks the GA 5 m source by site name; Phase 2 moves that into the config.
-    found = [f for f in found if not f.startswith("src/ingest/dem.py")]
     assert found == []

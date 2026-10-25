@@ -6,6 +6,13 @@ processed_dir: data/processed
 sites:
   melbourne:
     crs: 28355  # GDA94 / MGA zone 55 (metres), same as configs/analysis.yaml
+    # The Metro Tunnel.
+    recent_stations:
+      - {name: Arden, opened: "2025-11-30"}
+      - {name: Parkville, opened: "2025-11-30"}
+      - {name: State Library, opened: "2025-11-30"}
+      - {name: Town Hall, opened: "2025-11-30"}
+      - {name: Anzac, opened: "2025-11-30"}
   neu_boston:
     crs: 26919  # NAD83 / UTM 19N
   nyc:
@@ -60,15 +67,10 @@ transit:
   tram_stop: ["railway=tram_stop"]
   bus_stop: ["highway=bus_stop"]
   rail_station: ["railway=station"]
-  # Stations that opened during the count record. Their distances go in a separate column, so the
-  # training join can ignore them before the opening date (the OSM snapshot postdates it).
-  # Names are matched case-insensitively against the station's OSM name.
-  recent_stations:
-    - {name: Arden, opened: "2025-11-30"}
-    - {name: Parkville, opened: "2025-11-30"}
-    - {name: State Library, opened: "2025-11-30"}
-    - {name: Town Hall, opened: "2025-11-30"}
-    - {name: Anzac, opened: "2025-11-30"}
+  # Stations that opened during a site's count record are listed per site (`recent_stations`
+  # under `sites`). Their distances go in a separate column, so the training frame can ignore
+  # them before the opening date (the OSM snapshot postdates it). Names are matched
+  # case-insensitively against the station's OSM name.
 
 green_tags: ["leisure=park", "leisure=garden", "leisure=nature_reserve", "landuse=grass",
              "landuse=recreation_ground", "landuse=village_green", "landuse=forest",

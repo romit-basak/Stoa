@@ -162,7 +162,10 @@ def build_pois(points, polys, fcfg: dict[str, Any], crs: int) -> gpd.GeoDataFram
     return _finish(df, crs, ["name", "opening_hours", "amenity", "shop"])
 
 
-def build_transit(points, polys, fcfg: dict[str, Any], crs: int) -> gpd.GeoDataFrame:
+def build_transit(
+    points, polys, fcfg: dict[str, Any], crs: int, recent_stations: list | None = None
+) -> gpd.GeoDataFrame:
+    """Stops and stations by mode; `recent_stations` (this site's) get their opening date."""
     tcfg = fcfg["transit"]
     modes = {m: tag_matcher(tcfg[m]) for m in ("tram_stop", "bus_stop", "rail_station")}
     poly_pts = polys.copy()
@@ -172,7 +175,7 @@ def build_transit(points, polys, fcfg: dict[str, Any], crs: int) -> gpd.GeoDataF
     for mode, m in modes.items():
         df.loc[df["tags"].map(m) & df["mode"].isna(), "mode"] = mode
     df = gpd.GeoDataFrame(df[df["mode"].notna()], geometry="geometry", crs=4326)
-    recent = {s["name"].lower(): s["opened"] for s in tcfg["recent_stations"]}
+    recent = {s["name"].lower(): s["opened"] for s in recent_stations or []}
     names = df["tags"].map(lambda t: (t.get("name") or "").lower())
     # "Town Hall Station" / "Town Hall" both match "town hall"; only rail stations count.
     df["opened"] = [
@@ -222,7 +225,10 @@ def extract(site: Site, fcfg: dict[str, Any]) -> dict[str, int]:
         bbox,
         where="railway = 'station' OR other_tags LIKE '%\"public_transport\"=>\"station\"%'",
     )
-    transit = build_transit(points, pd.concat([polys, station_lines]), fcfg, crs)
+    recent = fcfg["sites"][site.name].get("recent_stations", [])
+    transit = build_transit(
+        points, pd.concat([polys, station_lines]), fcfg, crs, recent
+    )
     write_parquet(transit, out / "transit.parquet")
 
     counts = {

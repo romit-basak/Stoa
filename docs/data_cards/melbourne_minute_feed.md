@@ -28,6 +28,14 @@ One file per local day, `minute_feed_YYYY-MM-DD.parquet`:
 - **Two different rows for one sensor and minute** happen (2 of 24,078 rows that day; the portal's description mentions sensors 67-69). The archive keeps both as published and merges only rows identical in every column.
 - `direction_1 + direction_2 = total_of_directions` on every row.
 
+## Within-hour profiles
+
+`src.features.minute_profiles` (the `minute_profiles` task in `stoa_pipeline`) turns the archive into within-hour profiles, so the walkers and the microsimulation can start from measured shapes rather than an even spread. Only trusted sensor-hours count: the minutes must add up to the hourly table's count (within 5%, or 2 people), which also shows that the missing minutes were zeros, and the hour needs at least 30 people. The archive's newest hour is left out while it fills.
+- `minute_hours.parquet`, one row per kept sensor-hour. `peak15` is four times the busiest clock quarter's count over the hour's count: 1 when the hour is even, 4 when everyone came in one quarter, as in a peak-hour factor. Also the busiest minute's share, weekday or weekend, and the hour type: the event phase at the sensor's segment (during, before or after an event, from the training frame's event columns) or ordinary.
+- `minute_profiles.parquet`, the mean share of the hour in each minute by sensor, day type, local hour and hour type, with the number of hours behind each mean.
+
+The hourly table arrives a day or two behind the feed, so each day's hours join the profiles once its counts are pulled. When a sensor and minute have two different rows, the later poll's row is used, and the hour is kept only if it still adds up. Nothing is modelled from these yet.
+
 ## Known issues
 
 - Polls can be late or missed (a queue wait on the cluster, a sleeping laptop). That costs nothing as long as one comes before the day's restart; a day with no late poll keeps only what earlier polls saw.

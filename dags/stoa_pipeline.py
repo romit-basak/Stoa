@@ -185,6 +185,12 @@ def stoa_pipeline():
         # (src/features/training_frame.py). About 10 s.
         return f"{STOA} src.features.training_frame"
 
+    @task.bash
+    def minute_profiles():
+        # Within-hour profiles from the per-minute archive, for sensor-hours whose minutes add
+        # up to the hourly table (src/features/minute_profiles.py). A few seconds.
+        return f"{STOA} src.features.minute_profiles"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
     @task.bash(retries=0)
@@ -238,7 +244,9 @@ def stoa_pipeline():
     [frame, static] >> slices
     errors = bias_errors()
     slices >> errors
-    [checked, errors] >> dvc_push()
+    profiles = minute_profiles()
+    [checked, sensors] >> profiles
+    [checked, errors, profiles] >> dvc_push()
 
 
 stoa_pipeline()

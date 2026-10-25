@@ -51,6 +51,7 @@ def test_has_every_stage(dag):
         "bias_slices",
         "bias_errors",
         "training_frame",
+        "minute_profiles",
         "osm_shade",
         "validate",
         "dvc_push",
@@ -91,8 +92,9 @@ def test_wiring(dag):
     assert upstream("osm_shade") == {"osm_graph"}
     assert upstream("training_frame") == {"validate", "osm_shade"}
     assert upstream("bias_slices") == {"training_frame", "pull_static_layers"}
+    assert upstream("minute_profiles") == {"validate", "osm_sensor_match"}
     assert upstream("bias_errors") == {"bias_slices"}
-    assert upstream("dvc_push") == {"validate", "bias_errors"}
+    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_profiles"}
 
 
 def test_every_task_retries(dag):

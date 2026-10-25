@@ -197,6 +197,18 @@ stages:
       - src/features/training_frame.py
       - src/features/schema.py
 
+  minute_profiles:
+    cmd: python -m src.features.minute_profiles
+    deps:
+      - data/raw/melbourne_portal/minute_feed
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/features/melbourne/osm_segment_venue_dist.parquet
+      - configs/events.yaml
+      - configs/features.yaml
+      - src/features/minute_profiles.py
+      - src/features/training_frame.py
+
   validate:
     cmd: python -m src.pipeline.validate
     deps:

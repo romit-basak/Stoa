@@ -150,6 +150,11 @@ events:
   max_distance_m: 3000   # walking distances beyond this count as "not near an event"
   venue_reach_m: 50      # graph nodes this close to a venue's outline reach it
 
+# Within-hour profiles from the per-minute archive (src/features/minute_profiles.py).
+minute_profiles:
+  sum_tolerance: 0.05     # an hour is kept when its minutes add up to the hourly count within 5% (or 2 people)
+  min_hour_count: 30      # quieter hours give noisy shares and are left out
+
 # Surroundings of each segment (src/features/surroundings.py). Paths are under data/raw/; a
 # site without a file gets empty columns for it.
 surroundings:

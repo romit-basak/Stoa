@@ -183,6 +183,9 @@ surroundings:
 network_metrics:
   radii_m: [400, 800, 1600]
   workers: 8              # processes for the source loop; 0 = os.cpu_count()
+  # The segment stage stops at once above this (src/features/segment_features.py, preflight):
+  # the NYC clip's 594,712 segments peaked at 4.8 GB, and the Docker VM has 8 GB.
+  max_segments: 800000
 
 sensor_match:
   search_radius_m: 30

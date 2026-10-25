@@ -42,6 +42,23 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging, sha256
 
 STAGES = ["extract", "graph", "features", "shade", "sensors"]
 FEATURE_CODE = REPO_ROOT / "src" / "features"
+# Settings and modules only the stages after the OSM ones read (the hourly table, the training
+# frame, the minute profiles, the schema). Changing them doesn't make an OSM stage stale, so
+# they stay out of its fingerprint; tests/features/test_osm_cli.py checks no OSM stage imports
+# these modules.
+DOWNSTREAM_SECTIONS = {
+    "counts_hourly",
+    "sensor_steepness",
+    "training_frame",
+    "minute_profiles",
+}
+DOWNSTREAM_CODE = {
+    "counts_hourly.py",
+    "sensor_steepness.py",
+    "training_frame.py",
+    "minute_profiles.py",
+    "schema.py",
+}
 
 
 def _hash(*parts: str) -> str:
@@ -84,13 +101,20 @@ def fingerprints(
     site: Site, fcfg: dict[str, Any], data_cfg: dict[str, Any]
 ) -> dict[str, str]:
     """One hash per stage that changes whenever anything the stage depends on changes."""
-    code = _hash(*(_file_hash(f) for f in sorted(FEATURE_CODE.glob("*.py"))))
+    code = _hash(
+        *(
+            _file_hash(f)
+            for f in sorted(FEATURE_CODE.glob("*.py"))
+            if f.name not in DOWNSTREAM_CODE
+        )
+    )
+    osm_cfg = {k: v for k, v in fcfg.items() if k not in DOWNSTREAM_SECTIONS}
     fp = {
         "extract": _hash(
             _file_hash(site.pbf),
             str(site.bbox),
             str(site.crs),
-            config_hash(fcfg),
+            config_hash(osm_cfg),
             code,
             _file_hash(mask_points(site, fcfg, data_cfg)),
         )

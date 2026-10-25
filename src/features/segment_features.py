@@ -342,8 +342,27 @@ def transit_features(edges, nodes, transit, cfg, csr) -> pd.DataFrame:
 # --------------------------------------------------------------------------------------------
 
 
+def preflight(site_name: str, n_segments: int, cfg: dict[str, Any]) -> None:
+    """Stop before the slow stages when a site's graph is larger than the configured limit.
+
+    Measured peaks of this stage: NEU Boston (9,345 segments) 0.7 GB, Melbourne (111,465) 3.3 GB,
+    the NYC clip (594,712) 4.8 GB, against the 8 GB the Docker VM has. Memory doesn't grow in
+    step with segments (Melbourne's dense centre reaches more per segment), so the limit is a
+    plain count with headroom over NYC, not an estimate. A larger site wants a feature mask
+    (`sites.<site>.feature_mask`) or a machine with more memory and a raised limit.
+    """
+    limit = cfg.get("max_segments")
+    log.info("preflight: %s has %d segments (limit %s)", site_name, n_segments, limit)
+    if limit and n_segments > limit:
+        raise ValueError(
+            f"{site_name} has {n_segments:,} segments, over network_metrics.max_segments "
+            f"({limit:,}): clip it with a feature mask or raise the limit on a larger machine"
+        )
+
+
 def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
     edges = gpd.read_parquet(site.graph_dir / "edges.parquet")
+    preflight(site.name, len(edges), fcfg["network_metrics"])
     nodes = gpd.read_parquet(site.graph_dir / "nodes.parquet")
     pois = gpd.read_parquet(site.interim / "pois.parquet")
     buildings = gpd.read_parquet(site.interim / "buildings.parquet")

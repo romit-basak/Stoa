@@ -13,7 +13,7 @@ It is the input for the **portable** model (features any city has; see `CLAUDE.m
 .venv/bin/python -m src.features.osm --if-stale           # skip stages whose inputs haven't changed
 ```
 
-With `--if-stale` (used by the Airflow DAG), a stage reruns only if its outputs are missing or an input changed: the extract, the bbox or CRS, `configs/features.yaml`, the code in `src/features/`, and, for sensor matching, the sensor locations file or `configs/sensor_overrides.yaml`. Fingerprints are kept in `data/interim/osm/<site>/stamps/`.
+With `--if-stale` (used by the Airflow DAG), a stage reruns only if its outputs are missing or an input changed: the extract, the bbox or CRS, `configs/features.yaml`, the code in `src/features/`, and, for sensor matching, the sensor locations file or `configs/sensor_overrides.yaml`. Fingerprints are kept in `data/interim/osm/<site>/stamps/`. The settings and modules that only later steps read (the hourly table, footpath slope, the training frame, the minute profiles and the schema: `DOWNSTREAM_SECTIONS` and `DOWNSTREAM_CODE` in `src/features/osm.py`) stay out of the fingerprints, so editing them doesn't rebuild the graph. A test checks that no OSM stage imports those modules.
 
 | Stage | Module | Reads | Writes |
 |---|---|---|---|

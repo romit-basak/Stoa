@@ -186,3 +186,10 @@ def test_calibration_scales_each_sensor_to_its_window_counts():
     out = se.calibrate(pred, y, sensors, window)
     assert out[:3].tolist() == [100.0, 100.0, 300.0]  # sensor 1 scaled by 2
     assert out[3:].tolist() == [0.0, 0.0]  # nothing predicted: left as it was
+
+
+def test_the_bias_model_is_seeded_so_reruns_repeat():
+    # Over 200,000 rows the model subsamples to choose its bins; unseeded, reruns differ.
+    from src.bias.slices import load_bias_config
+
+    assert "random_state" in load_bias_config()["errors"]["model"]

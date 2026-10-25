@@ -9,7 +9,7 @@ Notebooks 01-03 build a Melbourne hourly pedestrian dataset with footpath steepn
 | 1 | `01_download.ipynb` | the web (the only notebook that goes online) | `raw/` |
 | 2 | `02_combine.ipynb` | `raw/` | `interim/`, `processed/` |
 | 3 | `03_preprocess.ipynb` | `raw/`, `interim/`, `processed/` | `final/` |
-| 4 | `04_bias_slicing.ipynb` | the team's bias report, `data/processed/bias/melbourne/` (from `src.bias.representation` or `dvc pull`), and `configs/bias.yaml` | the figures in `docs/bias/figures/` |
+| 4 | `04_bias_slicing.ipynb` | the team's bias report, `data/processed/bias/melbourne/` (from `src.bias.representation` and `src.bias.slice_errors`, or `dvc pull`), and `configs/bias.yaml` | the figures in `docs/bias/figures/` |
 | 5 | `05_bias_stage1.ipynb` | `final/`, `interim/missing_hours.parquet` | `reports/bias/`: the same data-bias check on this dataset, which includes the Wayback fill |
 
 Notebook 04 runs locally from the repo only, in the project environment (`.venv`); it doesn't use the data folder below. Notebooks 01-03 and 05 use the data folder.

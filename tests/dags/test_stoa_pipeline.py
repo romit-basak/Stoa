@@ -53,6 +53,7 @@ def test_has_every_stage(dag):
         "bias_errors",
         "training_frame",
         "minute_profiles",
+        "minute_coverage",
         "osm_shade",
         "validate",
         "dvc_push",
@@ -100,7 +101,8 @@ def test_wiring(dag):
         "pull_events",
     }
     assert upstream("bias_errors") == {"bias_slices"}
-    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_profiles"}
+    assert upstream("minute_coverage") == {"minute_profiles", "bias_slices"}
+    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_coverage"}
 
 
 def test_every_task_retries(dag):

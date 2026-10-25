@@ -21,6 +21,9 @@ def feed(sensor: int, start_local: str, counts: dict[int, int]) -> pd.DataFrame:
 
 
 def hourly(rows: list[tuple[int, str, int]]) -> pd.DataFrame:
+    # A later hour at another sensor ends the table, since the table's newest hour is never
+    # used (the portal publishes it unfinished).
+    rows = [*rows, (999, "2026-10-27 00:00", 0)]
     return pd.DataFrame(
         {
             "location_id": [r[0] for r in rows],
@@ -92,7 +95,11 @@ def test_the_repeated_hour_when_daylight_saving_ends_stays_two_hours():
         }
     )
     table = pd.DataFrame(
-        {"location_id": 1, "ts_local": [first, second], "pedestriancount": [40, 50]}
+        {
+            "location_id": 1,
+            "ts_local": [first, second, second + pd.Timedelta(hours=5)],
+            "pedestriancount": [40, 50, 0],
+        }
     )
     hours, _ = mp.minute_grid(minutes, table, CFG)
     assert sorted(hours["count"]) == [40, 50]
@@ -148,3 +155,42 @@ def test_profiles_average_the_shares_by_group():
     share = prof.set_index("minute")["share"]
     assert share[0] == pytest.approx(0.5) and share[1] == pytest.approx(0.5)
     assert share.sum() == pytest.approx(1.0)
+
+
+def test_hour_status_says_what_became_of_each_hour():
+    minutes = pd.concat(
+        [
+            feed(1, "2026-10-25 12:00", {0: 40, 1: 20}),  # adds up to 60: kept
+            feed(2, "2026-10-25 12:00", {0: 10}),  # adds up, but quiet
+            feed(3, "2026-10-25 12:00", {0: 5}),  # hourly says 50: a missed reading
+            tail_hour(1),
+        ]
+    )
+    table = hourly(
+        [
+            (1, "2026-10-25 12:00", 60),
+            (2, "2026-10-25 12:00", 10),
+            (3, "2026-10-25 12:00", 50),
+            (4, "2026-10-25 12:00", 70),  # no minutes in the archive at all
+            (5, "2026-10-25 12:00", 0),  # nobody counted, so no rows: still covered
+            (1, "2026-10-24 12:00", 70),  # before the archive began
+        ]
+    )
+    s = mp.hour_status(mp.archive_minutes(minutes), table, CFG).set_index("location_id")
+    assert len(s) == 5
+    assert s.loc[1, ["in_archive", "adds_up", "kept"]].tolist() == [True, True, True]
+    assert s.loc[2, ["in_archive", "adds_up", "kept"]].tolist() == [True, True, False]
+    assert s.loc[3, ["in_archive", "adds_up", "kept"]].tolist() == [True, False, False]
+    assert s.loc[4, ["in_archive", "adds_up", "kept"]].tolist() == [False, False, False]
+    assert s.loc[5, ["in_archive", "adds_up", "kept"]].tolist() == [True, True, False]
+
+
+def test_no_archive_files_give_empty_results_not_an_error(tmp_path):
+    # A clone without bucket credentials: pull_minute_feed is skipped and the folder is empty.
+    minutes = mp.read_archive(tmp_path)
+    table = hourly([(1, "2026-10-25 12:00", 60)])
+    assert mp.hour_status(mp.archive_minutes(minutes), table, CFG).empty
+    hours, grid = mp.minute_grid(minutes, table, CFG)
+    assert hours.empty and grid.shape == (0, 60)
+    # The rest of what main() runs.
+    assert mp.profiles(mp.hour_summary(hours, grid), grid).empty

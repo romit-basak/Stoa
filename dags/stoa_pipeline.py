@@ -193,6 +193,12 @@ def stoa_pipeline():
         # up to the hourly table (src/features/minute_profiles.py). A few seconds.
         return f"{STOA} src.features.minute_profiles"
 
+    @task.bash
+    def minute_coverage():
+        # Bias in the per-minute data: which slices the archive and its profiles under-cover
+        # (src/bias/minute_coverage.py). A few seconds.
+        return f"{STOA} src.bias.minute_coverage"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
     # none_failed: pull_minute_feed is skipped on a clone without bucket credentials, and by
@@ -253,7 +259,9 @@ def stoa_pipeline():
     slices >> errors
     profiles = minute_profiles()
     [checked, sensors, events] >> profiles
-    [checked, errors, profiles] >> dvc_push()
+    covered = minute_coverage()
+    [profiles, slices] >> covered
+    [checked, errors, covered] >> dvc_push()
 
 
 stoa_pipeline()

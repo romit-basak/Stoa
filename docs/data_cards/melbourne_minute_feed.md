@@ -30,13 +30,12 @@ One file per local day, `minute_feed_YYYY-MM-DD.parquet`:
 - **Two different rows for one sensor and minute** happen (2 of 24,078 rows that day; the portal's description mentions sensors 67-69). The archive keeps both as published and merges only rows identical in every column.
 - `direction_1 + direction_2 = total_of_directions` on every row.
 
-## Within-hour profiles
+## In the pipeline
 
-`src.features.minute_profiles` (the `minute_profiles` task in `stoa_pipeline`) turns the archive into within-hour profiles, so the walkers and the microsimulation can start from measured shapes rather than an even spread. Only trusted sensor-hours count: the minutes must add up to the hourly table's count (within 5%, or 2 people), which also shows that the missing minutes were zeros, and the hour needs at least 30 people. The archive's newest hour is left out while it fills.
-- `minute_hours.parquet`, one row per kept sensor-hour. `peak15` is four times the busiest clock quarter's count over the hour's count: 1 when the hour is even, 4 when everyone came in one quarter, as in a peak-hour factor. Also the busiest minute's share, weekday or weekend, and the hour type: the event phase at the sensor's segment (during, before or after an event, from the training frame's event columns) or ordinary.
-- `minute_profiles.parquet`, the mean share of the hour in each minute by sensor, day type, local hour and hour type, with the number of hours behind each mean.
-
-The hourly table arrives a day or two behind the feed, so each day's hours join the profiles once its counts are pulled. When a sensor and minute have two different rows, the later poll's row is used, and the hour is kept only if it still adds up. Nothing is modelled from these yet.
+- **Preprocessing.** `pull_minute_feed` in `stoa_pipeline` copies the day files into `data/raw/melbourne_portal/minute_feed/` for DVC. `minute_profiles` then builds the within-hour profiles: it keeps sensor-hours whose minutes add up to the hourly table's count (within 5%, or 2 people), which also shows that the missing minutes were zeros, and that have at least 30 people. It writes `minute_hour_status.parquet` (every sensor-hour in the archive's span and what became of it), `minute_hours.parquet` (`peak15`: four times the busiest clock quarter over the hour, 1 for an even hour, 4 when everyone came in one quarter) and `minute_profiles.parquet` (the mean share of each minute, by sensor, weekday or weekend, local hour and hour type: before, during or after an event near the sensor, from the training frame's event columns, or ordinary).
+- **Validation.** `validate` warns on missing days, days whose last minute is before 23:00, duplicate rows, and minutes that don't add up to the hourly counts.
+- **Bias.** `minute_coverage` measures which slices the profiles under-cover, and pools quiet hours by volume tier as the mitigation (`docs/bias/bias_slicing.md`, "The per-minute data").
+- **Two edges are left out.** The archive's newest hour may still be filling. The hourly table's newest hour is published unfinished: on 25 October its 03:00 counts were below the minutes' sums at 85% of sensors, until the next pull replaced them.
 
 ## Known issues
 

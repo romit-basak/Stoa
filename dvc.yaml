@@ -215,6 +215,19 @@ stages:
       - src/features/minute_profiles.py
       - src/features/training_frame.py
 
+  minute_coverage:
+    cmd: python -m src.bias.minute_coverage
+    deps:
+      - data/processed/features/melbourne/minute_hour_status.parquet
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/bias/melbourne/sensor_slices.csv
+      - data/raw/melbourne_portal/minute_feed
+      - data/raw/events/afl_attendance.csv
+      - configs/bias.yaml
+      - configs/features.yaml
+      - src/bias
+      - src/features/minute_profiles.py
+
   validate:
     cmd: python -m src.pipeline.validate
     deps:

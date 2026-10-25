@@ -143,7 +143,8 @@ Options:
 .venv/bin/python -m src.features.osm --site neu_boston    # another site's graph and features (no counts needed)
 .venv/bin/python -m src.pipeline.validate_segments --site neu_boston  # check a site's segment table
 .venv/bin/python -m src.bias.representation               # bias slices: how much data each group has (~40 s)
-.venv/bin/python -m src.bias.slice_errors                 # bias: baseline error per slice and mitigations (15–20 min)
+.venv/bin/python -m src.bias.slice_errors                 # bias: baseline error per slice and mitigations (~16 min)
+.venv/bin/python -m src.bias.minute_coverage              # bias in the per-minute data, and pooled profiles (seconds)
 ```
 
 Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`. `sensor_osm_features.parquet` joins onto the counts on `location_id`. The column dictionary, join recipe and caveats are in [docs/features/osm_features.md](docs/features/osm_features.md). `counts_hourly.parquet` is the hourly training table (one row per sensor and hour); see [docs/features/counts_hourly.md](docs/features/counts_hourly.md), including how it handles daylight saving. `sensor_steepness.parquet` gives each outdoor sensor its footpath slope and elevation (from Shubham Hadawle's join notebook), and the hourly table carries those columns.
@@ -169,7 +170,7 @@ docker compose down              # stop; add -v to also wipe Airflow's database
 - the OSM stages, about 2.5 min: the walking network and segment features, built once;
 - `bias_errors`, about 14 min: it trains 15 models, and on a first run there is no earlier result to reuse.
 
-A task that shows as running for several minutes isn't stuck: its log (click the task, then Logs) shows its progress, e.g. `bias_errors` logs each model it trains. Later daily runs reuse what's held: about 6 minutes, with `bias_errors` rerunning only weekly.
+A task that shows as running for several minutes isn't stuck: its log (click the task, then Logs) shows its progress, e.g. `bias_errors` logs each model it trains. Later daily runs reuse what's held: about 2 minutes, with `bias_errors` rerunning only weekly.
 
 The repo is mounted into the containers, so code changes apply on the next run; changes to `pyproject.toml` dependencies need `--build`. Data is written to `data/` on the host, as when running the modules directly.
 
@@ -182,7 +183,7 @@ pull_weather ──────────────────────�
 pull_calendars ───────────────────────────────────────────────────────────────────┘
 ```
 
-(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `minute_profiles` runs after `validate` and before `dvc_push`; it turns the per-minute archive into within-hour profiles. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM and the CLUE areas only when they aren't held yet, and also feeds `bias_slices`. `pull_events` fetches the current AFL season's crowds and fixtures (and any season not held), one page each, and feeds `training_frame` and `minute_profiles`. `bias_slices` reports how much data each bias slice has, and `bias_errors` a baseline model's error per slice with and without mitigations; `bias_errors` takes 15–20 minutes, so it reruns weekly or when its settings change and otherwise finishes at once. See [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) It runs daily because the counts and weather arrive daily and validation should catch a dead sensor or a stale feed within a day; a missed day costs nothing, since each run re-fetches from two days before the newest date held; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below), and the bias tasks run after it, so they only see data that passed. They don't run beside it because each loads the whole table (about 3 GB at 7.4M rows), and together they overran Docker Desktop's default 8 GB. `dvc_push` saves the result as a new DVC version (below). A daily run takes about 6 minutes in Docker; `validate` and `bias_slices`, which each read the whole hourly table (7.4M rows), and `join_all` are the slowest tasks (see "Pipeline optimization" below).
+(`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations. `pull_static_layers` fetches the footpath-steepness survey, the 5 m DEM and the CLUE areas only when they aren't held yet, and also feeds `bias_slices`. `pull_events` fetches the current AFL season's crowds and fixtures (and any season not held), one page each, and feeds `training_frame` and `minute_profiles`. `bias_slices` reports how much data each bias slice has, and `bias_errors` a baseline model's error per slice with and without mitigations; `bias_errors` takes about 16 minutes, so it reruns weekly or when its settings change and otherwise finishes at once. See [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md).) `pull_minute_feed` copies the per-minute archive into `data/raw` before `validate` checks it (without bucket credentials it is skipped, and `validate` runs anyway); after `validate`, `minute_profiles` builds the within-hour profiles and `minute_coverage` measures their bias by slice, with pooled profiles by volume tier as the mitigation. It runs daily because the counts and weather arrive daily and validation should catch a dead sensor or a stale feed within a day; a missed day costs nothing, since each run re-fetches from two days before the newest date held; each task retries twice, except `validate`. `validate` checks the hourly table before it's versioned (below), and the bias tasks run after it, so they only see data that passed. They don't run beside it because each loads the whole table (about 3 GB at 7.4M rows), and together they overran Docker Desktop's default 8 GB. `dvc_push` saves the result as a new DVC version (below). A daily run takes about 2 minutes in Docker; `validate` and `bias_slices`, which each read the whole hourly table (7.4M rows), and `join_all` are the slowest tasks (see "Pipeline optimization" below).
 
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date held, merged into the rows already held on (location, date, hour). The fixed 2009–2022 archive is kept. `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full` re-fetches everything.
@@ -261,7 +262,22 @@ The `pull_counts` fix holds (10 s against 229 s). The new bottleneck is the stre
 
 **Great Expectations was most of `validate`.** Profiling `validate` on the 7.4M-row table on a laptop: the Great Expectations suite took about 28 s, against about 6 s for every other check together and 1 s to read the table. Two things in Great Expectations 1.x made it slow. Its numpy range check only runs when a column is exactly `int64` or `float64`; for our `int8`, `int32` and `float32` columns it called a Python function per row. And before each check it filtered the whole frame it was given, copying every column. Now each expectation runs on a frame of just the columns it reads, with the range-checked ones widened to 64-bit: the suite takes 17 s instead of 28, peaks at 3.9 GB instead of 5.0, and gives the same results (`run_expectations` in `src/pipeline/validate.py`).
 
-`bias_errors`, added after this run, comes after `bias_slices`. It trains the bias baseline five times per mitigation, 15–20 minutes, so it reruns only when its last run is a week old or its settings changed; on other days it finishes at once and the daily run stays near 6 minutes.
+**The pipeline with `bias_errors` (25 October).** `bias_errors` comes after `bias_slices` and trains the bias baseline five times per mitigation, so it reruns only when its last run is a week old or its settings changed; on other days it finishes at once. Two runs on the same day show both cases (7,416,763 rows, Docker Desktop's default 8 GB, every task green on its first try):
+
+| Task | `gantt_2026_10_25` (daily, `bias_errors` skipped) | `gantt_2026_10_25_bias` (weekly, `bias_errors` trains) |
+|---|---|---|
+| `bias_errors` | 1 s | 950 s |
+| `validate` | 41 s | 47 s |
+| `join_all` | 40 s | 34 s |
+| `bias_slices` | 29 s | 32 s |
+| `pull_counts` | 6 s | 6 s |
+| `dvc_push` | 4 s | 6 s |
+| Other ingest and OSM tasks (OSM skipped) | 3 s or less each | 3 s or less each |
+| **Whole run** | **127 s** | **1,081 s** |
+
+![Gantt with bias_errors](docs/pipeline/gantt_bias_errors.png)
+
+With `validate` and `bias_slices` in sequence and the faster Great Expectations step, a daily run takes about 2 minutes instead of 6. Once a week `bias_errors` adds about 16 minutes and is the whole bottleneck. That is acceptable for a weekly fairness report; if it needs to be faster, the next step is fewer folds or mitigations per run, or running it on a schedule of its own.
 
 While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 
@@ -340,7 +356,7 @@ CLAUDE.md                project rules and conventions
 | `01_download` | Downloading the counts, sensor tables, footpath steepness, DEM and weather | `src/ingest/melbourne_portal.py`, `weather.py`, `dem.py` | `pull_counts`, `pull_weather`, `pull_static_layers` |
 | `02_combine` | Merging the archive, live table and Wayback copy; the September 2010 fix; daylight saving; locations for retired sensors; the weather join | `src/features/counts_hourly.py`, `sensor_match.py` (`load_sensor_locations`) | `join_all`, `osm_sensor_match` |
 | `03_preprocess` | Footpath slope with a DEM fallback; outage zeros; quality checks | `src/features/sensor_steepness.py`, `counts_hourly.py`, `src/pipeline/validate.py` | `sensor_steepness`, `join_all`, `validate` |
-| `04_bias_slicing` | Figures for the bias write-up, drawn from the pipeline's bias outputs | reads `data/processed/bias/` from `src/bias/representation.py` | `bias_slices` |
+| `04_bias_slicing` | Figures for the bias write-up, drawn from the pipeline's bias outputs | reads `data/processed/bias/` from `src/bias/representation.py` and `slice_errors.py` | `bias_slices`, `bias_errors` |
 | `05_bias_stage1` | The representation check on the notebooks' own dataset | `src/bias/representation.py` | `bias_slices` |
 
 The notebooks' tables differ from the pipeline's in a few documented ways (UTC-only time, four weather variables, a different outage-zero rule); see `notebooks/README.md`. Use the pipeline's tables (`dvc pull`, or a DAG run) for anything that feeds a model.

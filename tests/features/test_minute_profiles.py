@@ -166,3 +166,14 @@ def test_hour_status_says_what_became_of_each_hour():
     assert s.loc[3, ["in_archive", "adds_up", "kept"]].tolist() == [True, False, False]
     assert s.loc[4, ["in_archive", "adds_up", "kept"]].tolist() == [False, False, False]
     assert s.loc[5, ["in_archive", "adds_up", "kept"]].tolist() == [True, True, False]
+
+
+def test_no_archive_files_give_empty_results_not_an_error(tmp_path):
+    # A clone without bucket credentials: pull_minute_feed is skipped and the folder is empty.
+    minutes = mp.read_archive(tmp_path)
+    table = hourly([(1, "2026-10-25 12:00", 60)])
+    assert mp.hour_status(mp.archive_minutes(minutes), table, CFG).empty
+    hours, grid = mp.minute_grid(minutes, table, CFG)
+    assert hours.empty and grid.shape == (0, 60)
+    # The rest of what main() runs.
+    assert mp.profiles(mp.hour_summary(hours, grid), grid).empty

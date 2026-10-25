@@ -166,6 +166,21 @@ stages:
       - configs/bias.yaml
       - configs/features.yaml
 
+  training_frame:
+    cmd: python -m src.features.training_frame
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/interim/osm/melbourne/extract_meta.json
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      - data/raw/events/afl_attendance.csv
+      - configs/events.yaml
+      - configs/bias.yaml
+      - configs/features.yaml
+      - src/features/training_frame.py
+      - src/features/schema.py
+
   validate:
     cmd: python -m src.pipeline.validate
     deps:

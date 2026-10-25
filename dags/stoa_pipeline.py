@@ -167,6 +167,12 @@ def stoa_pipeline():
         # reweighting. About 15-20 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
 
+    @task.bash
+    def training_frame():
+        # The location splits, event days and feature spec every model trains from
+        # (src/features/training_frame.py). About 10 s.
+        return f"{STOA} src.features.training_frame"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
     @task.bash(retries=0)
@@ -210,8 +216,11 @@ def stoa_pipeline():
     # passed the checks. Only data that went through all three is versioned.
     checked = validate()
     joined >> checked
+    # The training frame loads the table too (about 2 GB), so it also takes its turn.
+    frame = training_frame()
+    checked >> frame
     slices = bias_slices()
-    [checked, static] >> slices
+    [frame, static] >> slices
     errors = bias_errors()
     slices >> errors
     [checked, errors] >> dvc_push()

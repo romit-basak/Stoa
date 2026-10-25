@@ -124,3 +124,11 @@ sensor_steepness:
   min_section_m: 5       # shorter sections are skipped: their grades reach 580%
   local_radius_m: 25     # length-weighted mean slope over sections this close
   dem_offset_m: 10       # DEM fallback: terrain slope from samples this far to each side
+
+# Training frame (src/features/training_frame.py): splits by location for every model.
+training_frame:
+  folds: 5
+  seed: 7
+  # Sensors within this distance of each other share a group, so neighbours on one street are
+  # never split between training and testing.
+  group_radius_m: 200

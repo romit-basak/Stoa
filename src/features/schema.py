@@ -111,7 +111,13 @@ def counts_hourly(timezone: str) -> list[Column]:
             description="Dropped before training",
         ),
         _f("weekday", "int8", t, True),
-        _f("hour_of_week", "int16", t, True),
+        Column(
+            "hour_of_week",
+            "int16",
+            "aux",
+            t,
+            description="weekday x hour; joins open hours",
+        ),
         _f("is_weekend", "bool", t, True),
         _f("is_public_holiday", "bool", "calendars", True),
         _f("school_term", "boolean", "calendars", True),
@@ -217,7 +223,13 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
         _f("lit_missing", "bool", o, True),
         _f("width_m", "float64", o, True),
         _f("width_missing", "bool", o, True),
-        _f("length_m", "float64", o, True),
+        Column(
+            "length_m",
+            "float64",
+            "aux",
+            o,
+            description="Depends on how the way was split",
+        ),
         Column(
             "bearing_deg",
             "float64",
@@ -252,7 +264,9 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
     ]
     for r in fcfg["network_metrics"]["radii_m"]:
         cols += [_f(f"{m}_{r}", "float64", o, True) for m in METRIC + ANGULAR]
-    cols.append(Column("in_main_component", "bool", "meta", o))
+    cols.append(
+        _f("in_main_component", "bool", o, True, "In the largest connected part")
+    )
     cols.append(Column("geometry", "geometry", "meta", o, description="Segment line"))
     return cols
 

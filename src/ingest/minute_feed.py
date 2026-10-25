@@ -4,8 +4,9 @@ Usage:
     python -m src.ingest.minute_feed [--bucket | --dest gs://BUCKET/PREFIX | --dest DIR]
     python -m src.ingest.minute_feed --sync [--archive-dir DIR]
 
-The portal's "past hour (counts per minute)" dataset is refreshed every 15 minutes and holds only
-the current Melbourne day so far (from about 01:00), so anything not saved is gone. The
+The portal's "past hour (counts per minute)" dataset is refreshed every 15 minutes and holds counts
+from 00:55 Melbourne time until a reset at about 02:00 the next morning, so anything not saved by
+then is gone. The
 `stoa_minute_feed` DAG polls it every 15 minutes and merges each poll into one parquet file per
 Melbourne day in the project bucket (--bucket: `minute_feed.gcs` in configs/data.yaml). Without
 --bucket or --dest the day files go to data/raw/melbourne_portal/minute_feed/. --sync copies the bucket's day files
@@ -27,7 +28,7 @@ import argparse
 import io
 import sys
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -227,12 +228,33 @@ def add_poll(store: Any, poll: pd.DataFrame) -> dict[str, int]:
     return added
 
 
-def fetch_poll(cfg: dict[str, Any]) -> pd.DataFrame:
+def poll_since(now: datetime, recent_hours: float) -> datetime | None:
+    """Where a poll starts: the whole feed in each hour's first quarter, else the last hours.
+
+    The portal takes about 8 s to export the whole day but under a second for the last few
+    hours, and a poll only needs minutes it may not have seen. The hourly full export picks up
+    any minute the portal published late, or that every poll in a longer gap missed.
+    """
+    if now.minute < 15:
+        return None
+    return (now - timedelta(hours=recent_hours)).replace(second=0, microsecond=0)
+
+
+def fetch_poll(cfg: dict[str, Any], since: datetime | None = None) -> pd.DataFrame:
+    """The feed's rows (only those from `since` on, if given) with fixed types."""
     mf = cfg["minute_feed"]
     url = f"{cfg['melbourne_portal']['base_url']}/catalog/datasets/{mf['dataset']}/exports/parquet"
+    params = (
+        None
+        if since is None
+        else {"where": f"sensing_datetime >= date'{since.isoformat()}'"}
+    )
     with tempfile.TemporaryDirectory() as tmp:
-        dest = download(url, Path(tmp) / "poll.parquet", timeout=120)
+        dest = download(url, Path(tmp) / "poll.parquet", params=params, timeout=120)
         poll = normalise(pd.read_parquet(dest), datetime.now(UTC))
+    log.info(
+        "poll %s", "of the whole feed" if since is None else f"from {since.isoformat()}"
+    )
     log.info(
         "poll: %d rows, %d sensors, %s to %s",
         len(poll),
@@ -283,6 +305,11 @@ def main() -> None:
         "--dest", help="gs://bucket/prefix or a folder (default: data/raw/...)"
     )
     ap.add_argument(
+        "--full",
+        action="store_true",
+        help="fetch the whole feed, not only the last hours",
+    )
+    ap.add_argument(
         "--sync",
         action="store_true",
         help="copy the bucket's day files into data/raw instead of polling",
@@ -300,7 +327,11 @@ def main() -> None:
             if dest.startswith("gs://")
             else LocalStore(Path(dest))
         )
-        add_poll(store, fetch_poll(cfg))
+        now = datetime.now(UTC)
+        since = (
+            None if args.full else poll_since(now, cfg["minute_feed"]["recent_hours"])
+        )
+        add_poll(store, fetch_poll(cfg, since))
     except MissingCredentials as err:
         # A clone without bucket access: skip (pink in Airflow) instead of failing every poll.
         log.warning("%s; skipped", err)

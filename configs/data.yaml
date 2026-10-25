@@ -121,14 +121,17 @@ melbourne_portal:
     dsm_2018_0p1m: https://s3-ap-southeast-2.amazonaws.com/gis-opendata-com/2018-DSM/CoM_DSM_2018.zip
     point_cloud_2018: https://opendatasoft-s3.s3.ap-southeast-2.amazonaws.com/attachments/CoM_Point_Cloud_2018_LAS.zip
 
-# Per-minute counts. The portal keeps only the current Melbourne day (from about 01:00), so the
-# stoa_minute_feed DAG polls it every 15 minutes and merges each poll into one file per local day
-# in the project bucket (src/ingest/minute_feed.py). The prefix sits outside DVC's own folders
+# Per-minute counts. The portal keeps them from 00:55 Melbourne time until a reset at about 02:00
+# the next morning, so the stoa_minute_feed DAG polls it every 15 minutes and merges each poll into
+# one file per local day in the project bucket (src/ingest/minute_feed.py). The prefix sits outside DVC's own folders
 # (files/md5/ and the two-letter legacy ones), so `dvc gc --cloud` never touches it.
 minute_feed:
   dataset: pedestrian-counting-system-past-hour-counts-per-minute
   license: CC BY 4.0
   gcs: gs://stoa-dvc-data/minute_feed
+  # A poll fetches only the last few hours (well over the 15 minutes between polls), except the
+  # first poll of each hour, which fetches the whole day so far.
+  recent_hours: 3
 
 # Stanford Drone Dataset: trajectories on a university campus, for route-choice validation only.
 # CC BY-NC-SA 3.0 (the original's licence; the mirror's label is wrong): no model fitted to it is

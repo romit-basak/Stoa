@@ -1,7 +1,8 @@
 """Archive the City of Melbourne's per-minute pedestrian counts every 15 minutes.
 
-The portal keeps only the current Melbourne day (from about 01:00 local time), so a poll has to
-happen before each day's restart or the rest of that day is lost. Each run fetches the feed and
+The portal keeps counts from 00:55 Melbourne time until a reset at about 02:00 the next morning,
+so a poll has to land between midnight and that reset, or the end of the day before and the new
+day's first hour are lost. Each run fetches the feed and
 merges it into that day's file in the project bucket (src/ingest/minute_feed.py); several
 teammates' machines can run this DAG at once without overwriting each other. Without bucket
 credentials the task is skipped, not failed.

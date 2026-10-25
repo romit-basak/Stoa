@@ -14,7 +14,7 @@ The work below was done on `ext/pipeline` (plan: data side and training frame; t
 | DEM is per-country code | Done for the three sites: the source is site config, large USGS clips come in tiles, no source fails loudly | `src/ingest/dem.py` |
 | No generic buildings with heights | Partly: shade has a portable variant from OSM heights (9 m default, counted) and a rich one from city heights | `src/features/shade.py` |
 | Imagery is US-only and single-item | Deferred (Tier 2) | |
-| AFL fixtures not in the DAG | Event features use AFL Tables (already pulled) and the sourced event log; Squiggle still runs by hand | `src/features/events.py`, `configs/events.yaml` |
+| AFL fixtures not in the DAG | Done: `pull_events` fetches the current season's crowds (AFL Tables) and fixtures (Squiggle) daily; event features use the crowds and the sourced event log | `dags/stoa_pipeline.py`, `src/features/events.py`, `configs/events.yaml` |
 | No entrance nodes | Done, in a separate routing graph so segment IDs don't change | `src/features/graph.py` |
 | Stations are single points | Done: station entrances are rail access points, dated like their station | `src/features/osm_extract.py` |
 | Shops are counts, not destinations | Deferred: belongs to the walkers | |
@@ -39,7 +39,7 @@ The work below was done on `ext/pipeline` (plan: data side and training frame; t
 | No OSM change monitoring | Done: weekly `stoa_osm_watch` | `src/pipeline/osm_watch.py` |
 | Documentation points | Done | |
 
-Also added, from the follow-up requests: the per-minute counts archive (`stoa_minute_feed`, the Explorer cluster poller, checks in `validate`), the Stanford Drone annotations (validation only), CI, and the NYC feature mask.
+Also added, from the follow-up requests: the per-minute counts archive (`stoa_minute_feed`, the Explorer cluster poller, checks in `validate`, within-hour profiles), the Stanford Drone annotations (validation only), CI, and the NYC feature mask.
 
 ## Where things stand
 

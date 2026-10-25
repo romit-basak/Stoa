@@ -56,14 +56,20 @@ stages:
       { test -f data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson ||
       python -m src.ingest.melbourne_portal --only blocks-for-census-of-land-use-and-employment-clue; } &&
       { test -f data/raw/dem/melbourne_ga_lidar_5m.tif ||
-      python -m src.ingest.dem --site melbourne; } &&
-      { test -f data/raw/events/afl_attendance.csv ||
-      python -m src.ingest.afl_attendance; }
+      python -m src.ingest.dem --site melbourne; }
     deps:
       - src/ingest/melbourne_portal.py
       - src/ingest/dem.py
-      - src/ingest/afl_attendance.py
       - configs/data.yaml
+
+  pull_events:
+    # The current AFL season and any season not held yet (crowds and fixtures).
+    cmd: python -m src.ingest.afl_attendance && python -m src.ingest.events
+    deps:
+      - src/ingest/afl_attendance.py
+      - src/ingest/events.py
+      - configs/data.yaml
+    always_changed: true
 
   pull_osm:
     cmd: python -m src.ingest.osm --site melbourne

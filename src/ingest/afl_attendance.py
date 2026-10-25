@@ -1,6 +1,10 @@
 """AFL match attendance (crowd size) from AFL Tables season pages, 2009 onward.
 
-Usage: python -m src.ingest.afl_attendance
+Usage: python -m src.ingest.afl_attendance [--all]
+
+Fetches the seasons not held yet and the current one (the stoa_pipeline task `pull_events` runs
+it daily, so a game's crowd arrives the day after); --all fetches every season again. The CSV is
+rebuilt from every held page.
 
 Squiggle (src.ingest.events) has fixtures but no crowd figures. AFL Tables publishes no licence
 and no robots.txt; attendance figures are facts. Fetch politely (one page per season, a pause
@@ -9,12 +13,20 @@ between requests), keep the raw HTML, and credit AFL Tables. See docs/data_cards
 
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import time
 from datetime import UTC, datetime
 
-from src.ingest.common import download, load_config, raw_dir, record, setup_logging
+from src.ingest.common import (
+    download,
+    load_config,
+    raw_dir,
+    record,
+    setup_logging,
+    years_to_fetch,
+)
 
 SOURCE = "events"
 GAME = re.compile(
@@ -44,17 +56,26 @@ def parse_season(html: str, season: int) -> list[dict[str, str]]:
 
 def main() -> None:
     setup_logging()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--all", action="store_true", help="fetch every season again")
+    args = ap.parse_args()
     cfg = load_config()
     ev = cfg["events"]
     out = raw_dir(cfg, SOURCE)
-    rows: list[dict[str, str]] = []
-    for season in range(ev["start_year"], datetime.now(UTC).year + 1):
+    now = datetime.now(UTC).year
+    held = {int(p.stem.rsplit("_", 1)[1]) for p in out.glob("afltables_*.html")}
+    for season in years_to_fetch(ev["start_year"], now, held, args.all):
         url = ev["afltables_season_url"].format(year=season)
         page = out / f"afltables_{season}.html"
         download(url, page)
         record(out, page, url, license="no licence stated (facts); credit AFL Tables")
-        rows += parse_season(page.read_text(encoding="latin-1"), season)
         time.sleep(ev["polite_delay_s"])
+
+    rows: list[dict[str, str]] = []
+    for season in range(ev["start_year"], now + 1):
+        page = out / f"afltables_{season}.html"
+        if page.exists():
+            rows += parse_season(page.read_text(encoding="latin-1"), season)
 
     dest = out / "afl_attendance.csv"
     with open(dest, "w", newline="") as f:

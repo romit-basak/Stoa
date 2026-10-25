@@ -97,7 +97,7 @@ def stoa_pipeline():
     def pull_static_layers():
         # Layers that don't change day to day, so each is fetched only when it isn't held yet
         # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
-        # (slope), the CLUE areas (precincts) and AFL crowds (match days), for bias slicing.
+        # (slope) and the CLUE areas (precincts), for bias slicing.
         # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
         # The braces matter: || and && have equal precedence, so `test || cd && python` would
         # run python even when the file is held (from the wrong folder, so it fails), and a
@@ -118,14 +118,16 @@ def stoa_pipeline():
                 f"{raw}/dem/melbourne_ga_lidar_5m.tif",
                 f"{STOA} src.ingest.dem --site melbourne",
             ),
-            (
-                f"{raw}/events/afl_attendance.csv",
-                f"{STOA} src.ingest.afl_attendance",
-            ),
         ]
         return " && ".join(
             f"{{ test -f {path} || {{ {cmd}; }}; }}" for path, cmd in steps
         )
+
+    @task.bash
+    def pull_events():
+        # AFL crowds (AFL Tables) and fixtures (Squiggle): the current season and any season
+        # not held yet, one page each, so a game's crowd arrives the day after it's played.
+        return f"{STOA} src.ingest.afl_attendance && {STOA} src.ingest.events"
 
     @task.bash
     def pull_osm(params=None):
@@ -238,14 +240,15 @@ def stoa_pipeline():
     checked = validate()
     [joined, pull_minute_feed()] >> checked
     # The training frame loads the table too (about 2 GB), so it also takes its turn.
+    events = pull_events()
     frame = training_frame()
-    [checked, shaded] >> frame
+    [checked, shaded, events] >> frame
     slices = bias_slices()
     [frame, static] >> slices
     errors = bias_errors()
     slices >> errors
     profiles = minute_profiles()
-    [checked, sensors] >> profiles
+    [checked, sensors, events] >> profiles
     [checked, errors, profiles] >> dvc_push()
 
 

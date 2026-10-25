@@ -87,6 +87,7 @@ Every source is configured in `configs/data.yaml`. Each script writes to `data/r
 .venv/bin/python -m src.ingest.events             # AFL fixtures (Squiggle)
 .venv/bin/python -m src.ingest.afl_attendance     # AFL crowd figures (AFL Tables)
 .venv/bin/python -m src.ingest.calendars          # public holidays per site + Vic Important Dates
+.venv/bin/python -m src.ingest.minute_feed --sync # per-minute counts archived since 25 Oct 2026 (below)
 
 # NEU Boston (demonstration)
 .venv/bin/python -m src.ingest.dem --site neu_boston          # USGS 3DEP 1 m clip
@@ -108,6 +109,7 @@ Options:
 - `osm` keeps an existing extract (graph segment IDs belong to one extract); `--refresh` downloads the latest.
 - `weather` re-fetches only missing years and the last two; `--full` re-fetches every year.
 - School terms and university teaching periods are hand-maintained in `configs/calendars/`.
+- **Per-minute counts.** The portal's per-minute feed keeps only the latest stretch of minutes, so the scheduled workflow `.github/workflows/minute_feed.yml` polls it every 15 minutes and keeps one parquet file per Melbourne day in this repo's GitHub Releases (`minute-feed-2026`, and one per later year). It runs on GitHub's servers, so no one's machine has to be on. `minute_feed --sync` copies the files into `data/raw/melbourne_portal/minute_feed/`. See [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
 
 ### Build features
 

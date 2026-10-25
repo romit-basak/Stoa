@@ -11,6 +11,9 @@ CFG = {
     "max_mismatch_share": 0.05,
 }
 NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)  # 2 pm on 27 Oct in Melbourne
+# The hourly table's newest hour is never compared (the portal publishes it unfinished), so
+# tables end with this later hour.
+LATER = "2026-10-26 22:00"
 
 
 def minutes(*rows):
@@ -41,9 +44,9 @@ def test_a_complete_archive_passes():
     )
     hourly = pd.DataFrame(
         {
-            "location_id": [1],
-            "ts_local": [pd.Timestamp("2026-10-26 01:00", tz=mc.TZ)],
-            "pedestriancount": [5],
+            "location_id": [1, 1],
+            "ts_local": pd.to_datetime(["2026-10-26 01:00", LATER]).tz_localize(mc.TZ),
+            "pedestriancount": [5, 0],
         }
     )
     c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
@@ -80,9 +83,9 @@ def test_minutes_that_do_not_add_up_warn():
     )
     hourly = pd.DataFrame(
         {
-            "location_id": [1],
-            "ts_local": [pd.Timestamp("2026-10-26 10:00", tz=mc.TZ)],
-            "pedestriancount": [50],
+            "location_id": [1, 1],
+            "ts_local": pd.to_datetime(["2026-10-26 10:00", LATER]).tz_localize(mc.TZ),
+            "pedestriancount": [50, 0],
         }
     )
     c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
@@ -109,3 +112,18 @@ def test_duplicates_are_counted():
 def test_no_archive_yet_passes():
     (c,) = mc.minute_checks(pd.DataFrame(), pd.DataFrame(), CFG, NOW)
     assert c.passed and "no archive" in c.detail
+
+
+def test_the_hourly_tables_unfinished_newest_hour_is_not_compared():
+    m = minutes((1, "2026-10-26 10:00", 40), (1, "2026-10-26 23:30", 1))
+    # The portal published 10:00 when only 12 people had been counted.
+    hourly = pd.DataFrame(
+        {
+            "location_id": [1],
+            "ts_local": [pd.Timestamp("2026-10-26 10:00", tz=mc.TZ)],
+            "pedestriancount": [12],
+        }
+    )
+    c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
+    check = c["minute feed: minutes add up to the hourly counts"]
+    assert check.passed and check.observed["compared"] == 0

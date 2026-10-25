@@ -134,3 +134,16 @@ def test_reference_quantiles_record_the_spread_and_missing_share():
     ref = tf.reference_quantiles(pd.DataFrame({"a": [0.0, 1.0, 2.0, np.nan]}))
     assert ref["a"]["quantiles"]["0.5"] == 1.0
     assert ref["a"]["null_share"] == 0.25
+
+
+def test_reference_keeps_a_distribution_for_drift_checks():
+    rng = np.random.default_rng(0)
+    ref = tf.reference_quantiles(
+        pd.DataFrame({"x": rng.normal(size=2000), "flag": rng.integers(0, 2, 2000)})
+    )
+    assert len(ref["x"]["edges"]) == 11 and abs(sum(ref["x"]["shares"]) - 1) < 1e-9
+    assert set(ref["flag"]["categories"]) == {"0.0", "1.0"}
+    assert tf.drift_from_reference(pd.Series(rng.normal(size=2000)), ref["x"]) < 0.05
+    assert tf.drift_from_reference(pd.Series(rng.normal(3, 1, 2000)), ref["x"]) > 1
+    # A value the reference never saw counts as drift.
+    assert tf.drift_from_reference(pd.Series([2.0] * 100), ref["flag"]) > 1

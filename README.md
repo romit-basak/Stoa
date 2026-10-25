@@ -299,7 +299,7 @@ CLAUDE.md                project rules and conventions
 | `01_download` | Downloading the counts, sensor tables, footpath steepness, DEM and weather | `src/ingest/melbourne_portal.py`, `weather.py`, `dem.py` | `pull_counts`, `pull_weather`, `pull_static_layers` |
 | `02_combine` | Merging the archive, live table and Wayback copy; the September 2010 fix; daylight saving; locations for retired sensors; the weather join | `src/features/counts_hourly.py`, `sensor_match.py` (`load_sensor_locations`) | `join_all`, `osm_sensor_match` |
 | `03_preprocess` | Footpath slope with a DEM fallback; outage zeros; quality checks | `src/features/sensor_steepness.py`, `counts_hourly.py`, `src/pipeline/validate.py` | `sensor_steepness`, `join_all`, `validate` |
-| `04_bias_slicing` | Figures for the bias write-up, drawn from the pipeline's bias outputs | reads `data/processed/bias/` from `src/bias/representation.py` | `bias_slices` |
+| `04_bias_slicing` | Figures for the bias write-up, drawn from the pipeline's bias outputs | reads `data/processed/bias/` from `src/bias/representation.py` and `slice_errors.py` | `bias_slices`, `bias_errors` |
 | `05_bias_stage1` | The representation check on the notebooks' own dataset | `src/bias/representation.py` | `bias_slices` |
 
 The notebooks' tables differ from the pipeline's in a few documented ways (UTC-only time, four weather variables, a different outage-zero rule); see `notebooks/README.md`. Use the pipeline's tables (`dvc pull`, or a DAG run) for anything that feeds a model.

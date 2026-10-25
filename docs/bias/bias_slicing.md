@@ -186,6 +186,10 @@ Placing the 18 retired sensors brought the overall error down from 0.60. They ar
 | Melbourne (Remainder) | 6 | 0.67 | 0.59–1.16 | −39% |
 | Public holidays | 117 | 0.62 | 0.55–0.68 | −28% |
 
+![Baseline WAPE per slice group with 95% intervals](figures/slice_errors_baseline.png)
+
+*Baseline WAPE per group on held-out sensors, with its 95% interval; orange groups are worse, their whole interval above the overall 0.55 (vertical line).*
+
 Kensington has 2 sensors, so no conclusion rests on it. Steep paths (0.73, interval 0.55–0.86) and sensors whose match needs review (0.65, 0.54–0.76) come next: the bottoms of their intervals sit just under the overall error.
 
 The bias column shows two different failures. Quiet sensors are over-predicted (+61%): the model pulls every place toward a typical volume, so the quietest streets come out too busy. Southbank (−75%) and the low-amenity sensors (−51%) are under-predicted. Both hold busy through-routes with few shops nearby, such as Southbank Promenade, Southern Cross Station, Sandridge Bridge and the Convention Centre. Those routes carry most of their pedestrians, and amenity counts don't capture what draws people there.
@@ -224,6 +228,10 @@ Each mitigation is run on the same folds, the same training rows and the same sc
 | CBD | 0.51 | 0.52 | 0.54 | 0.34 |
 | Carlton (held out) | 0.47 | 0.52 | 0.52 | 0.58 |
 | North Melbourne (held out) | 0.62 | 0.77 | 0.52 | 0.32 |
+
+![WAPE under each mitigation for the groups in the table above](figures/slice_errors_mitigations.png)
+
+*The table above as bars: WAPE for each group under the baseline and the three mitigations.*
 
 `mitigation_summary.csv` lists the groups each mitigation leaves worse than its own overall error. Calibration lists 16 because its overall error is so much lower; the table above compares every mitigation on the same groups.
 

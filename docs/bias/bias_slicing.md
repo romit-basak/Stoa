@@ -13,30 +13,30 @@ Stoa holds no personal data (CLAUDE.md, core rule 6): the counts are anonymous t
 
 ## The slices
 
-Arshmehar proposed the slice list (her table, and her notebook `notebooks/04_bias_slicing.ipynb`), which also gave the held-out sensor lists, the sensor start period, the count-distribution columns, coverage by year and the cross-tables. The calendar, event, density and sensor-quality slices and the reference comparison were added on top. The **Proposed by** column says which is which. Settings are in `configs/bias.yaml`; the code is `src/bias/slices.py`.
+Settings are in `configs/bias.yaml`; the code is `src/bias/slices.py`.
 
-| Slice | Groups | Why it could hide bias | Built from | Proposed by |
-|---|---|---|---|---|
-| `precinct` | CLUE areas, with the three CBD areas merged | Sensors cluster in the CBD | Sensor location in the City's CLUE areas | Arshmehar (CLUE grouping added) |
-| `holdout_precinct` | UniMelb edge (42–44), Carlton (31, 37, 46, 50, 54), North Melbourne (70, 76, 85, 86, 87, 180), the rest | These are the within-Melbourne transfer test | The sensor lists in `docs/PROJECT_CONTEXT.md` 7.1, copied to `configs/bias.yaml`. They don't follow CLUE boundaries: Macaulay Rd (76, 85) is in the Kensington area. | Arshmehar |
-| `volume_tier` | Quiet, medium, busy thirds of sensors | Errors on busy sensors dominate absolute metrics | Each sensor's mean hourly count | Arshmehar |
-| `amenity_tier` | Low, medium, high thirds | A density proxy (CLAUDE.md asks for error by density) | OSM amenities within 400 m of the matched segment | Added |
-| `slope_band` | <1%, 1–3%, 3–5%, ≥5% | Steep paths are rare | `sensor_steepness.parquet` | Arshmehar |
-| `slope_source` | Footpath survey, DEM | The 2 DEM sensors use a different method | `place_source` | Arshmehar |
-| `sensor_start` | 2009–2013, 2014–2018, 2019 on | Early years rest on a handful of streets | Year of each sensor's first count | Arshmehar |
-| `time_of_day` | Night 0–6, morning peak 6–10, midday 10–16, evening peak 16–20, late evening 20–24 | Most pedestrians walk in the day, so night errors are easy to miss | `hour_local` | Arshmehar |
-| `day_type` | Weekday or weekend | Different walking patterns | `is_weekend` | Arshmehar |
-| `public_holiday`, `school_term`, `uni_teaching` | Each calendar flag | Different walking patterns | The calendar columns (`unknown` where a calendar doesn't cover the year) | Added |
-| `rain` | Dry (<0.1 mm), light, rain (≥1 mm) | Rainy hours are rare | `wx_precipitation` | Arshmehar |
-| `temperature` | Cold (<10 °C), mild, warm (25–30 °C), hot (≥30 °C) | Hot hours are rare | `wx_temperature_2m` | Arshmehar |
-| `era` | Pre-COVID, COVID (16 Mar 2020 to 21 Oct 2021), recovery, post Metro Tunnel (from 30 Nov 2025) | Crowds changed sharply | `date_local` | Arshmehar |
-| `afl_day` | Marvel, MCG, both, none | Event days are reported separately (CLAUDE.md, "Evaluation") | AFL Tables attendance | Added |
-| `source` | Archive, live, Wayback | Different collection | `source` | Arshmehar |
-| `missing_hours` | <5%, 5–20%, ≥20% of hours absent | Unreliable sensors can skew training and evaluation | Hours absent within each source's span for the sensor | Arshmehar |
-| `match_review` | Matched automatically, needs review | A sensor on the wrong segment gets the wrong place features | `needs_review` from the sensor match | Added |
-| `has_location` | Located, no location | The 18 retired sensors had no place features until their 2022 locations were added; every sensor is located now, and the slice stays as a check | `has_location` | Added |
+| Slice | Groups | Why it could hide bias | Built from |
+|---|---|---|---|
+| `precinct` | CLUE areas, with the three CBD areas merged | Sensors cluster in the CBD | Sensor location in the City's CLUE areas |
+| `holdout_precinct` | UniMelb edge (42–44), Carlton (31, 37, 46, 50, 54), North Melbourne (70, 76, 85, 86, 87, 180), the rest | These are the within-Melbourne transfer test | The sensor lists in `docs/PROJECT_CONTEXT.md` 7.1, copied to `configs/bias.yaml`. They don't follow CLUE boundaries: Macaulay Rd (76, 85) is in the Kensington area. |
+| `volume_tier` | Quiet, medium, busy thirds of sensors | Errors on busy sensors dominate absolute metrics | Each sensor's mean hourly count |
+| `amenity_tier` | Low, medium, high thirds | A density proxy (CLAUDE.md asks for error by density) | OSM amenities within 400 m of the matched segment |
+| `slope_band` | <1%, 1–3%, 3–5%, ≥5% | Steep paths are rare | `sensor_steepness.parquet` |
+| `slope_source` | Footpath survey, DEM | The 2 DEM sensors use a different method | `place_source` |
+| `sensor_start` | 2009–2013, 2014–2018, 2019 on | Early years rest on a handful of streets | Year of each sensor's first count |
+| `time_of_day` | Night 0–6, morning peak 6–10, midday 10–16, evening peak 16–20, late evening 20–24 | Most pedestrians walk in the day, so night errors are easy to miss | `hour_local` |
+| `day_type` | Weekday or weekend | Different walking patterns | `is_weekend` |
+| `public_holiday`, `school_term`, `uni_teaching` | Each calendar flag | Different walking patterns | The calendar columns (`unknown` where a calendar doesn't cover the year) |
+| `rain` | Dry (<0.1 mm), light, rain (≥1 mm) | Rainy hours are rare | `wx_precipitation` |
+| `temperature` | Cold (<10 °C), mild, warm (25–30 °C), hot (≥30 °C) | Hot hours are rare | `wx_temperature_2m` |
+| `era` | Pre-COVID, COVID (16 Mar 2020 to 21 Oct 2021), recovery, post Metro Tunnel (from 30 Nov 2025) | Crowds changed sharply | `date_local` |
+| `afl_day` | Marvel, MCG, both, none | Event days are reported separately (CLAUDE.md, "Evaluation") | AFL Tables attendance |
+| `source` | Archive, live, Wayback | Different collection | `source` |
+| `missing_hours` | <5%, 5–20%, ≥20% of hours absent | Unreliable sensors can skew training and evaluation | Hours absent within each source's span for the sensor |
+| `match_review` | Matched automatically, needs review | A sensor on the wrong segment gets the wrong place features | `needs_review` from the sensor match |
+| `has_location` | Located, no location | The 18 retired sensors had no place features until their 2022 locations were added; every sensor is located now, and the slice stays as a check | `has_location` |
 
-The cut-offs for rain, temperature and sensor tiers are agreed: Arshmehar's first notebook used wet above 0.2 mm, bands at 10/20/30 °C and the median count, and her notebooks now use the ones above.
+The cut-offs for rain, temperature and sensor tiers are agreed, and the notebooks use the same ones.
 
 Slices are for checking, never features. Precinct, sensor ID, season and month must not go into a model (CLAUDE.md core rule 9); they only group rows so results can be compared.
 
@@ -186,6 +186,10 @@ Placing the 18 retired sensors brought the overall error down from 0.60. They ar
 | Melbourne (Remainder) | 6 | 0.67 | 0.59–1.16 | −39% |
 | Public holidays | 117 | 0.62 | 0.55–0.68 | −28% |
 
+![Baseline WAPE per slice group with 95% intervals](figures/slice_errors_baseline.png)
+
+*Baseline WAPE per group on held-out sensors, with its 95% interval; orange groups are worse, their whole interval above the overall 0.55 (vertical line).*
+
 Kensington has 2 sensors, so no conclusion rests on it. Steep paths (0.73, interval 0.55–0.86) and sensors whose match needs review (0.65, 0.54–0.76) come next: the bottoms of their intervals sit just under the overall error.
 
 The bias column shows two different failures. Quiet sensors are over-predicted (+61%): the model pulls every place toward a typical volume, so the quietest streets come out too busy. Southbank (−75%) and the low-amenity sensors (−51%) are under-predicted. Both hold busy through-routes with few shops nearby, such as Southbank Promenade, Southern Cross Station, Sandridge Bridge and the Convention Centre. Those routes carry most of their pedestrians, and amenity counts don't capture what draws people there.
@@ -225,6 +229,10 @@ Each mitigation is run on the same folds, the same training rows and the same sc
 | Carlton (held out) | 0.47 | 0.52 | 0.52 | 0.58 |
 | North Melbourne (held out) | 0.62 | 0.77 | 0.52 | 0.32 |
 
+![WAPE under each mitigation for the groups in the table above](figures/slice_errors_mitigations.png)
+
+*The table above as bars: WAPE for each group under the baseline and the three mitigations.*
+
 `mitigation_summary.csv` lists the groups each mitigation leaves worse than its own overall error. Calibration lists 16 because its overall error is so much lower; the table above compares every mitigation on the same groups.
 
 **Reweighting: tried and rejected.** Neither weighting lowered the overall error (0.55 and 0.56), and each moved error from some weak groups onto others.
@@ -242,7 +250,7 @@ The weak groups aren't under-weighted: the features don't tell the model how bus
 
 ## Mitigation plan and outcome
 
-Arshmehar's plan, written before step 2, with what was found and done:
+The plan, written before step 2, with what was found and done:
 
 | If the model is worse on... | Planned mitigation | Outcome |
 |---|---|---|
@@ -252,7 +260,7 @@ Arshmehar's plan, written before step 2, with what was found and done:
 | Early years, short sensor histories | Weight by sensor-year, or a recent-window model | Not worse: sensors from 2019 on have WAPE 0.65, interval 0.51–0.87. No action. |
 | COVID and post Metro Tunnel | Keep the flags; report post Metro Tunnel separately | COVID is worse (0.68) and unfixed; post Metro Tunnel is not worse (0.53). Both reported separately. |
 | Rain, heat, DEM sensors | Report separately; weight up if much worse | Rain and heat not worse. The 2 DEM sensors are too few to judge. No action. |
-| Missing years | Bring the Wayback fill into the pipeline | Done (Arshmehar, PR #16): 1.18M rows for November 2022 to October 2024. Those hours are not worse (0.59). |
+| Missing years | Bring the Wayback fill into the pipeline | Done (PR #16): 1.18M rows for November 2022 to October 2024. Those hours are not worse (0.59). |
 | Sensors with no location | Locations for the 18 retired sensors from the October 2022 sensor table | Done: `sensor_match.load_sensor_locations` places them from the Wayback copy of that table, so all 118 sensors are in every slice and in the evaluation. |
 | Incomplete sensors and flagged matches | Report sensors missing 20% or more separately; hand-check the 52 flagged matches | Flagged matches (0.65) sit just under the line for worse, and calibration brings them to 0.40; the hand check still matters for accuracy. The 10 incomplete sensors are not worse (0.51, interval 0.34–1.37). |
 | Outage zeros | Already dropped | Dropped from training and scoring. |

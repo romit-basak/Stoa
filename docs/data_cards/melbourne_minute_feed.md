@@ -30,6 +30,13 @@ One file per local day, `minute_feed_YYYY-MM-DD.parquet`:
 - **Two different rows for one sensor and minute** happen (2 of 24,078 rows that day; the portal's description mentions sensors 67-69). The archive keeps both as published and merges only rows identical in every column.
 - `direction_1 + direction_2 = total_of_directions` on every row.
 
+## In the pipeline
+
+- **Preprocessing.** `pull_minute_feed` in `stoa_pipeline` copies the day files into `data/raw/melbourne_portal/minute_feed/` for DVC. `minute_profiles` then builds the within-hour profiles: it keeps sensor-hours whose minutes add up to the hourly table's count (within 5%, or 2 people), which also shows that the missing minutes were zeros, and that have at least 30 people. It writes `minute_hour_status.parquet` (every sensor-hour in the archive's span and what became of it), `minute_hours.parquet` (`peak15`: four times the busiest clock quarter over the hour, 1 for an even hour, 4 when everyone came in one quarter) and `minute_profiles.parquet` (the mean share of each minute, by sensor, weekday or weekend, and local hour).
+- **Validation.** `validate` warns on missing days, days whose last minute is before 23:00, duplicate rows, and minutes that don't add up to the hourly counts.
+- **Bias.** `minute_coverage` measures which slices the profiles under-cover, and pools quiet hours by volume tier as the mitigation (`docs/bias/bias_slicing.md`, "The per-minute data").
+- **Two edges are left out.** The archive's newest hour may still be filling. The hourly table's newest hour is published unfinished: on 25 October its 03:00 counts were below the minutes' sums at 85% of sensors, until the next pull replaced them.
+
 ## Known issues
 
 - Polls can be late or missed (a queue wait on the cluster, a sleeping laptop). That costs nothing as long as one comes between midnight and the reset at about 02:00 Melbourne time; without one, the archive keeps only what earlier polls saw of the day before and none of the new day's first hour.

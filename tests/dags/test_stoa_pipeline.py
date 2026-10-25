@@ -50,6 +50,8 @@ def test_has_every_stage(dag):
         "join_all",
         "bias_slices",
         "bias_errors",
+        "minute_profiles",
+        "minute_coverage",
         "validate",
         "dvc_push",
     }
@@ -88,7 +90,9 @@ def test_wiring(dag):
     # After validate, not beside it: side by side, the two overran Docker's 8 GB.
     assert upstream("bias_slices") == {"validate", "pull_static_layers"}
     assert upstream("bias_errors") == {"bias_slices"}
-    assert upstream("dvc_push") == {"validate", "bias_errors"}
+    assert upstream("minute_profiles") == {"validate"}
+    assert upstream("minute_coverage") == {"minute_profiles", "bias_slices"}
+    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_coverage"}
 
 
 def test_every_task_retries(dag):

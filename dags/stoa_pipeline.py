@@ -173,6 +173,18 @@ def stoa_pipeline():
         # reweighting. About 10 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
 
+    @task.bash
+    def minute_profiles():
+        # Within-hour profiles from the per-minute archive, for sensor-hours whose minutes add
+        # up to the hourly table (src/features/minute_profiles.py). A few seconds.
+        return f"{STOA} src.features.minute_profiles"
+
+    @task.bash
+    def minute_coverage():
+        # Bias in the per-minute data: which slices the archive and its profiles under-cover
+        # (src/bias/minute_coverage.py). A few seconds.
+        return f"{STOA} src.bias.minute_coverage"
+
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
     @task.bash(retries=0)
@@ -220,7 +232,11 @@ def stoa_pipeline():
     [checked, static] >> slices
     errors = bias_errors()
     slices >> errors
-    [checked, errors] >> dvc_push()
+    profiles = minute_profiles()
+    checked >> profiles
+    covered = minute_coverage()
+    [profiles, slices] >> covered
+    [checked, errors, covered] >> dvc_push()
 
 
 stoa_pipeline()

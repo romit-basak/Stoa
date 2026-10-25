@@ -195,7 +195,11 @@ def stoa_pipeline():
 
     # No retries: bad data fails the same way every time, so retrying would only delay the
     # failure email. Checks and thresholds: configs/validation.yaml, docs/pipeline/validation.md.
-    @task.bash(retries=0)
+    # none_failed: pull_minute_feed is skipped on a clone without bucket credentials, and by
+    # default a skipped upstream task skips everything after it, so validate, the bias steps
+    # and dvc_push would quietly not run while the DAG still showed success. A failed upstream
+    # task (join_all, say) still stops validate.
+    @task.bash(retries=0, trigger_rule="none_failed")
     def validate():
         # Schema, Great Expectations suite, anomalies and drift on the hourly table. Fails on
         # any error-level check, so dvc_push never versions bad data.

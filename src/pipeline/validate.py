@@ -1,6 +1,6 @@
 """Validate the hourly counts table before it becomes a DVC version.
 
-Usage: python -m src.pipeline.validate [--write-schema]
+Usage: python -m src.pipeline.validate [--schema-diff]
 
 Runs as the `validate` task of stoa_pipeline, between join_all and dvc_push. Settings and
 thresholds are in configs/validation.yaml; docs/pipeline/validation.md lists every check.
@@ -22,8 +22,9 @@ to STOA_ALERT_EMAILS (with the smtp_default settings, read without importing Air
 run carries on. Outliers and stuck sensors only warn about hours
 added since the last good run, so a known event doesn't alert every day.
 
-`--write-schema` writes the schema from the current table instead. Run it after an intended
-change to the table's columns and commit the result.
+The expected schema is generated from src/features/schema.py (`python -m src.features.schema
+--write`). After an intended change to the table's columns, declare them there; `--schema-diff`
+lists how the current table differs from the committed schema, to see what to declare.
 """
 
 from __future__ import annotations
@@ -88,16 +89,17 @@ def infer_schema(df: pd.DataFrame) -> dict[str, Any]:
     return {"columns": {c: str(df[c].dtype) for c in df.columns}}
 
 
-def write_schema(df: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    header = (
-        "# Expected columns and pandas dtypes of the hourly counts table, checked by\n"
-        "# src/pipeline/validate.py. Generated with `python -m src.pipeline.validate "
-        "--write-schema`.\n"
-    )
-    body = yaml.safe_dump(infer_schema(df), sort_keys=False)
-    path.write_text(header + body)
-    log.info("wrote schema with %d columns to %s", df.shape[1], path)
+def schema_diff(df: pd.DataFrame, schema: dict[str, Any]) -> list[str]:
+    """How the table differs from the schema: columns missing, unexpected or of another type."""
+    want, have = schema["columns"], infer_schema(df)["columns"]
+    out = [f"missing: {c} ({t})" for c, t in want.items() if c not in have]
+    out += [f"unexpected: {c} ({t})" for c, t in have.items() if c not in want]
+    out += [
+        f"type: {c} is {have[c]}, schema says {t}"
+        for c, t in want.items()
+        if c in have and have[c] != t
+    ]
+    return out
 
 
 def check_schema(df: pd.DataFrame, schema: dict[str, Any]) -> list[Check]:
@@ -715,9 +717,9 @@ def main() -> None:
     setup_logging()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--write-schema",
+        "--schema-diff",
         action="store_true",
-        help="write the schema from the current table",
+        help="list how the current table differs from the committed schema",
     )
     args = parser.parse_args()
 
@@ -728,11 +730,12 @@ def main() -> None:
     df = pd.read_parquet(table)
     log.info("read %s: %d rows, %d columns", cfg["table"], len(df), df.shape[1])
     schema_path = REPO_ROOT / cfg["schema"]
-    if args.write_schema:
-        write_schema(df, schema_path)
+    schema = yaml.safe_load(schema_path.read_text())
+    if args.schema_diff:
+        diff = schema_diff(df, schema)
+        print("\n".join(diff) if diff else "the table matches the schema")
         return
 
-    schema = yaml.safe_load(schema_path.read_text())
     out = REPO_ROOT / cfg["reports_dir"]
     now = datetime.now(UTC)
     checks, stats = validate(

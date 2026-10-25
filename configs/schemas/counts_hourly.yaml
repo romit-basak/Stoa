@@ -1,5 +1,6 @@
 # Expected columns and pandas dtypes of the hourly counts table, checked by
-# src/pipeline/validate.py. Generated with `python -m src.pipeline.validate --write-schema`.
+# src/pipeline/validate.py. Generated from src/features/schema.py with
+# `python -m src.features.schema --write`; edit schema.py, not this file.
 columns:
   location_id: int32
   ts_utc: datetime64[us, UTC]

@@ -9,7 +9,7 @@
 site: melbourne
 # {site} in the two paths below is replaced by the site above.
 table: data/processed/features/{site}/counts_hourly.parquet
-# Generated from the data with `python -m src.pipeline.validate --write-schema`; review the diff
+# Generated from src/features/schema.py with `python -m src.features.schema --write`; review the diff
 # before committing it.
 schema: configs/schemas/counts_hourly.yaml
 reports_dir: data/processed/validation/{site}

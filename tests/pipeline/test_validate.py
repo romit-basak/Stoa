@@ -434,11 +434,18 @@ def test_reports_are_written_and_only_good_runs_join_the_history(cfg, tmp_path):
     assert (tmp_path / "counts_hourly_stats.json").is_file()
 
 
-def test_schema_round_trips(tmp_path):
+def test_schema_diff_names_what_to_declare():
     df = make_table()
-    path = tmp_path / "schema.yaml"
-    v.write_schema(df, path)
-    assert yaml.safe_load(path.read_text()) == v.infer_schema(df)
+    schema = v.infer_schema(df)
+    assert v.schema_diff(df, schema) == []
+    first = next(iter(schema["columns"]))
+    schema["columns"]["gone"] = "float32"
+    schema["columns"][first] = "float64"
+    df["extra"] = 1
+    diff = v.schema_diff(df, schema)
+    assert "missing: gone (float32)" in diff
+    assert "unexpected: extra (int64)" in diff
+    assert any(d.startswith(f"type: {first}") for d in diff)
 
 
 def test_config_only_names_columns_in_the_committed_schema(cfg):

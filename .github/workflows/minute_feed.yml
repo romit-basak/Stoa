@@ -1,0 +1,68 @@
+# Archive the City of Melbourne's per-minute pedestrian counts (src/ingest/minute_feed.py).
+#
+# The portal keeps only the latest stretch of minutes, so this polls every 15 minutes and keeps
+# one parquet file per local day as an asset of a GitHub Release (minute-feed-<year>). Nothing is
+# committed to git. GitHub may start a scheduled run late or skip one under load; the feed holds
+# more than an hour, so the next poll covers a late or skipped one. GitHub emails the repo owner
+# when a run fails, and the daily pipeline warns about gaps in the archive.
+#
+# Scheduled workflows run from the default branch only, so this file must be on main.
+
+name: Minute feed archive
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: minute-feed
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ARCHIVE: archive
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the few packages the poll needs, at the versions in requirements.txt
+        run: pip install -c requirements.txt pandas pyarrow requests pyyaml
+
+      - name: Fetch the day files a poll can touch (yesterday and today in Melbourne)
+        run: |
+          mkdir -p "$ARCHIVE"
+          for offset in 1 0; do
+            day=$(TZ=Australia/Melbourne date -d "-$offset day" +%F)
+            tag="minute-feed-${day:0:4}"
+            gh release download "$tag" -D "$ARCHIVE" --clobber \
+              --pattern "minute_feed_${day}.parquet" --pattern MANIFEST.json 2>/dev/null || true
+          done
+          ls -la "$ARCHIVE"
+
+      - name: Poll the portal and merge into the day files
+        run: python -m src.ingest.minute_feed --archive-dir "$ARCHIVE" --changed-list changed.txt
+
+      - name: Upload the changed day files
+        run: |
+          while read -r path; do
+            [ -n "$path" ] || continue
+            name=$(basename "$path")
+            year=${name:12:4}
+            tag="minute-feed-$year"
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              gh release create "$tag" --latest=false --title "Per-minute pedestrian counts, $year" \
+                --notes "City of Melbourne Pedestrian Counting System, past hour (counts per minute), archived every 15 minutes by .github/workflows/minute_feed.yml. One parquet file per Melbourne local day. Source: City of Melbourne Open Data, CC BY 4.0."
+            fi
+            gh release upload "$tag" "$path" "$ARCHIVE/MANIFEST.json" --clobber
+          done < changed.txt

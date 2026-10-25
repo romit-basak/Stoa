@@ -151,7 +151,7 @@ def stoa_pipeline():
 
     @task.bash
     def sensor_steepness():
-        # Footpath slope and elevation per sensor (from Shubham Hadawle's join notebook).
+        # Footpath slope and elevation per sensor.
         return f"{STOA} src.features.sensor_steepness"
 
     # --- Join, validate, then version ---
@@ -170,7 +170,7 @@ def stoa_pipeline():
     @task.bash
     def bias_errors():
         # Bias steps 2-3: a baseline's error per slice on held-out sensors, with and without
-        # reweighting. About 10 minutes, so it reruns only weekly or when its settings change.
+        # reweighting. About 16 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
 
     @task.bash

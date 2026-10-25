@@ -5,7 +5,7 @@ The `validate` task checks the hourly counts table (`data/processed/features/mel
 Great Expectations is pinned below 2.0 (`great-expectations>=1.9,<2` in `pyproject.toml`), since 2.0 changes its API.
 
 ```bash
-.venv/bin/python -m src.pipeline.validate                 # run every check (~40 s on 6.2M rows)
+.venv/bin/python -m src.pipeline.validate                 # run every check (41–47 s on 7.4M rows in Docker)
 .venv/bin/python -m src.pipeline.validate --write-schema  # regenerate the schema from the table
 ```
 
@@ -29,7 +29,7 @@ On the run of 22 October 2026: 67 checks, 0 errors, 3 warnings.
 | **Never missing** | error | 16 columns (`never_missing` in the config) have no empty values: keys, count, time and calendar flags. |
 | **Missing only where documented** | error | Columns that may be empty only in the cases `docs/features/counts_hourly.md` describes. For example `segment_id` and the slope columns must be present when `has_location` is true (only the 18 sensors with no location lack them), the university calendar from 2015 on, and the directional counts for live rows. Each rule in `required_when` is `[column, operator, value]`, built into a Great Expectations `Column(...)` condition (text conditions are deprecated and removed in GX 2.0). |
 | **Ranges** | error | 19 columns stay in a physical range: counts 0 to 30,000 (the record hour is about 16,000), hours 0–23, humidity and cloud 0–100%, slope 0–40%, and so on. |
-| **Allowed values** | error | `source` is `archive` or `live`; `place_source` is `footpath_steepness` or `ga_dem_5m`. |
+| **Allowed values** | error | `source` is `archive`, `live` or `wayback`; `place_source` is `footpath_steepness` or `ga_dem_5m`. |
 | **Weather present** | warning | Each `wx_*` column is present for at least 99% of rows. The weather archive lags about a week, so the newest rows have none until a later run fills them. |
 | **Outliers** | warning | New hours above 4x their own sensor's 99.9th percentile (from its whole history). Most big events stay below that; past hits were real events (below). |
 | **Stuck sensors** | warning | A run of the same count (10 or more) for 6+ hours at one sensor, reaching into the new hours. Small counts repeat naturally overnight (1 an hour), so they're ignored. |

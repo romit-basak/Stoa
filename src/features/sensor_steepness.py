@@ -5,7 +5,7 @@ Usage: python -m src.features.sensor_steepness
 Writes data/processed/features/melbourne/sensor_steepness.parquet, one row per outdoor sensor,
 which joins onto the counts on location_id (counts_hourly does this).
 
-Based on Shubham Hadawle's Colab join notebook. Each sensor is matched to the nearest section of
+Based on the team's Colab join notebook. Each sensor is matched to the nearest section of
 the City of Melbourne footpath-steepness survey, which gives its slope (`gradepc`) and elevation
 (the mean of `rlmin` and `rlmax`, in metres AHD). Fixes over the notebook:
 - sections with no grade are skipped, so a sensor is never matched to an empty section when a

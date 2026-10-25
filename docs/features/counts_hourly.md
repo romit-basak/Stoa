@@ -87,7 +87,7 @@ There's no month or day-of-year column, by design (core rule 9): use `sun_elevat
 
 ## Footpath slope per sensor
 
-`src/features/sensor_steepness.py` (task `sensor_steepness`) writes `sensor_steepness.parquet`, one row per outdoor sensor. It's based on Shubham Hadawle's Colab join notebook. Each sensor is matched to the nearest section of the City of Melbourne footpath-steepness survey within 25 m:
+`src/features/sensor_steepness.py` (task `sensor_steepness`) writes `sensor_steepness.parquet`, one row per outdoor sensor. It's based on the team's Colab join notebook. Each sensor is matched to the nearest section of the City of Melbourne footpath-steepness survey within 25 m:
 - `slope_pct` is that section's `gradepc` (metres of rise per 100 m along the footpath).
 - `elevation_m` is the mean of its `rlmin` and `rlmax`.
 - `slope_pct_local_mean` is the length-weighted mean `gradepc` of all sections within 25 m, so one odd section doesn't decide the value.

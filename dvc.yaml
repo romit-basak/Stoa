@@ -33,6 +33,13 @@ stages:
       - configs/data.yaml
     always_changed: true
 
+  pull_minute_feed:
+    cmd: python -m src.ingest.minute_feed --sync
+    deps:
+      - src/ingest/minute_feed.py
+      - configs/data.yaml
+    always_changed: true
+
   pull_calendars:
     cmd: python -m src.ingest.calendars
     deps:

@@ -82,6 +82,13 @@ def stoa_pipeline():
     def pull_weather():
         return f"{STOA} src.ingest.weather --site melbourne"
 
+    # Exit 99 (no bucket credentials) skips it, as for dvc_push.
+    @task.bash(skip_on_exit_code=99)
+    def pull_minute_feed():
+        # The per-minute archive (stoa_minute_feed writes it to the bucket) into data/raw,
+        # where DVC versions it and validate checks it.
+        return f"{STOA} src.ingest.minute_feed --sync"
+
     @task.bash
     def pull_calendars():
         return f"{STOA} src.ingest.calendars"
@@ -215,7 +222,7 @@ def stoa_pipeline():
     # 8 GB: validate was killed (exit -9). This order also keeps the bias reports to data that
     # passed the checks. Only data that went through all three is versioned.
     checked = validate()
-    joined >> checked
+    [joined, pull_minute_feed()] >> checked
     # The training frame loads the table too (about 2 GB), so it also takes its turn.
     frame = training_frame()
     checked >> frame

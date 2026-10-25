@@ -39,6 +39,7 @@ def test_has_every_stage(dag):
         "pull_counts",
         "pull_weather",
         "pull_calendars",
+        "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
         "osm_extract",
@@ -61,6 +62,7 @@ def test_ingest_tasks_run_in_parallel(dag):
         "pull_counts",
         "pull_weather",
         "pull_calendars",
+        "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
     ):
@@ -83,7 +85,7 @@ def test_wiring(dag):
         "pull_weather",
         "pull_calendars",
     }
-    assert upstream("validate") == {"join_all"}
+    assert upstream("validate") == {"join_all", "pull_minute_feed"}
     # After validate, not beside it: side by side, the two overran Docker's 8 GB.
     assert upstream("training_frame") == {"validate"}
     assert upstream("bias_slices") == {"training_frame", "pull_static_layers"}

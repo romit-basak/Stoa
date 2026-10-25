@@ -102,3 +102,11 @@ drift:
   # default it is the latest frame, so the check catches a change in how features are built.
   psi_warn: 0.25
   training_reference: data/processed/training/{site}/frame_spec.json
+
+# The per-minute counts archive (src/pipeline/minute_checks.py); every check is a warning.
+minute_feed:
+  dir: data/raw/melbourne_portal/minute_feed
+  min_last_local: "23:00"     # a finished day whose last minute is earlier was polled too early
+  max_duplicates: 50
+  sum_tolerance: 0.05         # minutes and hourly count agree within 5% (or 2 people)
+  max_mismatch_share: 0.05

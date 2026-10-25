@@ -33,6 +33,7 @@ ranges:
   weekday: [0, 6]
   hour_of_week: [0, 167]
   sun_elevation_deg: [-90, 90]
+  sun_azimuth_deg: [0, 360]
   wx_temperature_2m: [-10, 50]
   wx_apparent_temperature: [-20, 55]
   wx_relative_humidity_2m: [0, 100]

@@ -20,6 +20,7 @@ columns:
   uni_teaching: boolean
   uni_exams: boolean
   sun_elevation_deg: float32
+  sun_azimuth_deg: float32
   covid_period: bool
   post_metro_tunnel: bool
   wx_temperature_2m: float32

@@ -50,6 +50,7 @@ def test_has_every_stage(dag):
         "bias_slices",
         "bias_errors",
         "training_frame",
+        "osm_shade",
         "validate",
         "dvc_push",
     }
@@ -85,7 +86,8 @@ def test_wiring(dag):
     }
     assert upstream("validate") == {"join_all"}
     # After validate, not beside it: side by side, the two overran Docker's 8 GB.
-    assert upstream("training_frame") == {"validate"}
+    assert upstream("osm_shade") == {"osm_graph"}
+    assert upstream("training_frame") == {"validate", "osm_shade"}
     assert upstream("bias_slices") == {"training_frame", "pull_static_layers"}
     assert upstream("bias_errors") == {"bias_slices"}
     assert upstream("dvc_push") == {"validate", "bias_errors"}

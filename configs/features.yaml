@@ -116,6 +116,61 @@ entrances:
   node_snap_m: 10         # join an entrance to an existing node this close
   max_link_m: 30          # else to the nearest edge this close, splitting it
 
+# Building shade on each segment per sun position (src/features/shade.py).
+shade:
+  azimuth_step_deg: 30
+  # The sun counts as down below the first edge (fully shaded, no rows).
+  elevation_edges_deg: [5, 10, 20, 30, 45, 60, 90]
+  step_m: 5                # sample points along each segment
+  level_height_m: 3.0      # OSM: building:levels x this when there is no height tag
+  default_height_m: 9.0    # OSM: assumed when neither is tagged (a labelled assumption)
+  # A site's own heights, for the Melbourne-rich variant. Paths are under data/raw/.
+  city_heights:
+    melbourne:
+      path: melbourne_portal/2023-building-footprints.geojson
+      height_field: footprint_extrusion   # metres from the footprint's base to its top
+    neu_boston:
+      path: boston_buildings/neu_boston_buildings.geojson
+      height_field: BLDG_HGT_2010
+      scale: 0.3048                       # feet to metres
+
+# Event features (src/features/events.py): from AFL games at the MCG and Marvel and the log
+# in configs/events.yaml, for the sites listed here.
+events:
+  sites: [melbourne]
+  pre_hours: 2
+  post_hours: 2
+  # How long an event lasts when its source gives no end time (a labelled assumption; a log
+  # row's duration_h overrides it).
+  default_hours: {afl: 3, cricket: 7, football: 2, basketball: 2.5, netball: 2,
+                  concert: 3, graduation: 3, halloween: 3}
+  max_distance_m: 3000   # walking distances beyond this count as "not near an event"
+  venue_reach_m: 50      # graph nodes this close to a venue's outline reach it
+
+# Surroundings of each segment (src/features/surroundings.py). Paths are under data/raw/; a
+# site without a file gets empty columns for it.
+surroundings:
+  landcover_radius_m: 50
+  slope_step_m: 10        # the same along every DEM, whatever its resolution
+  canopy_buffer_m: 25
+  jobs_radii_m: [400, 800]
+  business_radii_m: [200, 400]
+  snap_m: 100             # blocks and businesses farther than this from the graph are dropped
+  sites:
+    melbourne:
+      worldcover: worldcover/melbourne_worldcover_2021.tif
+      dem: dem/melbourne_ga_lidar_5m.tif
+      canopy: melbourne_portal/tree-canopies-2021-urban-forest.geojson
+      clue_blocks: melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
+      clue_jobs: melbourne_portal/employment-by-block-by-clue-industry.parquet
+      businesses: melbourne_portal/business-establishments-with-address-and-industry-classification.parquet
+    neu_boston:
+      worldcover: worldcover/neu_boston_worldcover_2021.tif
+      dem: dem/neu_boston_usgs_3dep_1m.tif
+    nyc:
+      worldcover: worldcover/nyc_worldcover_2021.tif
+      dem: dem/nyc_usgs_3dep_10m.tif
+
 network_metrics:
   radii_m: [400, 800, 1600]
   workers: 8              # processes for the source loop; 0 = os.cpu_count()

@@ -89,6 +89,15 @@ stages:
       - src/features
       - configs/features.yaml
 
+  osm_shade:
+    cmd: python -m src.features.osm --site melbourne --only shade --if-stale
+    deps:
+      - data/interim/osm/melbourne/graph/edges.parquet
+      - data/interim/osm/melbourne/buildings.parquet
+      - data/raw/melbourne_portal/2023-building-footprints.geojson
+      - src/features
+      - configs/features.yaml
+
   osm_sensor_match:
     cmd: python -m src.features.osm --site melbourne --only sensors --if-stale
     deps:
@@ -259,3 +268,9 @@ stages:
     do:
       cmd: python -m src.pipeline.validate_segments --site ${item}
       deps: [src/pipeline/validate_segments.py, src/features/schema.py, configs/features.yaml]
+
+  site_osm_shade:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only shade --if-stale
+      deps: [src/features, configs/features.yaml]

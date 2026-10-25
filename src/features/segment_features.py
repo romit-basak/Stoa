@@ -392,6 +392,14 @@ def segment_features(site: Site, fcfg: dict[str, Any]) -> dict[str, Any]:
 
     write_parquet(feats, site.processed / "osm_segment_features.parquet")
     write_parquet(open_hours, site.processed / "osm_segment_open_hours.parquet")
+    ecfg = fcfg.get("events", {})
+    if site.name in ecfg.get("sites", []):
+        from src.features.events import load_log, venue_distances, venue_geometries
+
+        venues = venue_geometries(site.pbf, load_log()["venues"], site.crs)
+        dist = venue_distances(edges, nodes, venues, csr, ecfg)
+        write_parquet(dist, site.processed / "osm_segment_venue_dist.parquet")
+        runtimes["venues"] = len(venues)
     meta_in = json.loads((site.interim / "extract_meta.json").read_text())
     write_meta(
         site.processed / "osm_segment_features_meta.json",

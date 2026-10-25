@@ -66,6 +66,12 @@ def row_features(variant: str = "rich") -> list[str]:
     return schema.features(schema.tables()["counts_hourly"], variant == "portable")
 
 
+def derived_features(variant: str = "rich") -> list[str]:
+    """Features the frame adds per row: shade at the hour's sun and events nearby."""
+    _check_variant(variant)
+    return schema.features(schema.tables()["derived"], variant == "portable")
+
+
 def segment_features(variant: str = "rich") -> list[str]:
     """Features of each sensor's matched segment, in sensor_osm_features order."""
     _check_variant(variant)
@@ -115,6 +121,82 @@ def feature_names(osm: pd.DataFrame, row_cols: list[str] | None = None) -> list[
 # --------------------------------------------------------------------------------------------
 # Rows
 # --------------------------------------------------------------------------------------------
+
+
+def add_derived(
+    hourly: pd.DataFrame,
+    site: str,
+    data_cfg: dict[str, Any],
+    fcfg: dict[str, Any],
+) -> pd.DataFrame:
+    """hourly with the derived columns added (needs location_id, ts_local and the sun).
+
+    Shade comes from osm_segment_shade.parquet at the row's sun bin (fully shaded when the sun
+    is down, empty when the site has no shade table); events from the venue distances and the
+    event log (src/features/events.py; never near an event at a site without them).
+    """
+    from src.features import events as ev
+    from src.features import shade as sh
+
+    feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
+    seg_of = pd.read_parquet(
+        feats / "sensor_osm_features.parquet", columns=["location_id", "segment_id"]
+    ).set_index("location_id")["segment_id"]
+    seg = hourly["location_id"].map(seg_of)
+    out = hourly.copy()
+
+    shade_path = feats / "osm_segment_shade.parquet"
+    if shade_path.exists():
+        meta = json.loads((feats / "shade_meta.json").read_text())
+        b = sh.bin_of(
+            hourly["sun_elevation_deg"].to_numpy(),
+            hourly["sun_azimuth_deg"].to_numpy(),
+            meta,
+        )
+        table = pd.read_parquet(shade_path)
+        table = table[table["segment_id"].isin(seg.dropna().unique())]
+        key = pd.MultiIndex.from_arrays([seg.to_numpy(), b])
+        for name in ("shade_portable", "shade_rich"):
+            look = table.set_index(["segment_id", "sun_bin"])[name]
+            v = look.reindex(key).to_numpy(dtype="float32")
+            has = bool(table[name].notna().any())
+            v = np.where(np.isnan(v), 0.0 if has else np.nan, v)
+            out[name] = np.where(b < 0, 1.0, v).astype("float32")
+    else:
+        out["shade_portable"] = np.float32(np.nan)
+        out["shade_rich"] = np.float32(np.nan)
+
+    ecfg = fcfg.get("events", {})
+    cap = float(ecfg.get("max_distance_m", 3000))
+    dist_path = feats / "osm_segment_venue_dist.parquet"
+    if site in ecfg.get("sites", []) and dist_path.exists():
+        from src.bias.slices import load_bias_config
+
+        log_ = ev.load_log()
+        afl_path = REPO_ROOT / data_cfg["raw_dir"] / "events" / "afl_attendance.csv"
+        afl = (
+            pd.read_csv(afl_path)
+            if afl_path.exists()
+            else pd.DataFrame(columns=["date", "local_time", "venue"])
+        )
+        timed = ev.timed_events(log_, afl, load_bias_config()["afl_venues"], ecfg)
+        hour_local = hourly["ts_local"].dt.tz_localize(None).dt.floor("h")
+        cols = ev.hourly_event_features(
+            hour_local,
+            seg,
+            ev.venue_hours(timed, ecfg),
+            ev.event_days(log_, timed),
+            pd.read_parquet(dist_path),
+            cap,
+        )
+        for c in cols.columns:
+            out[c] = cols[c].to_numpy()
+    else:
+        for p in ev.PHASES:
+            out[f"event_{p}"] = False
+        out["event_dist_m"] = np.float32(cap)
+        out["event_day_dist_m"] = np.float32(cap)
+    return out
 
 
 def check_site(site: str, data_cfg: dict[str, Any], fcfg: dict[str, Any]) -> None:
@@ -188,13 +270,9 @@ def load(
     check_site(site, data_cfg, fcfg)
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
     row_cols = row_features(variant)
-    keep = ["location_id", "ts_utc", "date_local", "pedestriancount", "has_location"]
-    keep += [
-        "location_type",
-        "suspect_outage_zero",
-        "needs_review",
-        "post_metro_tunnel",
-    ]
+    keep = ["location_id", "ts_utc", "ts_local", "date_local", "pedestriancount"]
+    keep += ["has_location", "location_type", "suspect_outage_zero", "needs_review"]
+    keep += ["post_metro_tunnel", "sun_elevation_deg", "sun_azimuth_deg"]
     columns = list(dict.fromkeys(keep + row_cols + (extra_columns or [])))
     hourly = pd.read_parquet(feats / "counts_hourly.parquet", columns=columns)
     rows = eligible(hourly)
@@ -203,6 +281,8 @@ def load(
             ~hourly["needs_review"].iloc[rows].fillna(True).to_numpy(dtype=bool)
         ]
     hourly = hourly.iloc[rows].reset_index(drop=True)
+    hourly = add_derived(hourly, site, data_cfg, fcfg)
+    row_cols = row_cols + derived_features(variant)
     osm = sensor_features(
         pd.read_parquet(feats / "sensor_osm_features.parquet"), variant
     )
@@ -380,7 +460,10 @@ def main() -> None:
         rows=len(frame.hourly),
         sensors=len(np.unique(frame.sensors)),
         sensors_needs_review=int(needs_review.fillna(True).sum()),
-        features={v: row_features(v) + segment_features(v) for v in VARIANTS},
+        features={
+            v: row_features(v) + derived_features(v) + segment_features(v)
+            for v in VARIANTS
+        },
         holdout_sensors=int((split["fold"] == -1).sum()),
         folds=tcfg["folds"],
         event_days=len(days),

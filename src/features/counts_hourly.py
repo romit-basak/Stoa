@@ -39,6 +39,7 @@ from src.features.common import (
     write_meta,
     write_parquet,
 )
+from src.features.sun import solar_position
 from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
 ARCHIVE = "counts_per_hour_2009-05_to_2022-12-14.csv.zip"
@@ -220,37 +221,6 @@ def flag_outages(
 # --------------------------------------------------------------------------------------------
 
 
-def solar_elevation(ts_utc: pd.Series, lat: float, lon: float) -> np.ndarray:
-    """Sun elevation in degrees (NOAA's simplified solar position; accurate to well under 1 degree)."""
-    t = pd.DatetimeIndex(ts_utc)
-    doy = t.day_of_year.to_numpy()
-    hours = t.hour.to_numpy() + t.minute.to_numpy() / 60.0
-    gamma = 2 * np.pi / 365 * (doy - 1 + (hours - 12) / 24)
-    eqtime = 229.18 * (
-        0.000075
-        + 0.001868 * np.cos(gamma)
-        - 0.032077 * np.sin(gamma)
-        - 0.014615 * np.cos(2 * gamma)
-        - 0.040849 * np.sin(2 * gamma)
-    )
-    decl = (
-        0.006918
-        - 0.399912 * np.cos(gamma)
-        + 0.070257 * np.sin(gamma)
-        - 0.006758 * np.cos(2 * gamma)
-        + 0.000907 * np.sin(2 * gamma)
-        - 0.002697 * np.cos(3 * gamma)
-        + 0.00148 * np.sin(3 * gamma)
-    )
-    true_solar_min = hours * 60 + eqtime + 4 * lon
-    hour_angle = np.radians(true_solar_min / 4 - 180)
-    phi = np.radians(lat)
-    cos_zen = np.sin(phi) * np.sin(decl) + np.cos(phi) * np.cos(decl) * np.cos(
-        hour_angle
-    )
-    return 90 - np.degrees(np.arccos(np.clip(cos_zen, -1, 1)))
-
-
 def in_ranges(dates: pd.Series, ranges: list[tuple[str, str]]) -> pd.Series:
     """True where a date falls in any inclusive [start, end] range."""
     out = pd.Series(False, index=dates.index)
@@ -319,9 +289,11 @@ def time_features(
     out["uni_exams"] = covered(date, in_ranges(date, periods["exams"]), uni_years)
     # Sun at the middle of the count's hour; physics uses UTC, not the local clock.
     mid = counts["ts_utc"] + pd.Timedelta(minutes=30)
-    out["sun_elevation_deg"] = solar_elevation(mid, center[1], center[0]).astype(
-        "float32"
-    )
+    elevation, azimuth = solar_position(mid, center[1], center[0])
+    out["sun_elevation_deg"] = elevation.astype("float32")
+    # Azimuth is for looking up shade (src/features/shade.py), not a feature: it doesn't
+    # transfer between hemispheres (the noon sun is north in Melbourne, south in Boston).
+    out["sun_azimuth_deg"] = azimuth.astype("float32")
     covid = cfg["covid_period"]
     out["covid_period"] = date.between(pd.Timestamp(covid[0]), pd.Timestamp(covid[1]))
     out["post_metro_tunnel"] = date >= pd.Timestamp(cfg["metro_tunnel_opened"])

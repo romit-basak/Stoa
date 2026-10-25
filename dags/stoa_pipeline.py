@@ -140,6 +140,11 @@ def stoa_pipeline():
         return f"{STOA} src.features.osm --site melbourne --only features --if-stale"
 
     @task.bash
+    def osm_shade():
+        # Building shade per segment and sun position (src/features/shade.py).
+        return f"{STOA} src.features.osm --site melbourne --only shade --if-stale"
+
+    @task.bash
     def osm_sensor_match():
         return f"{STOA} src.features.osm --site melbourne --only sensors --if-stale"
 
@@ -196,7 +201,10 @@ def stoa_pipeline():
     # would attach to the last stage, not the first.
     extract = osm_extract()
     osm_features = osm_segment_features()
-    pull_osm() >> extract >> osm_graph() >> osm_features
+    built = osm_graph()
+    pull_osm() >> extract >> built >> osm_features
+    shaded = osm_shade()
+    built >> shaded
 
     # Sensor matching needs both the segment features and the sensor locations.
     sensors = osm_sensor_match()
@@ -218,7 +226,7 @@ def stoa_pipeline():
     joined >> checked
     # The training frame loads the table too (about 2 GB), so it also takes its turn.
     frame = training_frame()
-    checked >> frame
+    [checked, shaded] >> frame
     slices = bias_slices()
     [frame, static] >> slices
     errors = bias_errors()

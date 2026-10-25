@@ -37,9 +37,10 @@ from src.features.sensor_match import (
     sensor_locations_path,
     sensor_match,
 )
+from src.features.shade import shade
 from src.ingest.common import REPO_ROOT, load_config, setup_logging, sha256
 
-STAGES = ["extract", "graph", "features", "sensors"]
+STAGES = ["extract", "graph", "features", "shade", "sensors"]
 FEATURE_CODE = REPO_ROOT / "src" / "features"
 
 
@@ -62,6 +63,7 @@ def stage_outputs(site: Site) -> dict[str, list[Path]]:
             p / "osm_segment_features.parquet",
             p / "osm_segment_open_hours.parquet",
         ],
+        "shade": [p / "osm_segment_shade.parquet", p / "shade_meta.json"],
         "sensors": [
             p / "sensor_segment_map.parquet",
             p / "sensor_osm_features.parquet",
@@ -80,7 +82,16 @@ def fingerprints(
         )
     }
     fp["graph"] = _hash(fp["extract"], "graph")
-    fp["features"] = _hash(fp["graph"], "features")
+    events_log = REPO_ROOT / "configs" / "events.yaml"
+    fp["features"] = _hash(fp["graph"], "features", _file_hash(events_log))
+    heights = fcfg.get("shade", {}).get("city_heights", {}).get(site.name, {})
+    fp["shade"] = _hash(
+        fp["graph"],
+        "shade",
+        _file_hash(REPO_ROOT / data_cfg["raw_dir"] / heights["path"])
+        if heights
+        else "none",
+    )
     overrides = REPO_ROOT / fcfg["sensor_match"]["overrides_file"]
     fp["sensors"] = _hash(
         fp["features"],
@@ -141,6 +152,7 @@ def main() -> None:
         "extract": lambda: extract(site, fcfg),
         "graph": lambda: graph(site, fcfg),
         "features": lambda: segment_features(site, fcfg),
+        "shade": lambda: shade(site, fcfg, data_cfg),
         "sensors": lambda: sensor_match(site, fcfg, data_cfg),
     }
     fps = fingerprints(site, fcfg, data_cfg)

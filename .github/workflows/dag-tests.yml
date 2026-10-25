@@ -1,0 +1,31 @@
+# The DAG tests need Airflow, which only the Docker image has (tests/dags/). Build the image and
+# run them whenever the DAGs, the image or the dependencies change.
+name: DAG tests
+
+on:
+  pull_request:
+    paths: ["dags/**", "tests/dags/**", "Dockerfile", "pyproject.toml"]
+  push:
+    branches: [main, ext/pipeline]
+    paths: ["dags/**", "tests/dags/**", "Dockerfile", "pyproject.toml"]
+
+jobs:
+  dags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the Airflow image
+        run: docker build -t stoa-airflow:ci .
+
+      - name: Import errors and DAG tests
+        run: |
+          docker run --rm -v "$PWD":/opt/stoa \
+            -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db \
+            -e _AIRFLOW_DB_MIGRATE=true \
+            stoa-airflow:ci bash -c "
+              pip install -q pytest &&
+              cd /opt/stoa &&
+              AIRFLOW__CORE__DAGS_FOLDER=/opt/stoa/dags airflow dags list-import-errors &&
+              python -m pytest -q tests/dags"

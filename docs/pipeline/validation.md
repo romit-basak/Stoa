@@ -39,6 +39,7 @@ On the run of 22 October 2026 (7.4M rows, every sensor located): 67 checks, 0 er
 | **Freshness** | warning | The newest hour is at most 5 days old. |
 | **Drift: rows** | error | The table didn't lose more than 1% of its rows since the last good run. Held rows are kept and new hours added, so the row count only grows. |
 | **Drift: sensors, missing values, mean** | warning | No fewer sensors than last time; no column's missing share up by more than 5 points; mean hourly count within 20% of last time. |
+| **Drift: against the training reference** | warning | Each feature's distribution in the rows a model may use, against the reference the training frame stored (`docs/features/training_frame.md`): a population stability index above 0.25 warns. By default the reference is the latest frame, so this catches a change in how a feature is built; pointed at a deployed model's frame (`drift.training_reference`), it measures drift since that model was trained. |
 
 Each rule was checked against the real table before it was set: on clean data none of the error checks fail, and every rule that failed on a test copy with planted errors (negative counts, duplicate sensor-hours, a dropped column, a retyped column, an unknown `source`, a located sensor with no segment, 3% of rows removed) was reported as an error.
 

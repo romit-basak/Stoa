@@ -43,6 +43,7 @@ def test_wiring(dag):
     assert upstream(dag, "site_validate_segments") == {"site_osm_segment_features"}
     assert upstream(dag, "site_dvc_push") == {
         "site_validate_segments",
+        "site_osm_shade",
         "site_pull_dem",
         "site_pull_worldcover",
         "site_pull_weather",

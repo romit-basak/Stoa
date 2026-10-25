@@ -74,6 +74,10 @@ def stoa_site_build():
     def site_osm_segment_features():
         return f"{STOA} src.features.osm --site {SITE} --only features --if-stale"
 
+    @task.bash
+    def site_osm_shade():
+        return f"{STOA} src.features.osm --site {SITE} --only shade --if-stale"
+
     @task.bash(retries=0)
     def site_validate_segments():
         # Fails on any error-level check, so a broken segment table is never versioned.
@@ -85,7 +89,10 @@ def stoa_site_build():
 
     extract = site_osm_extract()
     features = site_osm_segment_features()
-    site_pull_osm() >> extract >> site_osm_graph() >> features
+    built = site_osm_graph()
+    site_pull_osm() >> extract >> built >> features
+    shaded = site_osm_shade()
+    built >> shaded
     checked = site_validate_segments()
     features >> checked
     pulls = [
@@ -95,7 +102,7 @@ def stoa_site_build():
         site_pull_calendars(),
         site_pull_extras(),
     ]
-    [checked, *pulls] >> site_dvc_push()
+    [checked, shaded, *pulls] >> site_dvc_push()
 
 
 stoa_site_build()

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An L-shaped pedestrian plaza (highway=pedestrian, area=yes) reached by three footways.
+     Grid unit 0.0001 deg (about 9 m east-west, 11 m north-south).
+
+                 x2
+                 |
+        p6 ==== p5
+        |        |
+        |       p4 ========== p3
+        |                     |
+  x3 == p1 ================== p2 == x1
+
+  The footways end on the outline at p1, p2 and p5. p1 to p2 and p1 to p5 can be walked inside
+  the plaza; p2 to p5 would cut across the inside corner at p4, outside it, so it gets no edge.
+-->
+<osm version="0.6" generator="hand">
+  <node id="501" lat="-37.8100" lon="144.9600"/>
+  <node id="502" lat="-37.8100" lon="144.9602"/>
+  <node id="503" lat="-37.8099" lon="144.9602"/>
+  <node id="504" lat="-37.8099" lon="144.9601"/>
+  <node id="505" lat="-37.8098" lon="144.9601"/>
+  <node id="506" lat="-37.8098" lon="144.9600"/>
+  <node id="511" lat="-37.8100" lon="144.9603"/>
+  <node id="512" lat="-37.8097" lon="144.9601"/>
+  <node id="513" lat="-37.8100" lon="144.9599"/>
+  <way id="400">
+    <nd ref="501"/><nd ref="502"/><nd ref="503"/><nd ref="504"/><nd ref="505"/><nd ref="506"/><nd ref="501"/>
+    <tag k="highway" v="pedestrian"/>
+    <tag k="area" v="yes"/>
+    <tag k="name" v="Test Square"/>
+  </way>
+  <way id="401">
+    <nd ref="511"/><nd ref="502"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="402">
+    <nd ref="505"/><nd ref="512"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="403">
+    <nd ref="513"/><nd ref="501"/>
+    <tag k="highway" v="footway"/>
+  </way>
+</osm>

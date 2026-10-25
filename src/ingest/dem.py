@@ -12,12 +12,61 @@ from __future__ import annotations
 
 import argparse
 import math
+import tempfile
+from pathlib import Path
 
+import rasterio
 from pyproj import Transformer
+from rasterio.merge import merge
 
 from src.ingest.common import download, load_config, raw_dir, record, setup_logging
 
 SOURCE = "dem"
+
+
+def tiles(
+    xmin: float, ymin: float, width: int, height: int, res: float, max_px: int
+) -> list[tuple[float, float, int, int, float]]:
+    """(xmin, ymin, width, height, res) of each tile, none wider or taller than max_px."""
+    out = []
+    for y0 in range(0, height, max_px):
+        for x0 in range(0, width, max_px):
+            w, h = min(max_px, width - x0), min(max_px, height - y0)
+            out.append((xmin + x0 * res, ymin + y0 * res, w, h, res))
+    return out
+
+
+def usgs_params(
+    xmin: float, ymin: float, width: int, height: int, res: float, epsg: int
+) -> dict:
+    """ImageServer export of a clip whose pixels are exactly res metres."""
+    return {
+        "bbox": f"{xmin},{ymin},{xmin + width * res},{ymin + height * res}",
+        "bboxSR": epsg,
+        "imageSR": epsg,
+        "size": f"{width},{height}",
+        "format": "tiff",
+        "pixelType": "F32",
+        "interpolation": "RSP_BilinearInterpolation",
+        "f": "image",
+    }
+
+
+def mosaic(paths: list[Path], dest: Path) -> None:
+    """Merge tiles that share a grid into one GeoTIFF."""
+    sources = [rasterio.open(p) for p in paths]
+    try:
+        data, transform = merge(sources)
+        meta = sources[0].meta | {
+            "height": data.shape[1],
+            "width": data.shape[2],
+            "transform": transform,
+        }
+    finally:
+        for s in sources:
+            s.close()
+    with rasterio.open(dest, "w", **meta) as dst:
+        dst.write(data)
 
 
 def main() -> None:
@@ -58,18 +107,25 @@ def main() -> None:
         )
         res = site["dem"]["res_m"]
         width, height = math.ceil((xmax - xmin) / res), math.ceil((ymax - ymin) / res)
-        params = {
-            "bbox": f"{xmin},{ymin},{xmin + width * res},{ymin + height * res}",
-            "bboxSR": epsg,
-            "imageSR": epsg,
-            "size": f"{width},{height}",
-            "format": "tiff",
-            "pixelType": "F32",
-            "interpolation": "RSP_BilinearInterpolation",
-            "f": "image",
-        }
         dest = out / f"{args.site}_usgs_3dep_{res:g}m.tif"
-        download(dem["usgs_3dep_imageserver"], dest, params=params)
+        parts = tiles(xmin, ymin, width, height, res, dem.get("usgs_max_px", 2500))
+        params = usgs_params(xmin, ymin, width, height, res, epsg)
+        if len(parts) == 1:
+            download(dem["usgs_3dep_imageserver"], dest, params=params)
+        else:
+            # The service refuses big exports (HTTP 500), so a large clip comes in tiles.
+            with tempfile.TemporaryDirectory() as tmp:
+                paths = []
+                for i, part in enumerate(parts):
+                    path = Path(tmp) / f"tile_{i}.tif"
+                    download(
+                        dem["usgs_3dep_imageserver"],
+                        path,
+                        params=usgs_params(*part, epsg),
+                    )
+                    paths.append(path)
+                mosaic(paths, dest)
+            params = {"tiles": len(parts), **params}
         record(
             out,
             dest,

@@ -124,6 +124,13 @@ def counts_hourly(timezone: str) -> list[Column]:
         _f("uni_teaching", "boolean", "calendars", True),
         _f("uni_exams", "boolean", "calendars", True),
         _f("sun_elevation_deg", "float32", "sun", True),
+        Column(
+            "sun_azimuth_deg",
+            "float32",
+            "aux",
+            "sun",
+            description="For the shade lookup; doesn't transfer between hemispheres",
+        ),
         _f("covid_period", "bool", t, True, "Lockdown dates are the site's own"),
         _f("post_metro_tunnel", "bool", t, False, "Melbourne's Metro Tunnel opening"),
         *[_f(f"wx_{w}", "float32", "weather", True) for w in WEATHER],
@@ -172,6 +179,9 @@ FLAGS = [
     "is_bridge",
     "is_tunnel",
     "is_covered",
+    "is_inferred",
+    "is_area_edge",
+    "is_detected",
 ]
 SIDEWALK = [
     "sidewalk_both",
@@ -259,6 +269,26 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
             False,
             "Metro Tunnel stations; the training frame caps it before they opened",
         ),
+        _f(
+            "wc_tree_share",
+            "float64",
+            "worldcover",
+            True,
+            "Tree share, about 50 m around",
+        ),
+        _f("wc_grass_share", "float64", "worldcover", True),
+        _f("wc_built_share", "float64", "worldcover", True),
+        _f("dem_slope_mean_pct", "float64", "dem", True, "Grade along it, every 10 m"),
+        _f("dem_slope_max_pct", "float64", "dem", True),
+        _f("canopy_cover", "float64", "com_canopy", False, "Tree canopy within 25 m"),
+        *[
+            _f(f"clue_jobs_{r}", "float64", "com_clue", False, f"Jobs within {r} m")
+            for r in fcfg["surroundings"]["jobs_radii_m"]
+        ],
+        *[
+            _f(f"businesses_{r}", "float64", "com_business", False)
+            for r in fcfg["surroundings"]["business_radii_m"]
+        ],
         _f("degree_min", "int64", o, True),
         _f("degree_max", "int64", o, True),
     ]
@@ -266,6 +296,24 @@ def segment_features(fcfg: dict[str, Any]) -> list[Column]:
         cols += [_f(f"{m}_{r}", "float64", o, True) for m in METRIC + ANGULAR]
     cols.append(
         _f("in_main_component", "bool", o, True, "In the largest connected part")
+    )
+    cols.append(
+        Column(
+            "in_metric_graph",
+            "bool",
+            "meta",
+            o,
+            description="False for separate-sidewalk roads left out of network metrics",
+        )
+    )
+    cols.append(
+        Column(
+            "in_feature_mask",
+            "bool",
+            "meta",
+            o,
+            description="Near a mask point at a site built only there (NYC); true elsewhere",
+        )
     )
     cols.append(Column("geometry", "geometry", "meta", o, description="Segment line"))
     return cols
@@ -295,6 +343,55 @@ def sensor_osm_features(fcfg: dict[str, Any]) -> list[Column]:
     return SENSOR_COLUMNS + [c for c in segment_features(fcfg) if c.name not in skip]
 
 
+# Features the training frame derives per row from per-segment tables and the row's hour
+# (src/features/training_frame.py): shade at the hour's sun position, and events nearby.
+DERIVED = [
+    _f(
+        "shade_portable",
+        "float32",
+        "shade",
+        True,
+        "Share in building shadow (OSM heights)",
+    ),
+    _f(
+        "shade_rich",
+        "float32",
+        "shade",
+        False,
+        "Share in building shadow (city heights)",
+    ),
+    _f(
+        "event_pre",
+        "bool",
+        "events",
+        True,
+        "An event near the segment starts within 2 h",
+    ),
+    _f("event_during", "bool", "events", True, "An event near the segment is on"),
+    _f(
+        "event_post",
+        "bool",
+        "events",
+        True,
+        "An event near the segment ended within 2 h",
+    ),
+    _f(
+        "event_dist_m",
+        "float32",
+        "events",
+        True,
+        "Walk to the nearest venue with an event on",
+    ),
+    _f(
+        "event_day_dist_m",
+        "float32",
+        "events",
+        True,
+        "Walk to the nearest venue with an event that day",
+    ),
+]
+
+
 def tables(site: str | None = None) -> dict[str, list[Column]]:
     """Every table's columns for a site (default: the site the hourly table is built for)."""
     data_cfg, fcfg = load_config(), load_features_config()
@@ -303,6 +400,7 @@ def tables(site: str | None = None) -> dict[str, list[Column]]:
         "counts_hourly": counts_hourly(tz),
         "osm_segment_features": segment_features(fcfg),
         "sensor_osm_features": sensor_osm_features(fcfg),
+        "derived": DERIVED,
     }
 
 

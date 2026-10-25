@@ -268,6 +268,31 @@ Arshmehar's plan, written before step 2, with what was found and done:
 - **The Wayback fill** comes from an archived copy of the City's own export, which matched the archive on about 98.5% of overlapping hours. It filled two years and moved the results only slightly (overall WAPE 0.58 before, 0.60 after, before the retired sensors were placed), and the `source` slice keeps it checkable.
 - **The retired sensors' locations** come from a 2022 table and are matched to the 2026 OSM network, so a sensor whose street has since changed can land on today's layout. Their matches go through the same review flags as the others.
 
+## Rerun on the extension branch (25 October 2026)
+
+The findings above are from the submission run. On `ext/pipeline` the same three steps were rerun after three changes:
+- The baseline reads its columns from the training frame (`src/features/training_frame.py`). The folds group sensors within 200 m by complete linkage, where the submission used single linkage: single linkage chained most of the CBD into one group. A held-out precinct's near neighbours are kept out of training as well. The HGB model is seeded (`random_state: 7`), so a rerun gives the same numbers.
+- Network metrics come from the metric graph: separate-sidewalk road centrelines are left out, and plaza edges and inferred crossings are added.
+- Three feature groups are new: building shade by sun position, event phases and the walk to the venue, and the segment's surroundings (land cover, DEM slope, canopy, CLUE jobs, businesses).
+
+The folds differ from the submission's, so the two columns show the direction of the change. They aren't a controlled comparison.
+
+| WAPE, baseline | Submission | Extension |
+|---|---|---|
+| **Overall** | 0.55 | **0.53** |
+| Overall bias | −27% | −23% |
+| Quiet sensors | 0.91 | 0.87 |
+| Southbank | 0.80 | 0.75 |
+| Low-amenity sensors | 0.72 | 0.67 |
+| Steep paths (≥5%) | 0.73 | 0.67 |
+| Match needs review | 0.65 | 0.55 |
+| Public holidays | 0.62 | 0.59 |
+| COVID era | 0.68 | 0.64 |
+| Night | 0.67 | 0.63 |
+| CBD | 0.51 | 0.49 |
+
+The other mitigations keep their order: equal sensor weights 0.545, precinct weights 0.562, calibration 0.374 (bias −0.5%). Reweighting still doesn't help, and calibration is still the step that works. The weak groups are the same ones: night, holidays, COVID, quiet and low-amenity streets, Southbank, Docklands and Melbourne (Remainder). Every one of them improved without calibration, though, and the flagged sensor matches are no longer worse than the auto-accepted ones by much (0.55 against 0.51). With the graph change alone, before the new features, overall WAPE was 0.553.
+
 ## Next steps
 
 1. **Rerun on the real flow model (step 4).** `slice_errors()` takes any model's out-of-fold predictions, so the flow model's evaluation can produce the same table.

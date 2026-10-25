@@ -7,7 +7,8 @@
 #   listing pages disappear after the event.
 # - Only what the source says. Times are Melbourne local clock time; `end` and `expected_crowd`
 #   stay null when the source doesn't give them. Features fill gaps with labelled defaults later.
-# - One row per day for multi-day events.
+# - One row per day for multi-day events. `duration_h` gives a length where the source has a
+#   start but no end and the kind's default (configs/features.yaml, events) doesn't fit.
 # - Venues are named by their OSM object in the pinned extract (data/raw/osm/melbourne.osm.pbf),
 #   so their location comes from the map, not from typed-in coordinates. `scope: citywide` rows
 #   (an observance like Halloween) have no venue.
@@ -70,12 +71,12 @@ events:
   - {name: "Sheffield Shield: Victoria v Western Australia, day 2", kind: cricket, venue: mcg, start: "2026-11-12T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Western Australia, day 3", kind: cricket, venue: mcg, start: "2026-11-13T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Western Australia, day 4", kind: cricket, venue: mcg, start: "2026-11-14T10:30", end: null, expected_crowd: null, source: mcg_events}
-  - {name: "T20 International: Australia v England", kind: cricket, venue: mcg, start: "2026-11-21T19:15", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "T20 International: Australia v England", kind: cricket, venue: mcg, start: "2026-11-21T19:15", end: null, duration_h: 3.5, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Queensland, day 1", kind: cricket, venue: mcg, start: "2026-12-03T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Queensland, day 2", kind: cricket, venue: mcg, start: "2026-12-04T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Queensland, day 3", kind: cricket, venue: mcg, start: "2026-12-05T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Sheffield Shield: Victoria v Queensland, day 4", kind: cricket, venue: mcg, start: "2026-12-06T10:30", end: null, expected_crowd: null, source: mcg_events}
-  - {name: "BBL|16: Melbourne Stars v Adelaide Strikers", kind: cricket, venue: mcg, start: "2026-12-18T19:15", end: null, expected_crowd: null, source: mcg_events}
+  - {name: "BBL|16: Melbourne Stars v Adelaide Strikers", kind: cricket, venue: mcg, start: "2026-12-18T19:15", end: null, duration_h: 3.5, expected_crowd: null, source: mcg_events}
   - {name: "Boxing Day Test: Australia v New Zealand, day 1", kind: cricket, venue: mcg, start: "2026-12-26T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Boxing Day Test: Australia v New Zealand, day 2", kind: cricket, venue: mcg, start: "2026-12-27T10:30", end: null, expected_crowd: null, source: mcg_events}
   - {name: "Boxing Day Test: Australia v New Zealand, day 3", kind: cricket, venue: mcg, start: "2026-12-28T10:30", end: null, expected_crowd: null, source: mcg_events}

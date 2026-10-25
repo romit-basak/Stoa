@@ -49,6 +49,8 @@ from src.bias.representation import network_reference, sliced_rows
 from src.bias.slices import load_bias_config
 from src.features.common import config_hash, load_features_config, log, write_meta
 from src.features.training_frame import (
+    add_derived,
+    derived_features,
     design_matrix,
     feature_names,
     fold_plan,
@@ -60,6 +62,8 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging
 # The baseline's features are the training frame's: the hourly table's own features, then the
 # matched segment's (src/features/training_frame.py, chosen by role in src/features/schema.py).
 ROW_FEATURES = row_features()
+# Shade and events, which the frame derives per row (training_frame.add_derived).
+DERIVED_FEATURES = derived_features()
 
 
 # --------------------------------------------------------------------------------------------
@@ -303,8 +307,11 @@ def build(
     ecfg = cfg["errors"]
     site = cfg["site"]
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
-    sliced = sliced_rows(data_cfg, fcfg, cfg, extra_columns=ROW_FEATURES)
+    extra = ROW_FEATURES + ["ts_local", "sun_azimuth_deg"]
+    sliced = sliced_rows(data_cfg, fcfg, cfg, extra_columns=extra)
     hourly, rows = sliced["hourly"], sliced["rows"]
+    hourly = add_derived(hourly, site, data_cfg, fcfg)
+    row_cols = ROW_FEATURES + DERIVED_FEATURES
     # Step 2 measures error, so the slices that only describe data coverage are left out:
     # every evaluated sensor is located, and its source and era are already sliced.
     dims = [d for d in sliced["dims"] if d not in ecfg["skip_dimensions"]]
@@ -319,7 +326,7 @@ def build(
     cap = fcfg["built_form"]["max_distance_m"]
 
     def build_x(pos: np.ndarray) -> np.ndarray:
-        return design_matrix(hourly, eligible[pos], osm, cap)
+        return design_matrix(hourly, eligible[pos], osm, cap, row_cols)
 
     plan = fold_plan(groups, ecfg["folds"], ecfg["train_rows_per_fold"], ecfg["seed"])
     edges = gpd.read_parquet(
@@ -371,7 +378,7 @@ def build(
             "loss": "poisson",
             **ecfg["model"],
         },
-        "features": feature_names(osm),
+        "features": feature_names(osm, row_cols),
         "dimensions": dims,
     }
     return pd.concat(all_errors, ignore_index=True), pd.DataFrame(summaries), meta

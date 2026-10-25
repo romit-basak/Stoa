@@ -22,14 +22,14 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Module | Path | Status |
 |---|---|---|
 | Ingestion | `src/ingest/` | ✅ Melbourne: counts, City of Melbourne layers, OSM, DEM, WorldCover, weather, AFL fixtures and crowds, calendars. ✅ NEU Boston: terrain, buildings, imagery, OSM, land cover, weather. ✅ NYC: test counts, OSM, land cover, weather |
-| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Footpath slope and elevation per sensor. ✅ Hourly table for Melbourne: counts + time + weather + calendars + slope, with the November 2022 to October 2024 gap filled from a Wayback copy, September 2010's hours recovered and the 18 retired sensors located ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). Shade and other City of Melbourne layers planned |
+| Features | `src/features/` | ✅ OSM: walking graph, per-segment features (tags, amenities, opening hours, built form, transit, network and angular metrics), sensor matching for Melbourne; a metric graph without double-counted roads, edges across plazas and an entrance routing graph. See [docs/features/osm_features.md](docs/features/osm_features.md). ✅ Shade per sun position, events near each segment, land cover, terrain slope, tree canopy, jobs and businesses ([docs/features/segment_context.md](docs/features/segment_context.md)). ✅ Every column's type, role and portability declared in `src/features/schema.py`. ✅ The training frame: rows, features and location splits every model uses ([docs/features/training_frame.md](docs/features/training_frame.md)). ✅ Footpath slope and elevation per sensor. ✅ Hourly table for Melbourne: counts + time + weather + calendars + slope, with the November 2022 to October 2024 gap filled from a Wayback copy, September 2010's hours recovered and the 18 retired sensors located ([docs/features/counts_hourly.md](docs/features/counts_hourly.md)). ✅ Site builds for NEU Boston (and NYC) without counts ([docs/pipeline/site_build.md](docs/pipeline/site_build.md)) |
 | Flow model | `src/models/flow/` | Planned (baseline ladder → gradient boosting; spatio-temporal GNN is a stretch goal) |
 | Path segmentation | `src/models/segmentation/` | Planned (NEU campus) |
 | Agents | `src/agents/` | Planned: LLM intake agent with local-knowledge adjustments (planning assistant is a stretch goal) |
 | Simulation | `src/simulation/` | Planned: route-sampling walkers, then microsimulation for limited areas |
 | Viewshed | `src/viewshed/` | Planned (integrating the existing engine) |
 | API / web app | `src/api/`, `app/` | Planned (map, scenario builder, store-siting view, cached replay mode) |
-| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging. ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics and anomaly checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)). ✅ Bias slicing: representation per slice, a baseline's error per slice on held-out sensors, and mitigations tried ([docs/bias/bias_slicing.md](docs/bias/bias_slicing.md)). MLflow, CI/CD, Cloud Run planned |
+| MLOps (Airflow, DVC, MLflow, CI/CD, Cloud Run) | `dags/` | ✅ Airflow: daily `stoa_pipeline` DAG with retries, failure emails and logging; `stoa_site_build` for other sites; `stoa_minute_feed` (every 15 minutes, also on the Explorer cluster, `ops/hpc/`); weekly `stoa_osm_watch`. ✅ CI: lint, tests and the DAG tests in the Airflow image on every pull request (`.github/workflows/`). ✅ DVC (data in `gs://stoa-dvc-data`). ✅ Data validation: schema, statistics, anomaly and drift checks with Great Expectations ([docs/pipeline/validation.md](docs/pipeline/validation.md)), and checks on every site's segment table. ✅ Bias slicing: representation per slice, a baseline's error per slice on held-out sensors, and mitigations tried ([docs/bias/bias_slicing.md](docs/bias/bias_slicing.md)). MLflow, deployment and Cloud Run planned |
 
 ## Setup
 
@@ -61,6 +61,21 @@ The pipeline's `dvc_push` task saves and uploads a new version after every run t
 .venv/bin/dvc push
 git add data/*.dvc dvc.lock && git commit -m "..."
 ```
+
+**Protecting the bucket.** Soft delete is on (a deleted object can be restored for 7 days). Object versioning is off; a project owner should turn it on, with a rule that keeps old versions from piling up (the per-minute archive rewrites its day files every 15 minutes):
+
+```bash
+gcloud storage buckets update gs://stoa-dvc-data --versioning
+cat > /tmp/stoa-lifecycle.json <<'JSON'
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "numNewerVersions": 3}},
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "daysSinceNoncurrentTime": 30}}
+]}
+JSON
+gcloud storage buckets update gs://stoa-dvc-data --lifecycle-file=/tmp/stoa-lifecycle.json
+```
+
+The count days that have left the portal's window, the pinned OSM extracts and the validation history exist only in our copies; where a second copy lives is still to decide.
 
 **Pipeline stages (`dvc.yaml`).** `dvc.yaml` lists the pipeline's stages, one per Airflow task, with each stage's command and inputs: its code, configs and the data it reads. `dvc.lock` records the exact version of every input for the data version committed with it, so a data version can be traced to the code and settings that produced it. To see which stages' results are out of date, and why:
 
@@ -118,9 +133,12 @@ Options:
 ### Build features
 
 ```bash
-.venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
+.venv/bin/python -m src.features.osm --site melbourne     # OSM graph, segment features, shade, sensor matching (~6 min)
 .venv/bin/python -m src.features.sensor_steepness         # footpath slope and elevation per sensor (~5 s)
 .venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars + slope (~30 s)
+.venv/bin/python -m src.features.training_frame           # splits, event days and feature spec for every model (~10 s)
+.venv/bin/python -m src.features.osm --site neu_boston    # another site's graph and features (no counts needed)
+.venv/bin/python -m src.pipeline.validate_segments --site neu_boston  # check a site's segment table
 .venv/bin/python -m src.bias.representation               # bias slices: how much data each group has (~40 s)
 .venv/bin/python -m src.bias.slice_errors                 # bias: baseline error per slice and mitigations (15–20 min)
 ```
@@ -155,8 +173,9 @@ The repo is mounted into the containers, so code changes apply on the next run; 
 ```
 pull_counts ────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┐
+                                    └─► osm_shade ───────────────────────────────── (training_frame)
 pull_static_layers ─► sensor_steepness ───────────────────────────────────────────┤
-pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► bias_slices ─► bias_errors ─► dvc_push
+pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─► validate ─► training_frame ─► bias_slices ─► bias_errors ─► dvc_push
 pull_calendars ───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -241,6 +260,14 @@ The `pull_counts` fix holds (10 s against 229 s). The new bottleneck is the stre
 
 While doing this we found that the portal's `id` is not unique (it glues location, hour and date: location 4 at hour 20 and location 42 at hour 2 share an id), so merging on it had dropped about 4.5% of rows. Counts are now merged on (location, date, hour).
 
+### Other DAGs
+
+| DAG | When | What |
+|---|---|---|
+| `stoa_site_build` | Triggered, with `site` | A site's graph and features without counts: NEU Boston, NYC ([docs/pipeline/site_build.md](docs/pipeline/site_build.md)) |
+| `stoa_minute_feed` | Every 15 minutes | Archives the per-minute counts into the bucket; also runs on the Explorer cluster ([ops/hpc/README.md](ops/hpc/README.md)) |
+| `stoa_osm_watch` | Weekly | Reports OSM path changes near the sensors since the pinned extract, without replacing it |
+
 ### Tests and lint
 
 ```bash
@@ -256,6 +283,8 @@ docker compose run --rm --no-deps \
   bash -c "pip install -q pytest && cd /opt/stoa && python -m pytest tests/dags"
 ```
 
+CI runs the same on every pull request: lint and the unit tests on a clean checkout (tests that need data skip themselves), and the DAG tests in a freshly built image when the DAGs, the image or the dependencies change (`.github/workflows/ci.yml`, `dag-tests.yml`).
+
 ## Repository layout
 
 The pipeline code lives in `src/` (as a Python package, run with `python -m src.<module>`), which plays the role of the `scripts/` folder in the course's example structure.
@@ -264,11 +293,14 @@ The pipeline code lives in `src/` (as a Python package, run with `python -m src.
 configs/data.yaml        data sources and site bounding boxes
 configs/calendars/       hand-maintained school terms and university teaching periods
 configs/analysis.yaml    parameters for src/analysis/
-configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, sensor matching)
+configs/features.yaml    feature pipeline settings (walk filter, POI categories, radii, graph, shade, events, sensor matching)
+configs/events.yaml      sourced log of non-AFL events near the sensors
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 configs/bias.yaml        bias slices: precincts, time and weather bins, eras, thresholds
 configs/validation.yaml  data validation thresholds; configs/schemas/ holds the expected table schema
-dags/                    Airflow DAGs (stoa_pipeline.py); Dockerfile + docker-compose.yaml run them
+dags/                    Airflow DAGs (stoa_pipeline, stoa_site_build, stoa_minute_feed, stoa_osm_watch); Dockerfile + docker-compose.yaml run them
+ops/hpc/                 the per-minute poller on Northeastern's Explorer cluster (Slurm scrontab)
+.github/workflows/       CI: lint, tests, DAG tests
 data/                    raw/, interim/ and processed/ (git-ignored; versioned with DVC, pointers in data/*.dvc)
 dvc.yaml, dvc.lock       pipeline stages with their inputs, and the input versions behind the committed data
 logs/                    Airflow task logs (written by the containers, git-ignored)
@@ -277,14 +309,16 @@ docs/
   analysis/              write-ups of one-off analyses
   features/              feature tables: how to build, column dictionaries, joins
   bias/                  bias analysis: slices, representation, per-slice errors, mitigations, findings
-  pipeline/              data validation checks, Gantt charts
+  pipeline/              data validation checks, site builds, Gantt charts
   data_licenses.md       license register; check before adding any dataset
   PROJECT_CONTEXT.md     reasoning behind decisions, scope tiers, validation plan
   scoping/               project scoping document (LaTeX source; the PDF is built, not tracked)
 src/ingest/              ingestion scripts (common.py = download + manifest helpers)
-src/features/            feature pipeline (osm.py runs extract -> graph -> features -> sensors)
+src/features/            feature pipeline (osm.py runs extract -> graph -> features -> shade -> sensors;
+                         schema.py declares every column; training_frame.py builds what models see)
 src/bias/                bias slicing (slices.py), representation report, per-slice errors (slice_errors.py)
-src/pipeline/            pipeline steps that aren't ingest or features: validate, dvc_push
+src/pipeline/            pipeline steps that aren't ingest or features: validate, validate_segments, dvc_push,
+                         site_extras, osm_watch
 src/analysis/            one-off analyses (e.g. new_openings: before/after study feasibility)
 notebooks/               exploration and demonstration only; the pipeline doesn't run them (see below)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)

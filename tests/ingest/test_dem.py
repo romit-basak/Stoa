@@ -90,13 +90,18 @@ def test_dag_and_sensor_steepness_look_for_the_file_dem_writes():
     assert re.search(r"_ga_lidar_5m\.tif", steepness)
 
 
-def test_nyc_gets_a_coarser_clip_so_the_request_stays_small(calls):
-    seen = calls("nyc")
-    url, dest, params = seen["download"][0]
-    assert url == CFG["dem"]["usgs_3dep_imageserver"]
-    assert dest.name == "nyc_usgs_3dep_10m.tif"
-    width, height = map(int, params["size"].split(","))
-    assert max(width, height) <= 4000
+def test_a_large_clip_is_requested_in_tiles_that_cover_it():
+    parts = dem.tiles(0.0, 0.0, 4500, 3000, 10.0, 2000)
+    assert len(parts) == 6  # 3 across, 2 up
+    assert max(w for _, _, w, _, _ in parts) <= 2000
+    assert sum(w * h for _, _, w, h, _ in parts) == 4500 * 3000
+    # The tiles sit on one grid: each starts where the previous one ends.
+    assert sorted({x for x, _, _, _, _ in parts}) == [0.0, 20000.0, 40000.0]
+
+
+def test_neu_stays_one_request_and_nyc_comes_in_tiles():
+    assert len(dem.tiles(0.0, 0.0, 1950, 2268, 1.0, 2500)) == 1
+    assert len(dem.tiles(0.0, 0.0, 3600, 3500, 10.0, 2500)) == 4
 
 
 def test_a_site_without_a_dem_source_fails_loudly(calls, monkeypatch):

@@ -1,4 +1,6 @@
 # Hand-checked sensor-to-segment choices for the OSM graph, keyed by site then CoM location_id.
 # Fill in from sensor_match_review.csv (column chosen_segment_id). Segment IDs are tied to one OSM
 # extract: if the extract changes, re-check these.
-melbourne: {}
+melbourne:
+  68: 715181644-2
+  69: 12558458-0

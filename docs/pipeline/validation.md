@@ -20,7 +20,7 @@ Outliers and stuck sensors are only warned about in the **new hours**: those aft
 
 ## The checks
 
-On the run of 22 October 2026: 67 checks, 0 errors, 3 warnings.
+On the run of 26 October 2026 (`data_snapshot_2026_10_26`, the committed data version): 71 checks, 0 errors, 2 warnings. The four per-minute checks were added after the run of 22 October (67 checks, 0 errors, 3 warnings).
 
 | Kind | Severity | What it checks |
 |---|---|---|
@@ -38,12 +38,20 @@ On the run of 22 October 2026: 67 checks, 0 errors, 3 warnings.
 | **Freshness** | warning | The newest hour is at most 5 days old. |
 | **Drift: rows** | error | The table didn't lose more than 1% of its rows since the last good run. Held rows are kept and new hours added, so the row count only grows. |
 | **Drift: sensors, missing values, mean** | warning | No fewer sensors than last time; no column's missing share up by more than 5 points; mean hourly count within 20% of last time. |
+| **Per-minute archive: days** | warning | Every Melbourne day since the archive began has a file in `data/raw/melbourne_portal/minute_feed/`. With no archive at all (a clone without bucket access), one passing check says so. |
+| **Per-minute archive: late polls** | warning | Each finished day's last minute is 23:00 or later. The feed keeps a day only until a reset at about 02:00 the next morning, so an earlier end means no poll landed between midnight and the reset. |
+| **Per-minute archive: duplicates** | warning | At most 50 rows share a sensor and minute. The portal publishes a few (10 on 26 October); the archive keeps them as published. |
+| **Per-minute archive: hourly sums** | warning | For hours both tables cover, each sensor-hour's minutes add up to its hourly count within 5% (or 2 people), for at least 95% of sensor-hours. A match also shows the absent minutes were zeros. The hourly table's newest hour is left out: the portal publishes it unfinished. |
+
+The per-minute checks are all warnings: the archive is extra evidence for within-hour profiles, not the training table. Their settings are under `minute_feed` in `configs/validation.yaml`; the code is `src/pipeline/minute_checks.py`.
 
 Each rule was checked against the real table before it was set: on clean data none of the error checks fail, and every rule that failed on a test copy with planted errors (negative counts, duplicate sensor-hours, a dropped column, a retyped column, an unknown `source`, a located sensor with no segment, 3% of rows removed) was reported as an error.
 
 The full DAG on a fresh clone (table rebuilt from public sources, 6,176,935 rows): 64 checks, 0 errors, 2 warnings. Warnings from a run by hand on 22 October 2026, on a table built on 16 October:
 - Sensors 37, 164 and 167 reported 87–88% of the last week's daytime hours.
 - The newest hour was 6.3 days old (the local copy was a week old; a scheduled run pulls the latest counts first).
+
+On 26 October the hourly-sums check warned that 28.9% of 253 sensor-hours didn't add up. Every one of them is the archive's first hour, 00:00 on 25 October: the archive began at 00:55 that night, so it holds only that hour's last 5 minutes (minute sums a median 116 below the hourly count). The two full hours after it matched for every sensor. Only three hours overlap so far, because the hourly table trails the per-minute feed, so this one partial hour weighs heavily; its share falls as hours arrive. `minute_profiles` already leaves that hour out.
 
 The outlier check also finds 9 older hours, at sensors 8, 10, 71 and 75. They are real crowds, not glitches: sensor 8 at 7 a.m. on four July Sundays (2019, 2022, 2025, 2026) is Run Melbourne, sensor 10 at midnight on 1 January 2025 is New Year's Eve, and sensor 71 is Christmas morning. That is why only new hours warn.
 

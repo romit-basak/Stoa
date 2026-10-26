@@ -14,7 +14,11 @@ NOW = datetime(2026, 10, 20, 12, tzinfo=UTC)
 
 @pytest.fixture(scope="module")
 def cfg():
-    return v.load_validation_config()
+    cfg = v.load_validation_config()
+    # The real training reference lives under data/ and changes with every training-frame run,
+    # so the synthetic tables here would drift from it. The drift check has its own tests below.
+    cfg["drift"]["training_reference"] = None
+    return cfg
 
 
 def make_table(sensors=(1, 2, 3), days=10) -> pd.DataFrame:

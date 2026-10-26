@@ -92,6 +92,10 @@ def hour_status(
             }
         )[cols]
     first, newest = m["ts_local"].min(), m["ts_local"].max()
+    # When the archive began mid-hour (25 October 2026 starts at 00:55), that first hour can't
+    # add up; it isn't a gap, so it is left out rather than counted against the coverage.
+    if m["sensing_datetime"].min() != first:
+        first = first + pd.Timedelta(hours=1)
     h = hourly.assign(location_id=hourly["location_id"].astype("int64"))
     # The hourly table's newest hour is left out too: the portal publishes it before the hour
     # is complete, so its count runs short of the minutes until the next pull replaces it.

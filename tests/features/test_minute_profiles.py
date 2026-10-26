@@ -194,3 +194,16 @@ def test_no_archive_files_give_empty_results_not_an_error(tmp_path):
     assert hours.empty and grid.shape == (0, 60)
     # The rest of what main() runs.
     assert mp.profiles(mp.hour_summary(hours, grid), grid).empty
+
+
+def test_the_archives_first_hour_is_left_out_when_it_began_mid_hour():
+    minutes = pd.concat(
+        [
+            feed(1, "2026-10-25 12:00", {55: 3}),  # the archive's first minute is 12:55
+            feed(1, "2026-10-25 13:00", {0: 40}),
+            tail_hour(1),
+        ]
+    )
+    table = hourly([(1, "2026-10-25 12:00", 30), (1, "2026-10-25 13:00", 40)])
+    s = mp.hour_status(mp.archive_minutes(minutes), table, CFG)
+    assert s["ts_local"].dt.hour.tolist() == [13] and s["kept"].all()

@@ -97,10 +97,15 @@ def minute_checks(
         .groupby(["location_id", "hour"])["total_of_directions"]
         .sum()
     )
-    # Only finished hours on both sides: not the archive's newest hour, which may still be
-    # filling, nor the hourly table's, which the portal publishes before the hour is complete.
+    # Only whole hours on both sides: not the archive's newest hour, which may still be
+    # filling, nor the hourly table's, which the portal publishes before the hour is complete,
+    # nor the archive's first hour when it began mid-hour (25 October 2026 starts at 00:55).
     newest = min(hour.max(), hourly["ts_local"].max()) if len(hourly) else hour.max()
-    sums = sums[sums.index.get_level_values("hour") < newest]
+    first = (
+        hour.min() if local.min() == hour.min() else hour.min() + pd.Timedelta(hours=1)
+    )
+    at = sums.index.get_level_values("hour")
+    sums = sums[(at >= first) & (at < newest)]
     h = hourly.set_index(["location_id", "ts_local"])["pedestriancount"]
     both = pd.concat([sums.rename("minutes"), h.rename("hourly")], axis=1, join="inner")
     off = (both["minutes"] - both["hourly"]).abs() > (

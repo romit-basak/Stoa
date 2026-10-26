@@ -127,3 +127,24 @@ def test_the_hourly_tables_unfinished_newest_hour_is_not_compared():
     c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
     check = c["minute feed: minutes add up to the hourly counts"]
     assert check.passed and check.observed["compared"] == 0
+
+
+def test_an_archive_that_began_mid_hour_doesnt_compare_that_hour():
+    # The archive began at 00:55, so its 00:00 hour holds 5 minutes of 60.
+    m = minutes(
+        (1, "2026-10-26 00:55", 3),
+        (1, "2026-10-26 01:10", 40),
+        (1, "2026-10-26 23:30", 1),
+    )
+    hourly = pd.DataFrame(
+        {
+            "location_id": [1, 1, 1],
+            "ts_local": pd.to_datetime(
+                ["2026-10-26 00:00", "2026-10-26 01:00", LATER]
+            ).tz_localize(mc.TZ),
+            "pedestriancount": [30, 40, 0],
+        }
+    )
+    c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
+    check = c["minute feed: minutes add up to the hourly counts"]
+    assert check.passed and check.observed["compared"] == 1

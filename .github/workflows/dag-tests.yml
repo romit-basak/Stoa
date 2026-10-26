@@ -6,7 +6,7 @@ on:
   pull_request:
     paths: ["dags/**", "tests/dags/**", "Dockerfile", "pyproject.toml"]
   push:
-    branches: [main, ext/pipeline]
+    branches: [main]
     paths: ["dags/**", "tests/dags/**", "Dockerfile", "pyproject.toml"]
 
 jobs:

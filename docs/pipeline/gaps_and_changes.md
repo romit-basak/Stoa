@@ -2,9 +2,9 @@
 
 Review of 24 October 2026. It covers the `stoa_pipeline` DAG, the graph and feature code, and what the pipeline still needs before it can feed training, validation and deployment end to end. Facts were checked against the code, the data on disk and the live City of Melbourne portal on that date. Tier numbers refer to `docs/PROJECT_CONTEXT.md` section 11.
 
-## Status on the extension branch (25 October 2026)
+## Status (25 October 2026)
 
-The work below was done on `ext/pipeline` (plan: data side and training frame; the model, API and walkers are outside it). Each gap's state:
+The work below was built as a pipeline extension (data side and training frame; the model, API and walkers are outside it) and merged into `main` before the data pipeline submission. Each gap's state:
 
 | Gap | State | Where |
 |---|---|---|

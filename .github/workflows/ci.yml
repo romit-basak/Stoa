@@ -1,11 +1,11 @@
-# Lint and unit tests on every pull request and on pushes to main and ext/pipeline.
+# Lint and unit tests on every pull request and on pushes to main.
 # Tests that need downloaded data skip themselves, so this runs on a clean checkout.
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main, ext/pipeline]
+    branches: [main]
 
 jobs:
   lint-and-test:

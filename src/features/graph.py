@@ -88,7 +88,10 @@ def _width_m(v: str | None) -> float | None:
 
 
 def sidewalk_state(tags: dict[str, Any]) -> str | None:
-    """Normalise the sidewalk tagging on a road to both/left/right/no/separate (None if untagged)."""
+    """Normalise a road's sidewalk tagging to both/left/right/no/separate.
+
+    None if untagged.
+    """
     v = tags.get("sidewalk") or tags.get("sidewalk:both")
     if v in _SIDEWALK_VALUES:
         return {"none": "no", "yes": "both"}.get(v, v)

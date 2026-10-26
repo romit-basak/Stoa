@@ -55,16 +55,16 @@ def toy_frame(n=7):
 
 def test_new_stations_are_capped_before_they_opened():
     f = toy_frame()
-    X = f.X()
+    x = f.matrix()
     col = f.columns.index("recent_station_dist_m")
-    assert X[:3, col].tolist() == [2000, 2000, 2000]  # before 2025-11-30
-    assert X[3:, col].tolist() == [300, 300, 120, 300]  # their real distances after
+    assert x[:3, col].tolist() == [2000, 2000, 2000]  # before 2025-11-30
+    assert x[3:, col].tolist() == [300, 300, 120, 300]  # their real distances after
 
 
 def test_chunked_matrix_equals_the_whole_one():
     f = toy_frame()
-    assert np.array_equal(f.X(chunk=2), f.X(chunk=100))
-    assert np.array_equal(f.X(np.array([4, 0])), f.X()[[4, 0]])
+    assert np.array_equal(f.matrix(chunk=2), f.matrix(chunk=100))
+    assert np.array_equal(f.matrix(np.array([4, 0])), f.matrix()[[4, 0]])
 
 
 def sensors_at(*points):

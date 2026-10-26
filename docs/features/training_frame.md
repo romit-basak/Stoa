@@ -20,7 +20,7 @@
 | Within-Melbourne transfer test | The holdout precincts in `configs/bias.yaml` (UniMelb edge, Carlton, North Melbourne), and any sensor grouped with one, are in no fold (`fold = -1`) |
 | Event days reported apart | `event_days.parquet`: dates with an AFL game at the MCG or Marvel, or a logged event at a venue (`configs/events.yaml`) |
 
-The frame isn't written out: 7.4M rows by 143 features is about 4 GB as float32. `Frame.X()` builds it in chunks of 500,000 rows.
+The frame isn't written out: 7.4M rows by 143 features is about 4 GB as float32. `Frame.matrix()` builds it in chunks of 500,000 rows.
 
 ## Outputs (`data/processed/training/melbourne/`)
 

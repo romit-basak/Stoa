@@ -260,7 +260,9 @@ class Frame:
     def sensors(self) -> np.ndarray:
         return self.hourly["location_id"].to_numpy()
 
-    def X(self, index: np.ndarray | None = None, chunk: int = 500_000) -> np.ndarray:
+    def matrix(
+        self, index: np.ndarray | None = None, chunk: int = 500_000
+    ) -> np.ndarray:
         """Rows `index` (default all) of the feature matrix, built in chunks."""
         idx = np.arange(len(self.hourly)) if index is None else np.asarray(index)
         parts = [

@@ -53,7 +53,10 @@ WAYBACK = "counts_per_hour_wayback_2025-05-02.csv"
 
 
 def read_archive(path: Path) -> tuple[pd.DataFrame, int]:
-    """The 2009-2022 archive, with September 2010's hours recovered; returns (rows, rows re-houred)."""
+    """The 2009-2022 archive, with September 2010's hours recovered.
+
+    Returns (rows, rows re-houred).
+    """
     with zipfile.ZipFile(path) as z:
         a = pd.read_csv(
             z.open(z.namelist()[0]),

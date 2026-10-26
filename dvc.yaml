@@ -4,12 +4,12 @@
 #
 # The stages list no `outs`: data/raw, data/interim and data/processed are versioned as whole
 # folders (data/*.dvc), and DVC doesn't allow a stage output inside a tracked folder. So DVC
-# can't order the stages by itself; run the pipeline with Airflow (README, "Run the pipeline").
+# can't order the stages by itself; run the pipeline with Airflow (README, "Quickstart").
 # Use this file to see what changed:
 #   dvc status      stages whose code, config or input data changed since dvc.lock
 #   dvc dag         the stages
 # dvc_push records the inputs of every stage in dvc.lock after each run (README, "Data
-# versioning"). dvc_push itself isn't a stage: it is the versioning step.
+# versioning with DVC"). dvc_push itself isn't a stage: it is the versioning step.
 
 stages:
   # --- Ingest: downloads, so they always count as changed ---
@@ -169,7 +169,7 @@ stages:
   bias_errors:
     # A baseline's error per slice on held-out sensors, with and without mitigations. It reads
     # the same inputs as bias_slices (it rebuilds the slices itself, it doesn't read their CSVs).
-    # About 18 minutes, so --if-older-than 7 skips it when its last run is under a week old and
+    # About 16 minutes, so --if-older-than 7 skips it when its last run is under a week old and
     # its settings are unchanged; dvc status still flags it when an input below changes.
     cmd: python -m src.bias.slice_errors --if-older-than 7
     deps:

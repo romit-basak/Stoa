@@ -196,7 +196,10 @@ def surroundings(
     cfg = fcfg["surroundings"]
     raw = REPO_ROOT / data_cfg["raw_dir"]
     files = cfg.get("sites", {}).get(site_name, {})
-    path = lambda key: raw / files[key] if key in files else None
+
+    def path(key: str):
+        return raw / files[key] if key in files else None
+
     out = landcover_shares(edges, path("worldcover"), cfg["landcover_radius_m"])
     out = out.merge(
         segment_slope(edges, path("dem"), cfg["slope_step_m"], files.get("dem_nodata")),

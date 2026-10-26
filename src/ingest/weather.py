@@ -1,4 +1,4 @@
-"""Hourly historical weather for a site from the Open-Meteo archive API (ERA5 reanalysis), one file per year.
+"""Hourly historical weather for a site from Open-Meteo's archive (ERA5), one file per year.
 
 Usage: python -m src.ingest.weather [--site melbourne] [--full]
 

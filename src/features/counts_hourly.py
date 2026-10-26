@@ -52,7 +52,10 @@ WAYBACK = "counts_per_hour_wayback_2025-05-02.csv"
 
 
 def read_archive(path: Path) -> tuple[pd.DataFrame, int]:
-    """The 2009-2022 archive, with September 2010's hours recovered; returns (rows, rows re-houred)."""
+    """The 2009-2022 archive, with September 2010's hours recovered.
+
+    Returns (rows, rows re-houred).
+    """
     with zipfile.ZipFile(path) as z:
         a = pd.read_csv(
             z.open(z.namelist()[0]),
@@ -221,7 +224,10 @@ def flag_outages(
 
 
 def solar_elevation(ts_utc: pd.Series, lat: float, lon: float) -> np.ndarray:
-    """Sun elevation in degrees (NOAA's simplified solar position; accurate to well under 1 degree)."""
+    """Sun elevation in degrees.
+
+    NOAA's simplified solar position; accurate to well under 1 degree.
+    """
     t = pd.DatetimeIndex(ts_utc)
     doy = t.dayofyear.to_numpy()
     hours = t.hour.to_numpy() + t.minute.to_numpy() / 60.0

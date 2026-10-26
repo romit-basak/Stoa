@@ -202,7 +202,8 @@ def main() -> None:
 
     print(
         f"candidates: {len(sites)} | re-coding artefacts: {int(sites.recoding_artefact.sum())} | "
-        f"with a sensor within {p['sensor_radius_m']} m: {int((sites.sensors_within_radius > 0).sum())} | "
+        f"with a sensor within {p['sensor_radius_m']} m: "
+        f"{int((sites.sensors_within_radius > 0).sum())} | "
         f"feasible: {int(sites.feasible.sum())} "
         f"(outside COVID windows: {int((sites.feasible & ~sites.covid_window).sum())})"
     )

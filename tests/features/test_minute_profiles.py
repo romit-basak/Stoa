@@ -9,7 +9,10 @@ TZ = "Australia/Melbourne"
 
 
 def feed(sensor: int, start_local: str, counts: dict[int, int]) -> pd.DataFrame:
-    """Feed rows for one sensor-hour: minute -> count (absent minutes left out, as the feed does)."""
+    """Feed rows for one sensor-hour: minute -> count.
+
+    Absent minutes are left out, as the feed does.
+    """
     t0 = pd.Timestamp(start_local, tz=TZ).tz_convert("UTC")
     return pd.DataFrame(
         {

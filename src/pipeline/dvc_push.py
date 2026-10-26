@@ -10,7 +10,8 @@ input data of every stage in dvc.yaml into dvc.lock (`dvc commit`), then uploads
 
 It does not commit the pointer files or dvc.lock. Git history is what links a data version to
 the code that made it, so a person commits them (`git add data/*.dvc dvc.lock && git commit`);
-the log lists which ones changed. Until then, teammates' `dvc pull` still fetches the previous version.
+the log lists which ones changed. Until then, teammates' `dvc pull` still fetches the previous
+version.
 
 Credentials are found the way the Google client libraries find them (google.auth.default):
 the service account key that GOOGLE_APPLICATION_CREDENTIALS points at (in Docker, a file in

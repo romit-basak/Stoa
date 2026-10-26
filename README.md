@@ -163,6 +163,10 @@ Without that key, `dvc_push` falls back to your `gcloud auth application-default
 - **Errors** (a broken schema, duplicate or negative counts, lost rows) fail the task without retrying. The team gets the failure email, and `dvc_push` doesn't run, so bad data never becomes a version.
 - **Warnings** (a new outlier, a quiet sensor, stale data) are logged as `WARN` lines and emailed to the team, and the run carries on. All per-minute checks are warnings.
 
+The warning email from the run of 26 October 2026 (`scheduled__2026-10-26`): sensor 37 reported only 87% of its daytime hours in the last week, and the per-minute archive's minutes didn't add up to the hourly counts for 28.9% of sensor-hours. The run carried on and versioned the data. The sender's address is blurred.
+
+![Validation warning email](docs/pipeline/alert_email_warnings.png)
+
 Thresholds are in `configs/validation.yaml`. [docs/pipeline/validation.md](docs/pipeline/validation.md) describes every check and how we tested each one against planted errors.
 
 **Setting up the alert emails.** When a task fails after its last retry, Airflow emails the team the task, the run and a link to the log. Validation warnings use the same settings. They live in `.env` in the repo root, which is git-ignored; without it, alerts are off. The sender needs a Gmail [App Password](https://myaccount.google.com/apppasswords) (this requires 2-Step Verification), not the account password:

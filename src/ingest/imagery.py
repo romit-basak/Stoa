@@ -99,7 +99,10 @@ def massgis(cfg: dict, site: str, bbox: list[float], out) -> None:
             dest,
             url,
             members=members,
-            license="public domain (MassGIS FAQ); credit MassGIS (Bureau of Geographic Information), Commonwealth of Massachusetts EOTSS",
+            license=(
+                "public domain (MassGIS FAQ); credit MassGIS (Bureau of Geographic "
+                "Information), Commonwealth of Massachusetts EOTSS"
+            ),
         )
 
 

@@ -35,9 +35,9 @@ echo "AIRFLOW_UID=$(id -u)" >> .env    # Linux only, so the containers can write
 docker compose up -d --build           # the first build takes a few minutes
 ```
 
-Open http://localhost:8080 (no login locally), unpause `stoa_pipeline` and press Trigger. When you're done, run `docker compose down` (add `-v` to also wipe Airflow's database).
+Open http://localhost:8080 (no login locally) and unpause `stoa_pipeline`. On a fresh clone, unpausing starts the first run by itself, so there's no need to press Trigger (a Trigger would queue a second run behind it); use Trigger for later runs. When you're done, run `docker compose down` (add `-v` to also wipe Airflow's database).
 
-**How long it takes.** The first run takes about 20 minutes. Most of that is `bias_errors` (about 16 minutes, because it trains 15 models), pulling the counts (including a 171 MB copy from the Internet Archive, which is often slow), and building the street network once. Later runs reuse what's already there and take about 2 minutes; `bias_errors` retrains only once a week. A task that runs for several minutes isn't stuck: click it, then Logs, to watch its progress.
+**How long it takes.** The first run takes about 22 minutes (measured on a clean clone on 25 October 2026: about 6 minutes to download and build the data, then 16 for `bias_errors`). Most of that is `bias_errors` (about 16 minutes, because it trains 15 models), pulling the counts (including a 171 MB copy from the Internet Archive, which is often slow), and building the street network once. Later runs reuse what's already there and take about 2 minutes; `bias_errors` retrains only once a week. A task that runs for several minutes isn't stuck: click it, then Logs, to watch its progress. Don't mark it as success to move on: Airflow stops a running task when it's marked, so its results are never written.
 
 **What you'll see without credentials.** `pull_minute_feed` and `dvc_push` need access to the team's bucket, so on your machine they show as skipped (pink). The run still succeeds and no failure email goes out. Leave the second DAG, `stoa_minute_feed`, paused: it only feeds the team's per-minute archive.
 

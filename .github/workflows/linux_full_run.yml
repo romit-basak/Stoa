@@ -57,6 +57,7 @@ jobs:
       - name: Task states and durations
         if: always()
         run: |
+          exec > >(tee summary.txt) 2>&1
           run_id=$($DC airflow dags list-runs stoa_pipeline -o json 2>/dev/null \
             | python3 -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t[t.index("["):])[0]["run_id"])')
           $DC airflow tasks states-for-dag-run stoa_pipeline "$run_id" -o json 2>/dev/null > states.json || true
@@ -87,6 +88,9 @@ jobs:
           print("host used peak (MiB):", max(int(l.split()[2]) for l in open("host_mem.log")))
           EOF
           df -h /; du -sh data/*
+          sleep 1
+          # Job logs need a GitHub login to read; annotations don't, so the summary goes there too.
+          python3 -c 'import sys; t=open("summary.txt").read().replace("%","%25").replace("\r","").replace("\n","%0A"); print("::notice title=Run summary::" + t)'
 
       # Airflow's log paths contain colons, which artifact uploads reject, so they go in a tarball.
       - name: Pack the task logs

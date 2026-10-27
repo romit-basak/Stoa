@@ -1,0 +1,105 @@
+# One-off check that the README quickstart works on Linux: a fresh clone, Docker Engine on an
+# x86 Ubuntu runner, no credentials. Runs only on pushes to this test branch, never on main.
+name: Linux full run
+
+on:
+  push:
+    branches: [ci/linux-full-run]
+
+jobs:
+  full-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      DC: docker compose exec -T airflow-scheduler
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Machine
+        run: |
+          uname -a; nproc; free -g; df -h /; docker version --format '{{.Server.Version}}'
+
+      - name: Quickstart, as written in the README
+        run: |
+          echo "AIRFLOW_UID=$(id -u)" >> .env
+          docker compose up -d --build
+
+      - name: Wait for Airflow and the DAG
+        run: |
+          for i in $(seq 90); do
+            if $DC airflow dags list 2>/dev/null | grep -q stoa_pipeline; then break; fi
+            sleep 10
+          done
+          $DC airflow dags list
+          $DC airflow dags list-import-errors
+
+      - name: Record memory every 15 s
+        run: |
+          nohup bash -c 'while true; do
+            docker stats --no-stream --format "{{.Name}} {{.MemUsage}}" >> mem.log; free -m | sed -n 2p >> host_mem.log; sleep 15
+          done' > /dev/null 2>&1 &
+
+      - name: Unpause stoa_pipeline (this starts the first run)
+        run: $DC airflow dags unpause stoa_pipeline
+
+      - name: Wait for the run to finish
+        run: |
+          state=none
+          for i in $(seq 480); do
+            state=$($DC airflow dags list-runs stoa_pipeline -o json 2>/dev/null \
+              | python3 -c 'import json,sys; t=sys.stdin.read(); r=json.loads(t[t.index("["):]); print(r[0]["state"] if r else "none")' || echo none)
+            echo "$(date -u +%H:%M:%S) $state"
+            case "$state" in success|failed) break ;; esac
+            sleep 15
+          done
+          echo "STATE=$state" >> "$GITHUB_ENV"
+
+      - name: Task states and durations
+        if: always()
+        run: |
+          run_id=$($DC airflow dags list-runs stoa_pipeline -o json 2>/dev/null \
+            | python3 -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t[t.index("["):])[0]["run_id"])')
+          $DC airflow tasks states-for-dag-run stoa_pipeline "$run_id" -o json 2>/dev/null > states.json || true
+          python3 - <<'EOF'
+          import json
+          from datetime import datetime
+          t = open("states.json").read()
+          rows = json.loads(t[t.index("["):]) if "[" in t else []
+          def ts(s):
+              return datetime.fromisoformat(s) if s else None
+          for r in sorted(rows, key=lambda r: r.get("start_date") or "~"):
+              a, b = ts(r.get("start_date")), ts(r.get("end_date"))
+              secs = f"{(b - a).total_seconds():7.0f} s" if a and b else "      -  "
+              print(f'{r["task_id"]:28} {r["state"] or "none":10} {secs}')
+          EOF
+          echo "--- peak memory per container (MiB)"
+          python3 - <<'EOF'
+          import re
+          peak = {}
+          for line in open("mem.log"):
+              name, use = line.split(" ", 1)
+              m = re.match(r"([\d.]+)(KiB|MiB|GiB)", use)
+              if m:
+                  v = float(m[1]) * {"KiB": 1 / 1024, "MiB": 1, "GiB": 1024}[m[2]]
+                  peak[name] = max(peak.get(name, 0), v)
+          for k, v in sorted(peak.items()):
+              print(f"{k:40} {v:8.0f}")
+          print("host used peak (MiB):", max(int(l.split()[2]) for l in open("host_mem.log")))
+          EOF
+          df -h /; du -sh data/*
+
+      # Airflow's log paths contain colons, which artifact uploads reject, so they go in a tarball.
+      - name: Pack the task logs
+        if: always()
+        run: tar czf airflow-logs.tgz logs states.json mem.log host_mem.log || true
+
+      - name: Keep the task logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airflow-logs
+          path: airflow-logs.tgz
+          retention-days: 7
+
+      - name: Fail unless the run succeeded
+        run: test "$STATE" = success

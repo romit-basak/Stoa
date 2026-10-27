@@ -5,22 +5,35 @@ Usage: python -m src.features.minute_profiles
 A data product for the walkers and the microsimulation, so they can start from measured
 within-hour shapes instead of an even spread. Nothing here is modelled.
 
+The profiles are built on 5-minute blocks, not single minutes. Despite the feed's name, more
+than half the sensors publish one row per 5 minutes, labelled with the block's first minute;
+the rest publish every minute. Blocks are the finest resolution every sensor supports. A few
+per-minute sensors never publish some blocks at all (on 27 October 2026, eight sensors had no
+rows for minutes :00-:04 of any hour), so their hours run short of the hourly count however
+busy they are. `sensor_reporting` finds both kinds, and sensors with missing blocks are left
+out of the profiles.
+
 Only sensor-hours that can be trusted are used. The feed leaves out minutes with no one counted,
 so a missing minute is either a zero or a missed reading. An hour is kept when its minutes add up
 to the hourly table's count (within `sum_tolerance`, or 2 people): then the missing minutes were
 zeros. It also needs at least `min_hour_count` people, since a quiet hour's shares are noise.
 The archive's newest hour is left out because it may still be filling, and so is the hourly
-table's, which the portal publishes before the hour is complete.
+table's, which the portal publishes before the hour is complete. So is the archive's first
+hour when the archive began part-way through it (it began at 00:55 on 25 October 2026).
 
 Writes data/processed/features/melbourne/:
+- minute_sensors.parquet: one row per sensor in the archive, with its rows, whether it reports
+  every minute or every 5 minutes, the 5-minute blocks it never reports, and whether it is used;
 - minute_hour_status.parquet: every sensor-hour of the hourly table inside the archive's span,
-  with whether the archive has it, whether its minutes add up, and whether it was kept. The bias
+  with whether the archive has it, whether its minutes add up, whether its sensor is usable, and
+  whether it was kept. The bias
   step (src/bias/minute_coverage.py) reads it to see which kinds of hours the profiles miss;
 - minute_hours.parquet: one row per kept sensor-hour. `peak15` is four times the busiest clock
   quarter's count over the hour's count (1 when the hour is even, 4 when everyone came in one
-  quarter); `top_minute_share` is the busiest minute's share;
-- minute_profiles.parquet: the mean share of the hour in each minute, by sensor, weekday or
-  weekend and local hour, with the number of hours behind each mean;
+  quarter); `top_block_share` is the busiest 5-minute block's share;
+- minute_profiles.parquet: the mean share of the hour in each 5-minute block (`block_start` is
+  the block's first minute, 0 to 55), by sensor, weekday or weekend and local hour, with the
+  number of hours behind each mean;
 - minute_profiles_meta.json.
 """
 
@@ -37,6 +50,8 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
 TZ = "Australia/Melbourne"
 KEYS = ["location_id", "ts_local"]
+BLOCK_MINUTES = 5
+BLOCKS = 60 // BLOCK_MINUTES
 
 
 def read_archive(folder) -> pd.DataFrame:
@@ -55,7 +70,7 @@ def read_archive(folder) -> pd.DataFrame:
 
 
 def archive_minutes(minutes: pd.DataFrame) -> pd.DataFrame:
-    """One row per sensor and minute (the latest poll's), with its local hour and minute."""
+    """One row per sensor and minute (the latest poll's), with its local hour, minute and block."""
     m = minutes
     if "polled_at" in m:
         m = m.sort_values("polled_at")
@@ -67,17 +82,91 @@ def archive_minutes(minutes: pd.DataFrame) -> pd.DataFrame:
         location_id=m["location_id"].astype("int64"),
         ts_local=utc.dt.floor("h").dt.tz_convert(TZ),
         minute=utc.dt.minute.astype("int64"),
+        block=(utc.dt.minute // BLOCK_MINUTES).astype("int64"),
     )
 
 
+def sensor_reporting(m: pd.DataFrame, cfg: dict[str, Any]) -> pd.DataFrame:
+    """How each sensor reports, from `m` (archive_minutes): every minute or every 5 minutes.
+
+    A sensor whose rows all fall on minutes :00, :05, ... reports 5-minute blocks. A sensor with
+    at least `gap_min_rows` rows and no row at all in some block of the hour has a block the
+    portal never publishes, so it is not usable. Below `gap_min_rows` an empty block can be
+    chance, and the sensor is kept.
+    """
+    cols = ["location_id", "rows", "resolution", "missing_blocks", "usable"]
+    if m.empty:
+        return pd.DataFrame(
+            {
+                "location_id": pd.Series(dtype="int64"),
+                "rows": pd.Series(dtype="int64"),
+                "resolution": pd.Series(dtype="string"),
+                "missing_blocks": pd.Series(dtype="string"),
+                "usable": pd.Series(dtype=bool),
+            }
+        )[cols]
+    g = m.groupby("location_id")
+    out = pd.DataFrame(
+        {
+            "rows": g.size(),
+            "on_block_start": g["minute"].agg(
+                lambda x: (x % BLOCK_MINUTES == 0).mean()
+            ),
+        }
+    )
+    out["resolution"] = np.where(
+        out["on_block_start"] >= cfg["five_minute_share"], "5min", "1min"
+    )
+    present = g["block"].agg(lambda b: set(b))
+    missing = [
+        sorted(set(range(BLOCKS)) - present[s])
+        if out.loc[s, "rows"] >= cfg["gap_min_rows"]
+        else []
+        for s in out.index
+    ]
+    # Each missing block as its minutes, e.g. "0-4".
+    out["missing_blocks"] = [
+        ",".join(
+            f"{b * BLOCK_MINUTES}-{b * BLOCK_MINUTES + BLOCK_MINUTES - 1}"
+            for b in blocks
+        )
+        for blocks in missing
+    ]
+    out["usable"] = [not blocks for blocks in missing]
+    out = out.reset_index()
+    out["resolution"] = out["resolution"].astype("string")
+    out["missing_blocks"] = out["missing_blocks"].astype("string")
+    return out[cols]
+
+
+def first_full_hour(m: pd.DataFrame) -> pd.Timestamp:
+    """The archive's first complete hour: its first hour, unless it began part-way through."""
+    first = m["ts_local"].min()
+    if m["sensing_datetime"].min() != first.tz_convert("UTC"):
+        first += pd.Timedelta(hours=1)
+    return first
+
+
 def hour_status(
-    m: pd.DataFrame, hourly: pd.DataFrame, cfg: dict[str, Any]
+    m: pd.DataFrame,
+    hourly: pd.DataFrame,
+    cfg: dict[str, Any],
+    sensors: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Each hourly-table sensor-hour inside the archive's span, and what became of it.
 
-    `m` comes from archive_minutes. Columns: count, minute_sum, in_archive, adds_up, kept.
+    `m` comes from archive_minutes and `sensors` from sensor_reporting (all usable when left
+    out). Columns: count, minute_sum, in_archive, adds_up, usable_sensor, kept.
     """
-    cols = [*KEYS, "count", "minute_sum", "in_archive", "adds_up", "kept"]
+    cols = [
+        *KEYS,
+        "count",
+        "minute_sum",
+        "in_archive",
+        "adds_up",
+        "usable_sensor",
+        "kept",
+    ]
     if m.empty:
         # Typed, so filtering on the flags and the saved file work with no rows too.
         return pd.DataFrame(
@@ -86,10 +175,13 @@ def hour_status(
                 "ts_local": pd.Series(dtype=f"datetime64[ns, {TZ}]"),
                 "count": pd.Series(dtype="int64"),
                 "minute_sum": pd.Series(dtype="float64"),
-                **{c: pd.Series(dtype=bool) for c in ["in_archive", "adds_up", "kept"]},
+                **{
+                    c: pd.Series(dtype=bool)
+                    for c in ["in_archive", "adds_up", "usable_sensor", "kept"]
+                },
             }
         )[cols]
-    first, newest = m["ts_local"].min(), m["ts_local"].max()
+    first, newest = first_full_hour(m), m["ts_local"].max()
     h = hourly.assign(location_id=hourly["location_id"].astype("int64"))
     # The hourly table's newest hour is left out too: the portal publishes it before the hour
     # is complete, so its count runs short of the minutes until the next pull replaces it.
@@ -107,8 +199,17 @@ def hour_status(
     out["adds_up"] = out["in_archive"] & (
         (out["minute_sum"] - out["count"]).abs() <= tol
     )
-    out["kept"] = out["adds_up"] & (out["count"] >= cfg["min_hour_count"])
-    return out.reset_index()[cols]
+    out = out.reset_index()
+    usable = (
+        sensors.set_index("location_id")["usable"]
+        if sensors is not None and len(sensors)
+        else pd.Series(dtype=bool)
+    )
+    out["usable_sensor"] = out["location_id"].map(usable).fillna(True).astype(bool)
+    out["kept"] = (
+        out["adds_up"] & out["usable_sensor"] & (out["count"] >= cfg["min_hour_count"])
+    )
+    return out[cols]
 
 
 def minute_grid(
@@ -117,61 +218,60 @@ def minute_grid(
     cfg: dict[str, Any],
     which: str = "kept",
 ) -> tuple[pd.DataFrame, np.ndarray]:
-    """Sensor-hours (location_id, ts_local, count) and their counts by minute (n x 60).
+    """Sensor-hours (location_id, ts_local, count) and their counts by 5-minute block (n x 12).
 
     `which` is a hour_status flag: "kept" (the default, for the per-sensor profiles) or
     "adds_up" (every hour whose minutes can be trusted, however quiet; for pooled profiles).
+    Sensors with blocks the portal never publishes are left out either way.
     """
     m = archive_minutes(minutes)
-    status = hour_status(m, hourly, cfg)
-    kept = status[status[which]].set_index(KEYS).sort_index()
+    status = hour_status(m, hourly, cfg, sensor_reporting(m, cfg))
+    kept = status[status[which] & status["usable_sensor"]].set_index(KEYS).sort_index()
     if kept.empty:
-        return kept[["count"]].reset_index(), np.zeros((0, 60))
+        return kept[["count"]].reset_index(), np.zeros((0, BLOCKS))
     grid = (
         m.set_index(KEYS)
         .loc[lambda d: d.index.isin(kept.index)]
         .reset_index()
         .pivot_table(
             index=KEYS,
-            columns="minute",
+            columns="block",
             values="total_of_directions",
             aggfunc="sum",
             fill_value=0,
         )
-        .reindex(index=kept.index, columns=range(60), fill_value=0)
+        .reindex(index=kept.index, columns=range(BLOCKS), fill_value=0)
     )
     return kept[["count"]].reset_index(), grid.to_numpy(dtype=float)
 
 
 def hour_summary(hours: pd.DataFrame, grid: np.ndarray) -> pd.DataFrame:
-    """peak15, top_minute_share, hour and day type for each kept sensor-hour."""
+    """peak15, top_block_share, hour and day type for each kept sensor-hour."""
     total = grid.sum(axis=1)
-    quarters = grid.reshape(len(grid), 4, 15).sum(axis=2)
+    quarters = grid.reshape(len(grid), 4, BLOCKS // 4).sum(axis=2)
     out = hours.copy()
     out["peak15"] = (4 * quarters.max(axis=1) / np.maximum(total, 1)).astype("float32")
-    out["top_minute_share"] = (grid.max(axis=1) / np.maximum(total, 1)).astype(
-        "float32"
-    )
+    out["top_block_share"] = (grid.max(axis=1) / np.maximum(total, 1)).astype("float32")
     out["hour_local"] = out["ts_local"].dt.hour.astype("int8")
     out["day_type"] = np.where(out["ts_local"].dt.dayofweek >= 5, "weekend", "weekday")
     return out
 
 
 def profiles(summary: pd.DataFrame, grid: np.ndarray) -> pd.DataFrame:
-    """Mean share of the hour in each minute by sensor, day type and local hour."""
+    """Mean share of the hour in each 5-minute block by sensor, day type and local hour."""
     group = ["location_id", "day_type", "hour_local"]
     if summary.empty:
-        return pd.DataFrame(columns=[*group, "minute", "share", "n_hours"])
+        return pd.DataFrame(columns=[*group, "block_start", "share", "n_hours"])
     shares = grid / np.maximum(grid.sum(axis=1, keepdims=True), 1)
     wide = pd.concat(
         [summary[group].reset_index(drop=True), pd.DataFrame(shares)], axis=1
     )
     g = wide.groupby(group)
-    mean = g[list(range(60))].mean()
+    mean = g[list(range(BLOCKS))].mean()
     n = g.size().rename("n_hours")
     long = mean.stack().rename("share").reset_index()
-    long = long.rename(columns={f"level_{len(group)}": "minute"})
-    long["minute"] = long["minute"].astype("int8")
+    long = long.rename(columns={f"level_{len(group)}": "block_start"})
+    long["block_start"] = (long["block_start"] * BLOCK_MINUTES).astype("int8")
     long["share"] = long["share"].astype("float32")
     return long.merge(n.reset_index(), on=group)
 
@@ -195,11 +295,14 @@ def main() -> None:
             columns=[*KEYS, "pedestriancount"],
             filters=[("ts_utc", ">=", start.floor("h").tz_convert("UTC"))],
         )
-    status = hour_status(archive_minutes(minutes), hourly, cfg)
+    m = archive_minutes(minutes)
+    sensors = sensor_reporting(m, cfg)
+    status = hour_status(m, hourly, cfg, sensors)
     hours, grid = minute_grid(minutes, hourly, cfg)
     summary = hour_summary(hours, grid)
     prof = profiles(summary, grid)
 
+    write_parquet(sensors, out / "minute_sensors.parquet")
     write_parquet(status, out / "minute_hour_status.parquet")
     write_parquet(summary, out / "minute_hours.parquet")
     write_parquet(prof, out / "minute_profiles.parquet")
@@ -213,6 +316,11 @@ def main() -> None:
         "sensor_hours_in_archive": int(status["in_archive"].sum()),
         "sensor_hours_kept": len(summary),
         "sensors": int(summary["location_id"].nunique()),
+        "sensors_every_minute": int((sensors["resolution"] == "1min").sum()),
+        "sensors_every_5_minutes": int((sensors["resolution"] == "5min").sum()),
+        "sensors_with_missing_blocks": sensors.loc[
+            ~sensors["usable"], "location_id"
+        ].tolist(),
         "median_peak15": round(float(summary["peak15"].median()), 3)
         if len(summary)
         else None,

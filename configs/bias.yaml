@@ -75,6 +75,9 @@ errors:
     min_samples_leaf: 200
     l2_regularization: 1.0
     early_stopping: false
+    # Fixes the subsample the model draws to choose its bins (over 200,000 rows), so reruns
+    # with the same data and settings give the same numbers.
+    random_state: 7
   bootstrap_reps: 300       # sensor resamples for each group's interval
   # A group is "worse" when its whole 95% interval is above the overall WAPE (plus this
   # relative margin; 0 = just above).

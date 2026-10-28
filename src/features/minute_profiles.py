@@ -30,10 +30,12 @@ Writes data/processed/features/melbourne/:
   step (src/bias/minute_coverage.py) reads it to see which kinds of hours the profiles miss;
 - minute_hours.parquet: one row per kept sensor-hour. `peak15` is four times the busiest clock
   quarter's count over the hour's count (1 when the hour is even, 4 when everyone came in one
-  quarter); `top_block_share` is the busiest 5-minute block's share;
+  quarter); `top_block_share` is the busiest 5-minute block's share. `hour_type` is the event
+  phase at the sensor's segment (event_during, event_pre, event_post, from the training frame's
+  event columns), else ordinary;
 - minute_profiles.parquet: the mean share of the hour in each 5-minute block (`block_start` is
-  the block's first minute, 0 to 55), by sensor, weekday or weekend and local hour, with the
-  number of hours behind each mean;
+  the block's first minute, 0 to 55), by sensor, weekday or weekend, local hour and hour type,
+  with the number of hours behind each mean;
 - minute_profiles_meta.json.
 """
 
@@ -257,9 +259,19 @@ def hour_summary(hours: pd.DataFrame, grid: np.ndarray) -> pd.DataFrame:
     return out
 
 
+def hour_types(events: pd.DataFrame) -> np.ndarray:
+    """ordinary or the event phase, during first, from the event_* columns."""
+    return np.select(
+        [events["event_during"], events["event_pre"], events["event_post"]],
+        ["event_during", "event_pre", "event_post"],
+        "ordinary",
+    )
+
+
 def profiles(summary: pd.DataFrame, grid: np.ndarray) -> pd.DataFrame:
-    """Mean share of the hour in each 5-minute block by sensor, day type and local hour."""
-    group = ["location_id", "day_type", "hour_local"]
+    """Mean share of the hour in each 5-minute block by sensor, day type, local hour and hour
+    type."""
+    group = ["location_id", "day_type", "hour_local", "hour_type"]
     if summary.empty:
         return pd.DataFrame(columns=[*group, "block_start", "share", "n_hours"])
     shares = grid / np.maximum(grid.sum(axis=1, keepdims=True), 1)
@@ -300,6 +312,22 @@ def main() -> None:
     status = hour_status(m, hourly, cfg, sensors)
     hours, grid = minute_grid(minutes, hourly, cfg)
     summary = hour_summary(hours, grid)
+    if summary.empty:
+        summary["hour_type"] = pd.Series(dtype="object")
+    else:
+        from src.features.training_frame import event_columns
+
+        seg_of = pd.read_parquet(
+            out / "sensor_osm_features.parquet", columns=["location_id", "segment_id"]
+        ).set_index("location_id")["segment_id"]
+        events = event_columns(
+            summary["ts_local"],
+            summary["location_id"].map(seg_of),
+            site,
+            data_cfg,
+            fcfg,
+        )
+        summary["hour_type"] = hour_types(events)
     prof = profiles(summary, grid)
 
     write_parquet(sensors, out / "minute_sensors.parquet")
@@ -316,6 +344,7 @@ def main() -> None:
         "sensor_hours_in_archive": int(status["in_archive"].sum()),
         "sensor_hours_kept": len(summary),
         "sensors": int(summary["location_id"].nunique()),
+        "hour_types": summary["hour_type"].value_counts().to_dict(),
         "sensors_every_minute": int((sensors["resolution"] == "1min").sum()),
         "sensors_every_5_minutes": int((sensors["resolution"] == "5min").sum()),
         "sensors_with_missing_blocks": sensors.loc[

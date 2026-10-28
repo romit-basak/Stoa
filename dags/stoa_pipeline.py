@@ -45,8 +45,9 @@ on_failure_alert = (
 @dag(
     dag_id="stoa_pipeline",
     start_date=datetime(2026, 10, 1, tzinfo=UTC),
-    # The portal adds new counts daily and keeps only ~2 years, so pull daily and never
-    # miss a window. catchup=False: a missed day is covered by the next run's merge.
+    # Counts and weather arrive daily, and validation should catch a dead sensor or a stale
+    # feed within a day. catchup=False: each run re-fetches from two days before the newest
+    # held date, so a missed day is covered by the next run's merge.
     schedule="@daily",
     catchup=False,
     max_active_runs=1,  # two runs merging into the same parquet at once would clash
@@ -96,7 +97,7 @@ def stoa_pipeline():
     def pull_static_layers():
         # Layers that don't change day to day, so each is fetched only when it isn't held yet
         # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
-        # (slope), the CLUE areas (precincts) and AFL crowds (match days), for bias slicing.
+        # (slope) and the CLUE areas (precincts), for bias slicing.
         # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
         # The braces matter: || and && have equal precedence, so `test || cd && python` would
         # run python even when the file is held (from the wrong folder, so it fails), and a
@@ -117,14 +118,16 @@ def stoa_pipeline():
                 f"{raw}/dem/melbourne_ga_lidar_5m.tif",
                 f"{STOA} src.ingest.dem --site melbourne",
             ),
-            (
-                f"{raw}/events/afl_attendance.csv",
-                f"{STOA} src.ingest.afl_attendance",
-            ),
         ]
         return " && ".join(
             f"{{ test -f {path} || {{ {cmd}; }}; }}" for path, cmd in steps
         )
+
+    @task.bash
+    def pull_events():
+        # AFL crowds (AFL Tables) and fixtures (Squiggle): the current season and any season
+        # not held yet, one page each, so a game's crowd arrives the day after it's played.
+        return f"{STOA} src.ingest.afl_attendance && {STOA} src.ingest.events"
 
     @task.bash
     def pull_osm(params=None):
@@ -144,6 +147,11 @@ def stoa_pipeline():
     @task.bash
     def osm_segment_features():
         return f"{STOA} src.features.osm --site melbourne --only features --if-stale"
+
+    @task.bash
+    def osm_shade():
+        # Building shade per segment and sun position (src/features/shade.py).
+        return f"{STOA} src.features.osm --site melbourne --only shade --if-stale"
 
     @task.bash
     def osm_sensor_match():
@@ -172,6 +180,12 @@ def stoa_pipeline():
         # Bias steps 2-3: a baseline's error per slice on held-out sensors, with and without
         # reweighting. About 16 minutes, so it reruns only weekly or when its settings change.
         return f"{STOA} src.bias.slice_errors --if-older-than 7"
+
+    @task.bash
+    def training_frame():
+        # The location splits, event days and feature spec every model trains from
+        # (src/features/training_frame.py). About 10 s.
+        return f"{STOA} src.features.training_frame"
 
     @task.bash
     def minute_profiles():
@@ -212,7 +226,10 @@ def stoa_pipeline():
     # would attach to the last stage, not the first.
     extract = osm_extract()
     osm_features = osm_segment_features()
-    pull_osm() >> extract >> osm_graph() >> osm_features
+    built = osm_graph()
+    pull_osm() >> extract >> built >> osm_features
+    shaded = osm_shade()
+    built >> shaded
 
     # Sensor matching needs both the segment features and the sensor locations.
     sensors = osm_sensor_match()
@@ -232,12 +249,16 @@ def stoa_pipeline():
     # passed the checks. Only data that went through all three is versioned.
     checked = validate()
     [joined, pull_minute_feed()] >> checked
+    # The training frame loads the table too (about 2 GB), so it also takes its turn.
+    events = pull_events()
+    frame = training_frame()
+    [checked, shaded, events] >> frame
     slices = bias_slices()
-    [checked, static] >> slices
+    [frame, static] >> slices
     errors = bias_errors()
     slices >> errors
     profiles = minute_profiles()
-    checked >> profiles
+    [checked, sensors, events] >> profiles
     covered = minute_coverage()
     [profiles, slices] >> covered
     [checked, errors, covered] >> dvc_push()

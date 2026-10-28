@@ -46,3 +46,29 @@ def test_fingerprints_change_with_inputs(site, fcfg):
     assert cli.fingerprints(other, fcfg, data_cfg)["extract"] != base["extract"]
     # The same inputs give the same fingerprints.
     assert cli.fingerprints(site, fcfg, data_cfg) == base
+
+
+def test_downstream_settings_leave_the_osm_stages_current(site, fcfg):
+    from src.ingest.common import load_config
+
+    data_cfg = load_config()
+    base = cli.fingerprints(site, fcfg, data_cfg)
+    changed = {**fcfg, "training_frame": {"anything": 1}, "minute_profiles": {}}
+    assert cli.fingerprints(site, changed, data_cfg) == base
+
+
+def test_no_osm_stage_imports_a_downstream_module():
+    import ast
+
+    names = {n.removesuffix(".py") for n in cli.DOWNSTREAM_CODE}
+    for f in sorted(cli.FEATURE_CODE.glob("*.py")):
+        if f.name in cli.DOWNSTREAM_CODE:
+            continue
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert node.module.rsplit(".", 1)[-1] not in names, (
+                    f.name,
+                    node.module,
+                )
+                if node.module == "src.features":
+                    assert not {a.name for a in node.names} & names, f.name

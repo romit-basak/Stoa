@@ -7,17 +7,26 @@ sites:
     bbox: [144.892, -37.856, 144.997, -37.770]
     center: [144.9631, -37.8136]
     timezone: Australia/Melbourne
+    dem: {source: ga_5m}
+    # The City's counting sensors are matched to the graph (src/features/sensor_match.py).
+    count_sensors: true
   neu_boston:
     # Northeastern Boston campus (~lon -71.095 to -71.082, lat 42.333 to 42.345) + ~400 m buffer.
     bbox: [-71.100, 42.329, -71.077, 42.349]
     center: [-71.0892, 42.3398]
     timezone: America/New_York
     utm_epsg: 26919
+    dem: {source: usgs_3dep, res_m: 1.0}
+    # Site layers beyond OSM, DEM, land cover, weather and calendars (stoa_site_build).
+    extra_ingest: [boston_buildings, imagery]
   nyc:
     # Extent of the 114 NYC DOT bi-annual count locations (transfer test only).
     bbox: [-74.170, 40.565, -73.745, 40.885]
     center: [-73.9855, 40.7580]
     timezone: America/New_York
+    utm_epsg: 32618
+    # 10 m, not 1 m: the city-wide bbox at 1 m would be a ~36,000 x 35,000 pixel request.
+    dem: {source: usgs_3dep, res_m: 10.0}
     # Bi-annual counts start May 2007.
     weather_start: "2007-01-01"
 
@@ -124,6 +133,16 @@ minute_feed:
   # first poll of each hour, which fetches the whole day so far.
   recent_hours: 3
 
+# Stanford Drone Dataset: trajectories on a university campus, for route-choice validation only.
+# CC BY-NC-SA 3.0 (the original's licence; the mirror's label is wrong): no model fitted to it is
+# shipped or distributed (CLAUDE.md core rule 5). Annotations only, no video.
+stanford_drone:
+  kaggle_dataset: aryashah2k/stanford-drone-dataset
+  original_url: https://cvgl.stanford.edu/projects/uav_data/
+  license: CC BY-NC-SA 3.0
+  # Count window: 1,800 frames, a minute at the videos' 30 frames per second.
+  frames_per_window: 1800
+
 osm:
   # BBBike weekly city extracts. Melbourne extract covers lon 144.68-145.30, lat -38.02 to -37.53.
   extracts:
@@ -153,7 +172,6 @@ dem:
   # (MA_CentralEastern_2021_B21 x32y469/x32y470). It is a dynamic mosaic: source project per pixel
   # is not reported.
   usgs_3dep_imageserver: https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage
-  usgs_3dep_res_m: 1.0
 
 weather:
   # ERA5-based reanalysis via Open-Meteo archive API (hourly, local time).

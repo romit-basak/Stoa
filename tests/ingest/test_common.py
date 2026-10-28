@@ -164,3 +164,11 @@ def test_download_fails_fast_on_client_errors(tmp_path, monkeypatch):
     with pytest.raises(requests.HTTPError):
         common.download("https://example.org/f", tmp_path / "f.csv")
     assert len(calls) == 1
+
+
+def test_years_to_fetch_is_the_missing_years_and_the_current_one():
+    from src.ingest.common import years_to_fetch
+
+    assert years_to_fetch(2020, 2024, {2020, 2021, 2023}) == [2022, 2024]
+    assert years_to_fetch(2020, 2024, {2020, 2021, 2022, 2023, 2024}) == [2024]
+    assert years_to_fetch(2022, 2024, {2022}, refetch_all=True) == [2022, 2023, 2024]

@@ -13,9 +13,9 @@ from src.features.counts_hourly import (
     read_wayback,
     read_weather,
     rehour_midnight_days,
-    solar_elevation,
     weather_for_counts,
 )
+from src.features.sun import solar_elevation
 
 TZ = "Australia/Melbourne"
 MELB = (144.9631, -37.8136)  # lon, lat

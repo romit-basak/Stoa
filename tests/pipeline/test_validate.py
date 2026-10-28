@@ -14,7 +14,11 @@ NOW = datetime(2026, 10, 20, 12, tzinfo=UTC)
 
 @pytest.fixture(scope="module")
 def cfg():
-    return v.load_validation_config()
+    cfg = v.load_validation_config()
+    # The real training reference lives under data/ and changes with every training-frame run,
+    # so the synthetic tables here would drift from it. The drift check has its own tests below.
+    cfg["drift"]["training_reference"] = None
+    return cfg
 
 
 def make_table(sensors=(1, 2, 3), days=10) -> pd.DataFrame:
@@ -28,7 +32,7 @@ def make_table(sensors=(1, 2, 3), days=10) -> pd.DataFrame:
     df["ts_local"] = local
     df["date_local"] = local.dt.tz_localize(None).dt.normalize()
     hour = local.dt.hour  # int64: arithmetic on the int8 column would overflow
-    weekday = local.dt.weekday
+    weekday = local.dt.day_of_week
     df["hour_local"] = hour.astype("int8")
     df["source"] = pd.Categorical(
         ["live"] * len(df), categories=["archive", "live", "wayback"]
@@ -434,11 +438,18 @@ def test_reports_are_written_and_only_good_runs_join_the_history(cfg, tmp_path):
     assert (tmp_path / "counts_hourly_stats.json").is_file()
 
 
-def test_schema_round_trips(tmp_path):
+def test_schema_diff_names_what_to_declare():
     df = make_table()
-    path = tmp_path / "schema.yaml"
-    v.write_schema(df, path)
-    assert yaml.safe_load(path.read_text()) == v.infer_schema(df)
+    schema = v.infer_schema(df)
+    assert v.schema_diff(df, schema) == []
+    first = next(iter(schema["columns"]))
+    schema["columns"]["gone"] = "float32"
+    schema["columns"][first] = "float64"
+    df["extra"] = 1
+    diff = v.schema_diff(df, schema)
+    assert "missing: gone (float32)" in diff
+    assert "unexpected: extra (int64)" in diff
+    assert any(d.startswith(f"type: {first}") for d in diff)
 
 
 def test_config_only_names_columns_in_the_committed_schema(cfg):
@@ -451,6 +462,28 @@ def test_config_only_names_columns_in_the_committed_schema(cfg):
         *cfg["allowed_values"],
     }
     assert named <= set(schema)
+
+
+def test_training_drift_warns_only_when_a_feature_moves():
+    import numpy as np
+
+    from src.features.training_frame import reference_quantiles
+
+    rng = np.random.default_rng(0)
+    base = pd.DataFrame({"t": rng.normal(15, 5, 5000), "h": rng.integers(0, 24, 5000)})
+    ref = {"rows": reference_quantiles(base)}
+    same = pd.DataFrame({"t": rng.normal(15, 5, 5000), "h": rng.integers(0, 24, 5000)})
+    (check,) = v.training_drift_checks(same, ref, psi_warn=0.25)
+    assert check.passed and set(check.observed["psi"]) == {"t", "h"}
+
+    shifted = same.assign(t=same["t"] + 10)  # every hour 10 degrees warmer
+    (check,) = v.training_drift_checks(shifted, ref, psi_warn=0.25)
+    assert not check.passed and list(check.observed["over"]) == ["t"]
+
+
+def test_training_drift_passes_without_a_reference():
+    (check,) = v.training_drift_checks(make_table(), None, psi_warn=0.25)
+    assert check.passed and "no training reference" in check.detail
 
 
 def test_range_checks_see_widened_columns_with_the_same_values():

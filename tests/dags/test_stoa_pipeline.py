@@ -42,6 +42,7 @@ def test_has_every_stage(dag):
         "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
+        "pull_events",
         "osm_extract",
         "osm_graph",
         "osm_segment_features",
@@ -50,8 +51,10 @@ def test_has_every_stage(dag):
         "join_all",
         "bias_slices",
         "bias_errors",
+        "training_frame",
         "minute_profiles",
         "minute_coverage",
+        "osm_shade",
         "validate",
         "dvc_push",
     }
@@ -66,6 +69,7 @@ def test_ingest_tasks_run_in_parallel(dag):
         "pull_minute_feed",
         "pull_osm",
         "pull_static_layers",
+        "pull_events",
     ):
         assert dag.get_task(task_id).upstream_task_ids == set()
 
@@ -88,9 +92,15 @@ def test_wiring(dag):
     }
     assert upstream("validate") == {"join_all", "pull_minute_feed"}
     # After validate, not beside it: side by side, the two overran Docker's 8 GB.
-    assert upstream("bias_slices") == {"validate", "pull_static_layers"}
+    assert upstream("osm_shade") == {"osm_graph"}
+    assert upstream("training_frame") == {"validate", "osm_shade", "pull_events"}
+    assert upstream("bias_slices") == {"training_frame", "pull_static_layers"}
+    assert upstream("minute_profiles") == {
+        "validate",
+        "osm_sensor_match",
+        "pull_events",
+    }
     assert upstream("bias_errors") == {"bias_slices"}
-    assert upstream("minute_profiles") == {"validate"}
     assert upstream("minute_coverage") == {"minute_profiles", "bias_slices"}
     assert upstream("dvc_push") == {"validate", "bias_errors", "minute_coverage"}
 

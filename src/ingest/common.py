@@ -138,3 +138,14 @@ def record(source_dir: Path, path: Path, url: str, **extra: Any) -> None:
         **extra,
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
+def years_to_fetch(
+    start: int, current: int, held: set[int], refetch_all: bool = False
+) -> list[int]:
+    """Years from start to current that a yearly source needs: the missing ones and the current
+    one, which may still be growing (a past season's page or fixture list doesn't change)."""
+    years = range(start, current + 1)
+    if refetch_all:
+        return list(years)
+    return [y for y in years if y not in held or y == current]

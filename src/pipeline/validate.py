@@ -1,6 +1,6 @@
 """Validate the hourly counts table before it becomes a DVC version.
 
-Usage: python -m src.pipeline.validate [--write-schema]
+Usage: python -m src.pipeline.validate [--schema-diff]
 
 Runs as the `validate` task of stoa_pipeline, between join_all and dvc_push. Settings and
 thresholds are in configs/validation.yaml; docs/pipeline/validation.md lists every check.
@@ -22,8 +22,9 @@ to STOA_ALERT_EMAILS (with the smtp_default settings, read without importing Air
 run carries on. Outliers and stuck sensors only warn about hours
 added since the last good run, so a known event doesn't alert every day.
 
-`--write-schema` writes the schema from the current table instead. Run it after an intended
-change to the table's columns and commit the result.
+The expected schema is generated from src/features/schema.py (`python -m src.features.schema
+--write`). After an intended change to the table's columns, declare them there; `--schema-diff`
+lists how the current table differs from the committed schema, to see what to declare.
 """
 
 from __future__ import annotations
@@ -72,8 +73,15 @@ class Check:
 
 
 def load_validation_config(path: Path | None = None) -> dict[str, Any]:
+    """The validation settings, with {site} in the table and reports paths filled in."""
     with open(path or REPO_ROOT / "configs" / "validation.yaml") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    for key in ("table", "reports_dir"):
+        cfg[key] = cfg[key].format(site=cfg["site"])
+    ref = cfg["drift"].get("training_reference")
+    if ref:
+        cfg["drift"]["training_reference"] = ref.format(site=cfg["site"])
+    return cfg
 
 
 # --- Schema ---
@@ -84,16 +92,17 @@ def infer_schema(df: pd.DataFrame) -> dict[str, Any]:
     return {"columns": {c: str(df[c].dtype) for c in df.columns}}
 
 
-def write_schema(df: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    header = (
-        "# Expected columns and pandas dtypes of the hourly counts table, checked by\n"
-        "# src/pipeline/validate.py. Generated with `python -m src.pipeline.validate "
-        "--write-schema`.\n"
-    )
-    body = yaml.safe_dump(infer_schema(df), sort_keys=False)
-    path.write_text(header + body)
-    log.info("wrote schema with %d columns to %s", df.shape[1], path)
+def schema_diff(df: pd.DataFrame, schema: dict[str, Any]) -> list[str]:
+    """How the table differs from the schema: columns missing, unexpected or of another type."""
+    want, have = schema["columns"], infer_schema(df)["columns"]
+    out = [f"missing: {c} ({t})" for c, t in want.items() if c not in have]
+    out += [f"unexpected: {c} ({t})" for c, t in have.items() if c not in want]
+    out += [
+        f"type: {c} is {have[c]}, schema says {t}"
+        for c, t in want.items()
+        if c in have and have[c] != t
+    ]
+    return out
 
 
 def check_schema(df: pd.DataFrame, schema: dict[str, Any]) -> list[Check]:
@@ -601,6 +610,44 @@ def last_summary(history: Path) -> dict[str, Any] | None:
 # --- Run ---
 
 
+def training_drift_checks(
+    df: pd.DataFrame, reference: dict[str, Any] | None, psi_warn: float
+) -> list[Check]:
+    """Each feature's PSI in the eligible rows against the training reference."""
+    if reference is None:
+        return [
+            Check(
+                "drift: against the training reference",
+                WARNING,
+                True,
+                "no training reference yet (src/features/training_frame.py)",
+            )
+        ]
+    from src.features.training_frame import drift_from_reference, eligible
+
+    rows = (
+        df.iloc[eligible(df)]
+        if {"has_location", "location_type"} <= set(df.columns)
+        else df
+    )
+    scores = {}
+    for col, ref in reference.get("rows", {}).items():
+        if col in rows.columns:
+            score = drift_from_reference(rows[col], ref)
+            if score is not None:
+                scores[col] = round(score, 4)
+    high = {c: s for c, s in scores.items() if s > psi_warn}
+    return [
+        Check(
+            "drift: against the training reference",
+            WARNING,
+            not high,
+            ", ".join(f"{c} PSI {s:.2f}" for c, s in sorted(high.items())),
+            {"psi": scores, "over": high},
+        )
+    ]
+
+
 def validate(
     df: pd.DataFrame,
     cfg: dict[str, Any],
@@ -615,7 +662,17 @@ def validate(
     checks += anomaly_checks(df, cfg, now, since)
     stats = profile(df)
     checks += drift_checks(summary(stats, now), previous, cfg)
+    checks += training_drift_checks(
+        df, training_reference(cfg), cfg["drift"].get("psi_warn", 0.25)
+    )
     return checks, stats
+
+
+def training_reference(cfg: dict[str, Any]) -> dict[str, Any] | None:
+    path = cfg["drift"].get("training_reference")
+    if not path or not (REPO_ROOT / path).is_file():
+        return None
+    return json.loads((REPO_ROOT / path).read_text()).get("reference")
 
 
 def write_reports(
@@ -648,7 +705,7 @@ def write_reports(
 
 
 def warning_email(
-    checks: list[Check], run_id: str | None = None
+    checks: list[Check], run_id: str | None = None, report: str | None = None
 ) -> tuple[str, str] | None:
     """Subject and HTML body listing the failed warning checks, or None if there are none."""
     warnings = [c for c in checks if not c.passed and c.severity == WARNING]
@@ -663,8 +720,8 @@ def warning_email(
         "is being versioned, but these warnings need a look:</p>"
         f"<ul>{rows}</ul>"
         + (f"<p>Run: {run_id}</p>" if run_id else "")
-        + "<p>Full report: <code>data/processed/validation/melbourne/"
-        "counts_hourly_validation.json</code>. Checks: docs/pipeline/validation.md.</p>"
+        + (f"<p>Full report: <code>{report}</code>. " if report else "<p>")
+        + "Checks: docs/pipeline/validation.md.</p>"
     )
     return subject, body
 
@@ -689,14 +746,16 @@ def smtp_settings() -> dict[str, Any] | None:
     return conn
 
 
-def send_warning_alert(checks: list[Check]) -> bool:
+def send_warning_alert(checks: list[Check], report: str | None = None) -> bool:
     """Email the warnings to STOA_ALERT_EMAILS through the smtp_default settings. Returns
     whether an email went out.
 
     Nothing here raises: warnings never stop the pipeline, so a failed send is only logged.
     """
     try:
-        message = warning_email(checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"))
+        message = warning_email(
+            checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"), report
+        )
         recipients = [
             e.strip()
             for e in os.environ.get("STOA_ALERT_EMAILS", "").split(",")
@@ -752,9 +811,9 @@ def main() -> None:
     setup_logging()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--write-schema",
+        "--schema-diff",
         action="store_true",
-        help="write the schema from the current table",
+        help="list how the current table differs from the committed schema",
     )
     args = parser.parse_args()
 
@@ -765,11 +824,12 @@ def main() -> None:
     df = pd.read_parquet(table)
     log.info("read %s: %d rows, %d columns", cfg["table"], len(df), df.shape[1])
     schema_path = REPO_ROOT / cfg["schema"]
-    if args.write_schema:
-        write_schema(df, schema_path)
+    schema = yaml.safe_load(schema_path.read_text())
+    if args.schema_diff:
+        diff = schema_diff(df, schema)
+        print("\n".join(diff) if diff else "the table matches the schema")
         return
 
-    schema = yaml.safe_load(schema_path.read_text())
     out = REPO_ROOT / cfg["reports_dir"]
     now = datetime.now(UTC)
     checks, stats = validate(
@@ -793,7 +853,7 @@ def main() -> None:
     if failed:
         # The failure email covers this run; no separate warning email.
         raise ValidationError(f"{len(failed)} checks failed: {'; '.join(failed)}")
-    send_warning_alert(checks)
+    send_warning_alert(checks, f"{cfg['reports_dir']}/counts_hourly_validation.json")
 
 
 if __name__ == "__main__":

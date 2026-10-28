@@ -13,15 +13,15 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Course requirement | Where to look |
 |---|---|
 | Data acquisition | `src/ingest/`, sources listed in `configs/data.yaml`. See [Running steps by hand](#running-steps-by-hand) |
-| Preprocessing and features | `src/features/`. The hourly table is described in [docs/features/counts_hourly.md](docs/features/counts_hourly.md) |
-| Airflow DAG | `dags/stoa_pipeline.py`. See [The pipeline](#the-pipeline) |
+| Preprocessing and features | `src/features/`. The hourly table is described in [docs/features/counts_hourly.md](docs/features/counts_hourly.md), the street features in [docs/features/osm_features.md](docs/features/osm_features.md) and [docs/features/segment_context.md](docs/features/segment_context.md), and the training frame in [docs/features/training_frame.md](docs/features/training_frame.md). Every column is declared in `src/features/schema.py` |
+| Airflow DAG | `dags/stoa_pipeline.py`, plus three smaller DAGs. See [The pipeline](#the-pipeline) |
 | Data versioning (DVC) | `data/*.dvc`, `dvc.yaml`, `dvc.lock`. See [Data versioning with DVC](#data-versioning-with-dvc) |
 | Schema and statistics | `src/pipeline/validate.py`, `configs/schemas/counts_hourly.yaml`. See [Validation, anomalies and alerts](#validation-anomalies-and-alerts) |
 | Anomaly detection and alerts | Same section; every check is listed in [docs/pipeline/validation.md](docs/pipeline/validation.md) |
 | Logging and error handling | [Logging and error handling](#logging-and-error-handling) |
 | Bias detection and mitigation | `src/bias/`. Summary in [Bias detection and mitigation](#bias-detection-and-mitigation), full write-up in [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md) |
 | Pipeline optimization (Gantt) | [Pipeline optimization](#pipeline-optimization) |
-| Tests | `tests/`, which mirrors `src/`. See [Tests and lint](#tests-and-lint) |
+| Tests | `tests/`, which mirrors `src/`; CI in `.github/workflows/`. See [Tests and lint](#tests-and-lint) |
 | Reproducibility | [Quickstart](#quickstart) |
 | Folder structure | [Repository layout](#repository-layout) |
 
@@ -61,29 +61,32 @@ One Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), runs the Melbourne p
 ```
 pull_counts ──────────────────────────────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┤
+                                    └─► osm_shade
 pull_static_layers ─► sensor_steepness ───────────────────────────────────────────┤
 pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─┐
 pull_calendars ───────────────────────────────────────────────────────────────────┘             ├─► validate
 pull_minute_feed ───────────────────────────────────────────────────────────────────────────────┘
 
-validate ─┬─► bias_slices ─────┬─► bias_errors ──────┐
-          │                    │                     ├─► dvc_push
-          └─► minute_profiles ─┴─► minute_coverage ──┘
+validate ─┬─► training_frame ─► bias_slices ─┬─► bias_errors ──────┐
+          │                                  │                     ├─► dvc_push
+          └─► minute_profiles ───────────────┴─► minute_coverage ──┘
 ```
 
-`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations, and `pull_static_layers` also feeds `bias_slices`.
+`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations, and `pull_static_layers` also feeds `bias_slices`. `osm_shade` and `pull_events` (AFL games) feed `training_frame`; `pull_events` and `osm_sensor_match` also feed `minute_profiles`.
 
 | Task | What it does |
 |---|---|
 | `pull_counts` | Hourly counts and sensor locations from the City of Melbourne portal |
 | `pull_weather` | Hourly weather (ERA5 via Open-Meteo) |
 | `pull_calendars` | Public holidays, plus the school and university terms kept in `configs/calendars/` |
-| `pull_static_layers` | Footpath-steepness survey, 5 m terrain model, CLUE areas (the City's precincts) and AFL crowds, each fetched only if it isn't already on disk |
-| `pull_osm`, `osm_*` | The OpenStreetMap extract, the walking graph, per-segment features, and each sensor's matching segment |
+| `pull_static_layers` | Footpath-steepness survey, 5 m terrain model and CLUE areas (the City's precincts), each fetched only if it isn't already on disk |
+| `pull_events` | AFL crowds (AFL Tables) and fixtures (Squiggle) for the current season and any season not held, one page each |
+| `pull_osm`, `osm_*` | The OpenStreetMap extract, the walking graph, per-segment features (network metrics, amenities, transit, land cover, slope, canopy, jobs, event venues), building shade for each sun position, and each sensor's matching segment |
 | `sensor_steepness` | Footpath slope and elevation at each sensor |
 | `pull_minute_feed` | Copies the per-minute counts archive from the bucket into `data/raw` |
 | `join_all` | Builds the hourly table, `counts_hourly.parquet`: one row per sensor and hour, with time, weather, calendar, slope and street features |
 | `validate` | Checks the table's schema, values, anomalies and drift. Fails the run on errors |
+| `training_frame` | The rows, features and location splits every model trains from, with each feature's reference distribution for drift checks |
 | `bias_slices` | How much data each group (place, time, weather, era...) has |
 | `bias_errors` | A baseline model's error for each group, with and without mitigations. Retrains weekly |
 | `minute_profiles` | How people spread across each hour in 5-minute blocks, from the per-minute archive |
@@ -99,11 +102,18 @@ How it's set up:
 What a daily run re-does:
 - **Counts:** only the days from two before the latest date we hold, merged into the rows we already have on (location, date, hour). The fixed 2009–2022 archive is kept. To re-fetch everything: `python -m src.ingest.melbourne_portal --only pedestrian-counting-system-monthly-counts-per-hour --full`.
 - **Weather:** only the last two years (`--full` re-fetches all of it).
-- **OpenStreetMap:** the extract is pinned. Each OSM stage skips itself unless one of its inputs changed: the extract, `configs/features.yaml`, the code in `src/features/`, the sensor locations, or `configs/sensor_overrides.yaml`. A skipped OSM chain takes a couple of seconds.
+- **OpenStreetMap:** the extract is pinned. Each OSM stage skips itself unless one of its inputs changed: the extract, `configs/features.yaml`, the code in `src/features/`, the sensor locations, or `configs/sensor_overrides.yaml`. Settings and code that only later steps read (the hourly table, the training frame, the minute profiles) don't count. A skipped OSM chain takes a couple of seconds.
+- **AFL games:** only the current season, one page from each source.
 
 To move to a newer OSM extract, trigger the DAG with `refresh_osm` set to true (Trigger, then advanced options). That renumbers the graph's segments, so `osm_sensor_match` fails until any sensor overrides that point at old segments are fixed.
 
-NYC (a transfer test only) and NEU Boston (a demonstration) aren't in the DAG. They're fixed snapshots, downloaded once by hand (see [Running steps by hand](#running-steps-by-hand)) and versioned with DVC like the rest.
+### Other DAGs
+
+| DAG | When | What |
+|---|---|---|
+| `stoa_site_build` | Triggered, with `site` | A site's graph and features without counts: NEU Boston (the demonstration) and NYC (the transfer test, clipped around its 114 count locations). See [docs/pipeline/site_build.md](docs/pipeline/site_build.md) |
+| `stoa_minute_feed` | Every 15 minutes | Archives the per-minute counts into the bucket (see [The per-minute counts](#running-steps-by-hand)); leave it paused unless you poll for the team |
+| `stoa_osm_watch` | Weekly | Reports OSM path changes near the sensors since the pinned extract, without replacing it |
 
 ## Data versioning with DVC
 
@@ -138,6 +148,22 @@ git add data/*.dvc dvc.lock && git commit -m "..."
 
 Don't use `dvc repro`; run the pipeline with Airflow. The stages list no outputs, because DVC doesn't allow a stage output inside a folder that's tracked as a whole, so DVC can't work out the order on its own. The download stages always show as changed, since they fetch new data on every run.
 
+**Protecting the bucket.** Soft delete keeps a deleted object for 7 days, and object versioning (on since 25 October 2026) keeps up to 3 older versions of each file for 30 days, since the per-minute archive rewrites its day files every 15 minutes. A project owner set it up with:
+
+```bash
+gcloud storage buckets update gs://stoa-dvc-data --versioning
+cat > /tmp/stoa-lifecycle.json <<'JSON'
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "numNewerVersions": 3}},
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "daysSinceNoncurrentTime": 30}}
+]}
+JSON
+gcloud storage buckets update gs://stoa-dvc-data --lifecycle-file=/tmp/stoa-lifecycle.json
+gcloud storage buckets describe gs://stoa-dvc-data --format="yaml(versioning_enabled,lifecycle_config)"   # check
+```
+
+Count days that have left the portal's window, the pinned OSM extracts and the validation history exist only in our copies. Where a second copy should live is still a team decision.
+
 **Credentials for `dvc_push`.** The containers log in to the bucket as the `stoa-airflow-dvc` service account, using a key file in `.secrets/` (git-ignored; each person makes their own). Once, with `gcloud` signed in to an account on the project:
 
 ```bash
@@ -151,10 +177,10 @@ Without that key, `dvc_push` falls back to your `gcloud auth application-default
 ## Validation, anomalies and alerts
 
 `validate` (`src/pipeline/validate.py`) checks the hourly table after `join_all` builds it and before anything is versioned. It uses a Great Expectations suite for the column checks and our own code for the anomaly checks:
-- **Schema:** the columns and their types match `configs/schemas/counts_hourly.yaml`. When we add a feature on purpose, we regenerate it with `--write-schema` and commit it with the change.
+- **Schema:** the columns and their types match `configs/schemas/counts_hourly.yaml`, which is generated from `src/features/schema.py`, where every column is declared with its type, role and whether it transfers to other cities. When we add a feature, we declare it there, run `python -m src.features.schema --write` and commit both; `validate --schema-diff` shows how a table differs.
 - **Values:** one row per sensor-hour; no missing values except where documented; values in physical ranges; categories from an allowed list.
 - **Anomalies:** new per-sensor outliers, stuck sensors, gaps in the last week's daytime hours, stale data, and too many outage zeros.
-- **Drift:** row count, sensor count, missing values and mean count compared with the last good run.
+- **Drift:** row count, sensor count, missing values and mean count compared with the last good run, and each feature's distribution against the training frame's reference (population stability index).
 - **The per-minute archive:** missing days, late polls, duplicate rows, sensors that never publish part of the hour, and minutes that don't add up to the hourly counts.
 
 **Statistics over time.** Every run writes a statistics profile of each column and a report of every check to `data/processed/validation/melbourne/`. Each good run adds a summary line to a history file, and the next run's drift checks compare against it. A failed run doesn't join the history, so bad data never becomes the baseline. These files sit under `data/processed/`, so DVC versions them with the data they describe.
@@ -163,7 +189,7 @@ Without that key, `dvc_push` falls back to your `gcloud auth application-default
 - **Errors** (a broken schema, duplicate or negative counts, lost rows) fail the task without retrying. The team gets the failure email, and `dvc_push` doesn't run, so bad data never becomes a version.
 - **Warnings** (a new outlier, a quiet sensor, stale data) are logged as `WARN` lines and emailed to the team, and the run carries on. All per-minute checks are warnings.
 
-The warning email from the run of 26 October 2026 (`scheduled__2026-10-26`): sensor 37 reported only 87% of its daytime hours in the last week, and the per-minute archive's minutes didn't add up to the hourly counts for 28.9% of sensor-hours. The run carried on and versioned the data. The sender's address is blurred.
+The warning email from the run of 26 October 2026 (`scheduled__2026-10-26`): sensor 37 reported only 87% of its daytime hours in the last week, and the per-minute archive's minutes didn't add up to the hourly counts for 28.9% of sensor-hours. That second warning was the archive's partial first hour (it began at 00:55 on 25 October), which the check now leaves out. The run carried on and versioned the data. The sender's address is blurred.
 
 ![Validation warning email](docs/pipeline/alert_email_warnings.png)
 
@@ -194,8 +220,8 @@ Our data has no people in it. The counts are anonymous totals per sensor and hou
 We slice the hourly table 20 ways, including precinct, how busy the sensor is, nearby amenities, slope, time of day, holidays, rain, temperature, era (before, during and after COVID) and AFL match days. The slices are defined in `configs/bias.yaml`.
 
 1. **How much data each group has** (`bias_slices`). Each group's share is compared with a fair reference: hours in the study period for time and weather, walkable network for precincts, and footpath length for slope. Place is the most uneven: the city centre has five times its share of sensors, while Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less.
-2. **Where a model does worse** (`bias_errors`). The real flow model comes later, so a gradient-boosting baseline stands in for it. It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, night, public holidays and the COVID era. The thin outer precincts are not among them.
-3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about a third (WAPE 0.55 to 0.38) and fixed the quiet, low-amenity and Southbank sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights.
+2. **Where a model does worse** (`bias_errors`). The real flow model comes later, so a gradient-boosting baseline stands in for it. It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. Overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
+3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about 30% (WAPE 0.53 to 0.38) and fixed the quiet, low-amenity, Southbank and Kensington sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights.
 4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the run of 27 October that raised coverage from 63% to 91% of sensor-hours (quiet sensors from 45% to 96%). Carlton and Parkville stay under-covered, because three of their sensors never publish the first 5 minutes of each hour.
 
 [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md) has every number, the trade-offs we accepted, and the next steps.
@@ -248,6 +274,8 @@ A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minu
 .venv/bin/ruff check src tests && .venv/bin/ruff format src tests
 ```
 
+CI runs on every pull request (`.github/workflows/`): ruff and the unit tests on a clean checkout, where tests that need data skip themselves, and the DAG tests in a freshly built Airflow image when the DAGs, the image or the dependencies change.
+
 The tests use small made-up tables and cover ingestion, features, validation (including planted errors such as negative counts, duplicate rows and dropped columns), bias, DVC versioning and the DAG itself. The DAG tests (`tests/dags/`) need Airflow, so they're skipped in `.venv`. To run them in the Airflow image (no Postgres needed; the override gives the run a throwaway database):
 
 ```bash
@@ -279,6 +307,11 @@ Every task in the DAG is a module you can run yourself. Each source is configure
 
 # NYC (cross-city transfer test only)
 .venv/bin/python -m src.ingest.nyc                            # NYC DOT counts (~150 MB)
+.venv/bin/python -m src.ingest.dem --site nyc                 # USGS 3DEP 10 m, fetched in tiles
+
+# Stanford Drone Dataset (route-choice validation only; CC BY-NC-SA 3.0)
+.venv/bin/python -m src.ingest.stanford_drone                 # 60 annotation files from a Kaggle mirror, no video (~45 MB)
+.venv/bin/python -m src.ingest.stanford_drone --parse         # tracks and per-minute counts tables
 
 # OSM, land cover and weather for the other sites
 .venv/bin/python -m src.ingest.osm --site neu_boston          # likewise worldcover, weather; and --site nyc
@@ -295,14 +328,22 @@ Useful options:
 Then build the features and bias reports:
 
 ```bash
-.venv/bin/python -m src.features.osm --site melbourne     # OSM graph + segment features + sensor matching (~2.5 min)
+.venv/bin/python -m src.features.osm --site melbourne     # OSM graph, segment features, shade, sensor matching (~6 min)
 .venv/bin/python -m src.features.sensor_steepness         # footpath slope and elevation per sensor (~5 s)
 .venv/bin/python -m src.features.counts_hourly            # hourly table: counts + time + weather + calendars + slope (~30 s)
 .venv/bin/python -m src.pipeline.validate                 # checks on the hourly table (~45 s)
+.venv/bin/python -m src.features.training_frame           # rows, features and location splits for every model (~30 s)
 .venv/bin/python -m src.bias.representation               # how much data each bias slice has (~40 s)
 .venv/bin/python -m src.bias.slice_errors                 # baseline error per slice and mitigations (~16 min)
 .venv/bin/python -m src.features.minute_profiles          # within-hour profiles from the per-minute archive (seconds)
 .venv/bin/python -m src.bias.minute_coverage              # bias in the per-minute data, and pooled profiles (seconds)
+```
+
+Other sites (what `stoa_site_build` runs):
+
+```bash
+.venv/bin/python -m src.features.osm --site neu_boston                 # graph, features, shade (~25 s; NYC ~20 min)
+.venv/bin/python -m src.pipeline.validate_segments --site neu_boston   # checks on the site's segment table
 ```
 
 Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `data/processed/features/<site>/`:
@@ -332,18 +373,21 @@ The code lives in `src/` rather than `scripts/` because it's a Python package: m
 ```
 configs/data.yaml        data sources and site bounding boxes
 configs/calendars/       hand-maintained school terms and university teaching periods
-configs/features.yaml    feature settings (walk filter, POI categories, radii, sensor matching)
+configs/features.yaml    feature settings (walk filter, POI categories, radii, graph, shade, events, sensor matching)
+configs/events.yaml      sourced log of non-AFL events near the sensors
 configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 configs/validation.yaml  validation thresholds; configs/schemas/ holds the expected table schema
 configs/bias.yaml        bias slices: precincts, time and weather bins, eras, thresholds
 configs/analysis.yaml    parameters for src/analysis/
-dags/                    Airflow DAGs; Dockerfile and docker-compose.yaml run them
+dags/                    Airflow DAGs (stoa_pipeline, stoa_site_build, stoa_minute_feed, stoa_osm_watch);
+                         Dockerfile and docker-compose.yaml run them
 data/                    raw/, interim/, processed/ (git-ignored; versioned with DVC)
 dvc.yaml, dvc.lock       pipeline stages with their inputs, and the input versions behind the committed data
 logs/                    Airflow task logs (written by the containers, git-ignored)
 src/ingest/              downloads (common.py has the download and manifest helpers)
-src/features/            feature building (osm.py runs extract -> graph -> features -> sensors)
-src/pipeline/            validation and DVC versioning
+src/features/            feature building (osm.py runs extract -> graph -> features -> shade -> sensors;
+                         schema.py declares every column; training_frame.py builds what models see)
+src/pipeline/            validation (validate, validate_segments, minute_checks), DVC versioning, osm_watch
 src/bias/                bias slices, representation report, per-slice errors, per-minute coverage
 src/analysis/            one-off analyses (new_openings: before/after study feasibility)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
@@ -351,12 +395,13 @@ ops/hpc/                 the cluster job that polls the per-minute feed
 notebooks/               exploration only; the pipeline doesn't run them (below)
 docs/data_cards/         one card per dataset: schema, coverage, known issues
 docs/features/           feature tables: how they're built, column dictionaries, joins
-docs/pipeline/           validation checks and Gantt charts
+docs/pipeline/           validation checks, site builds, Gantt charts, the gaps review
 docs/bias/               bias analysis and figures
 docs/analysis/           write-ups of one-off analyses
 docs/data_licenses.md    license register; check it before adding a dataset
 docs/PROJECT_CONTEXT.md  the reasoning behind decisions, scope tiers, validation plan
 docs/scoping/            project scoping document (LaTeX source)
+.github/workflows/       CI: lint, unit tests, DAG tests
 requirements.txt         pinned versions generated from pyproject.toml
 CLAUDE.md                project rules and conventions
 ```
@@ -387,10 +432,12 @@ The notebooks' tables differ from the pipeline's in a few ways: UTC-only time, f
 | ESA WorldCover 2021 | Study area | CC BY 4.0 |
 | Weather (ERA5 via Open-Meteo) | 2009 → now, hourly | CC BY 4.0; the free API is non-commercial |
 | AFL games (Squiggle) and crowds (AFL Tables) | 2009 → now | No published licence (facts; credit both) |
+| Event log (`configs/events.yaml`): cricket, concerts, football, Halloween | 63 events, each with a source and an archived copy | Facts; each row cites its source |
 | Holidays and calendars | Holidays 2007–2027; Vic school terms 2009–2026; UniMelb 2015–2026; NEU 2026–27 | `holidays` (MIT); Vic Gov CC BY 4.0; facts |
 | NEU Boston: USGS 3DEP 1 m, Boston buildings, NAIP 2023, MassGIS 2025 orthos | Campus + ~400 m | Public domain; buildings PDDL |
 | NYC DOT pedestrian counts | 114 locations, 2007 → May 2026, period totals | NYC Open Data Law (no use restrictions). **Evaluation only** |
-| Stanford Drone Dataset (not pulled) | 8 scenes, 60 videos | CC BY-NC-SA 3.0: validation and academic demonstration only; no model fine-tuned on it is shipped or distributed |
+| NYC: USGS 3DEP 10 m, WorldCover | The area around the count locations | Public domain; CC BY 4.0 |
+| Stanford Drone Dataset (annotations only, from a Kaggle mirror) | 8 scenes, 60 videos, 10.6M track points | CC BY-NC-SA 3.0 (the original's licence): validation and academic demonstration only; no model fine-tuned on it is shipped or distributed, and no feature code reads it |
 
 Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/data_licenses.md`](docs/data_licenses.md).
 
@@ -407,9 +454,9 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 | Event scenario | Demonstration. Melbourne event days (centred on Marvel Stadium) are evaluated separately. |
 | Marathons (stretch) | Melbourne Marathon (validation) and Boston Marathon (demonstration) |
 
-**Done:** ingestion for all three sites; OSM, slope and hourly-table features for Melbourne; the Airflow pipeline with validation, alerts, bias slicing and DVC versioning.
+**Done:** ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
 
-**Planned:** the flow model (`src/models/flow/`), path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, and MLflow, CI/CD and Cloud Run.
+**Planned:** the flow model (`src/models/flow/`), path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, and MLflow, deployment and Cloud Run.
 
 ## Ground rules
 

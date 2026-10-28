@@ -15,9 +15,10 @@ group is flagged `under` when its kept share is below `low_ratio` times the over
 and it has at least `min_hours` sensor-hours, so a single quiet evening doesn't raise a flag.
 
 Mitigation: pooled profiles. Every hour whose minutes add up, however quiet, is summed with the
-others of its volume tier (quiet, medium, busy), day type and local hour, and the shares come
-from the sums. A pooled cell is usable once it holds `pooled_min_people` people, so quiet
-streets get a profile from many quiet hours together. `pooled_share` is the share of each
+others of its volume tier (quiet, medium, busy), day type and local hour, and the shares of each
+5-minute block come from the sums. Sensors with blocks the portal never publishes are left out,
+as in the per-sensor profiles. A pooled cell is usable once it holds `pooled_min_people` people,
+so quiet streets get a profile from many quiet hours together. `pooled_share` is the share of each
 group's sensor-hours that land in a usable pooled cell, next to `kept_share` for comparison.
 
 Reads minute_hour_status.parquet (minute_profiles), the archive, the hourly table for the
@@ -119,18 +120,19 @@ def coverage(
 def pooled_profiles(
     summary: pd.DataFrame, grid: pd.DataFrame | object, min_people: float
 ) -> pd.DataFrame:
-    """Within-hour shares from the summed minutes of every trusted hour in each pooled cell.
+    """Within-hour shares from the summed blocks of every trusted hour in each pooled cell.
 
-    `summary` has location_id and the POOL columns, one row per hour of `grid` (n x 60).
+    `summary` has location_id and the POOL columns, one row per hour of `grid` (n x 12, one
+    column per 5-minute block).
     """
-    cols = [*POOL, "minute", "share", "people", "n_hours", "n_sensors", "usable"]
+    cols = [*POOL, "block_start", "share", "people", "n_hours", "n_sensors", "usable"]
     if summary.empty:
         return pd.DataFrame(columns=cols)
     wide = pd.concat(
         [summary[POOL].reset_index(drop=True), pd.DataFrame(grid)], axis=1
     ).dropna(subset=POOL)
     g = wide.groupby(POOL)
-    sums = g[list(range(60))].sum()
+    sums = g[list(range(mp.BLOCKS))].sum()
     people = sums.sum(axis=1)
     cells = pd.DataFrame(
         {
@@ -144,8 +146,8 @@ def pooled_profiles(
     cells["usable"] = cells["people"] >= min_people
     shares = sums.div(people.where(people > 0), axis=0)
     long = shares.stack().rename("share").reset_index()
-    long = long.rename(columns={f"level_{len(POOL)}": "minute"})
-    long["minute"] = long["minute"].astype("int8")
+    long = long.rename(columns={f"level_{len(POOL)}": "block_start"})
+    long["block_start"] = (long["block_start"] * mp.BLOCK_MINUTES).astype("int8")
     long["share"] = long["share"].astype("float32")
     return long.merge(cells.reset_index(), on=POOL)[cols]
 

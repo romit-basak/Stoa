@@ -129,3 +129,8 @@ sensor_steepness:
 minute_profiles:
   sum_tolerance: 0.05     # an hour is kept when its minutes add up to the hourly count within 5% (or 2 people)
   min_hour_count: 30      # quieter hours give noisy shares and are left out
+  # A sensor whose rows fall on minutes :00, :05, ... at least this often reports 5-minute blocks.
+  five_minute_share: 0.99
+  # With at least this many rows, a 5-minute block with no row at all is one the portal never
+  # publishes for that sensor (eight sensors never publish minutes :00-:04), so it is left out.
+  gap_min_rows: 300

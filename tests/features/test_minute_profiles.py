@@ -4,7 +4,12 @@ import pytest
 
 from src.features import minute_profiles as mp
 
-CFG = {"sum_tolerance": 0.05, "min_hour_count": 30}
+CFG = {
+    "sum_tolerance": 0.05,
+    "min_hour_count": 30,
+    "five_minute_share": 0.99,
+    "gap_min_rows": 300,
+}
 TZ = "Australia/Melbourne"
 
 
@@ -42,11 +47,14 @@ def tail_hour(sensor: int) -> pd.DataFrame:
 
 
 def test_an_hour_is_kept_when_its_minutes_add_up_and_absent_minutes_are_zeros():
-    minutes = pd.concat([feed(1, "2026-10-25 12:00", {0: 40, 30: 20}), tail_hour(1)])
+    minutes = pd.concat(
+        [feed(1, "2026-10-25 12:00", {0: 30, 4: 10, 30: 20}), tail_hour(1)]
+    )
     hours, grid = mp.minute_grid(minutes, hourly([(1, "2026-10-25 12:00", 60)]), CFG)
     assert len(hours) == 1 and hours.loc[0, "count"] == 60
-    assert grid.shape == (1, 60)
-    assert grid[0, 0] == 40 and grid[0, 30] == 20 and grid[0].sum() == 60
+    # One column per 5-minute block: minutes 0 and 4 share the first block.
+    assert grid.shape == (1, 12)
+    assert grid[0, 0] == 40 and grid[0, 6] == 20 and grid[0].sum() == 60
 
 
 def test_hours_that_dont_add_up_or_are_quiet_or_newest_are_left_out():
@@ -118,9 +126,9 @@ def test_peak15_is_one_for_an_even_hour_and_four_for_one_busy_quarter():
             "count": [60, 60],
         }
     )
-    even = np.ones(60)
-    burst = np.zeros(60)
-    burst[:15] = 4
+    even = np.full(12, 5.0)
+    burst = np.zeros(12)
+    burst[:3] = 20
     out = mp.hour_summary(hours, np.vstack([even, burst]))
     assert out["peak15"].tolist() == pytest.approx([1.0, 4.0])
     assert out["day_type"].tolist() == ["weekend", "weekday"]
@@ -134,12 +142,12 @@ def test_profiles_average_the_shares_by_group():
             "hour_local": [12, 12],
         }
     )
-    a, b = np.zeros(60), np.zeros(60)
+    a, b = np.zeros(12), np.zeros(12)
     a[0], b[1] = 30, 60
     prof = mp.profiles(summary, np.vstack([a, b]))
-    assert len(prof) == 60 and (prof["n_hours"] == 2).all()
-    share = prof.set_index("minute")["share"]
-    assert share[0] == pytest.approx(0.5) and share[1] == pytest.approx(0.5)
+    assert len(prof) == 12 and (prof["n_hours"] == 2).all()
+    share = prof.set_index("block_start")["share"]
+    assert share[0] == pytest.approx(0.5) and share[5] == pytest.approx(0.5)
     assert share.sum() == pytest.approx(1.0)
 
 
@@ -177,6 +185,62 @@ def test_no_archive_files_give_empty_results_not_an_error(tmp_path):
     table = hourly([(1, "2026-10-25 12:00", 60)])
     assert mp.hour_status(mp.archive_minutes(minutes), table, CFG).empty
     hours, grid = mp.minute_grid(minutes, table, CFG)
-    assert hours.empty and grid.shape == (0, 60)
+    assert hours.empty and grid.shape == (0, 12)
+    assert mp.sensor_reporting(mp.archive_minutes(minutes), CFG).empty
     # The rest of what main() runs.
     assert mp.profiles(mp.hour_summary(hours, grid), grid).empty
+
+
+def busy_days(sensor: int, minutes_of_hour: list[int], days: int = 2) -> pd.DataFrame:
+    """Rows at the given minutes of every hour for `days` days, 3 people each."""
+    return pd.concat(
+        [
+            feed(sensor, str(t), {k: 3 for k in minutes_of_hour})
+            for t in pd.date_range("2026-10-25 00:00", periods=24 * days, freq="h")
+        ]
+    )
+
+
+def test_sensor_reporting_tells_5_minute_sensors_from_per_minute_ones():
+    every_minute = busy_days(1, list(range(60)), days=1)
+    every_5 = busy_days(2, list(range(0, 60, 5)), days=2)
+    s = mp.sensor_reporting(
+        mp.archive_minutes(pd.concat([every_minute, every_5])), CFG
+    ).set_index("location_id")
+    assert s.loc[1, "resolution"] == "1min" and s.loc[2, "resolution"] == "5min"
+    assert s["usable"].all() and (s["missing_blocks"] == "").all()
+
+
+def test_a_sensor_that_never_publishes_a_block_is_left_out_of_the_profiles():
+    # Sensor 1 reports every minute except :00-:04, like the eight sensors seen in October.
+    gappy = busy_days(1, list(range(5, 60)), days=1)
+    s = mp.sensor_reporting(mp.archive_minutes(gappy), CFG).set_index("location_id")
+    assert s.loc[1, "missing_blocks"] == "0-4" and not s.loc[1, "usable"]
+
+    # Its 12:00 hour adds up (the hourly table agrees with the minutes), but isn't kept.
+    table = hourly([(1, "2026-10-25 12:00", 55 * 3)])
+    status = mp.hour_status(mp.archive_minutes(gappy), table, CFG, s.reset_index())
+    row = status.set_index("location_id").loc[1]
+    assert row["adds_up"] and not row["usable_sensor"] and not row["kept"]
+    hours, _ = mp.minute_grid(gappy, table, CFG, which="adds_up")
+    assert hours.empty
+
+
+def test_few_rows_are_not_enough_to_call_a_block_missing():
+    quiet = feed(1, "2026-10-25 12:00", {30: 2})
+    s = mp.sensor_reporting(mp.archive_minutes(quiet), CFG)
+    assert bool(s.loc[0, "usable"]) and s.loc[0, "missing_blocks"] == ""
+
+
+def test_the_archives_partial_first_hour_is_left_out():
+    # The archive began at 00:55, so its 00:00 hour holds only the last 5 minutes.
+    minutes = pd.concat(
+        [
+            feed(1, "2026-10-25 00:55", {0: 40}),
+            feed(1, "2026-10-25 01:00", {0: 40}),
+            tail_hour(1),
+        ]
+    )
+    table = hourly([(1, "2026-10-25 00:00", 100), (1, "2026-10-25 01:00", 40)])
+    status = mp.hour_status(mp.archive_minutes(minutes), table, CFG)
+    assert status["ts_local"].tolist() == [pd.Timestamp("2026-10-25 01:00", tz=TZ)]

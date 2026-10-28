@@ -20,7 +20,7 @@ Outliers and stuck sensors are only warned about in the **new hours**: those aft
 
 ## The checks
 
-On the run of 26 October 2026 (`data_snapshot_2026_10_26`, the committed data version): 71 checks, 0 errors, 2 warnings. The four per-minute checks were added after the run of 22 October (67 checks, 0 errors, 3 warnings).
+On the run of 27 October 2026 (the committed data version; the DAG's steps run in order on the host): 72 checks, 0 errors, 1 warning (sensor 37 reported 88% of the last week's daytime hours). The fifth per-minute check, on sensors that never publish part of the hour, was added for that run. The run of 26 October had 71 checks, 0 errors and 2 warnings; the first four per-minute checks were added after the run of 22 October (67 checks, 0 errors, 3 warnings).
 
 | Kind | Severity | What it checks |
 |---|---|---|
@@ -40,10 +40,11 @@ On the run of 26 October 2026 (`data_snapshot_2026_10_26`, the committed data ve
 | **Drift: sensors, missing values, mean** | warning | No fewer sensors than last time; no column's missing share up by more than 5 points; mean hourly count within 20% of last time. |
 | **Per-minute archive: days** | warning | Every Melbourne day since the archive began has a file in `data/raw/melbourne_portal/minute_feed/`. With no archive at all (a clone without bucket access), one passing check says so. |
 | **Per-minute archive: late polls** | warning | Each finished day's last minute is 23:00 or later. The feed keeps a day only until a reset at about 02:00 the next morning, so an earlier end means no poll landed between midnight and the reset. |
-| **Per-minute archive: duplicates** | warning | At most 50 rows share a sensor and minute. The portal publishes a few (10 on 26 October); the archive keeps them as published. |
-| **Per-minute archive: hourly sums** | warning | For hours both tables cover, each sensor-hour's minutes add up to its hourly count within 5% (or 2 people), for at least 95% of sensor-hours. A match also shows the absent minutes were zeros. The hourly table's newest hour is left out: the portal publishes it unfinished. |
+| **Per-minute archive: duplicates** | warning | At most 50 times, a single poll has two rows for one sensor and minute (4 by 27 October). A minute whose value changed between polls is the portal revising it (37 by 27 October, about a dozen a day): the archive keeps both values, the profiles use the latest, and the check reports revisions without warning on them. |
+| **Per-minute archive: missing blocks** | warning | At most 8 sensors have a 5-minute block of the hour with no row in the whole archive. Eight per-minute sensors (14, 31, 42, 50, 52, 56, 180 and 187) never publish minutes :00–:04, which the check lists by name; it warns if more sensors start doing it. Sensors with fewer than 300 rows aren't judged, since a quiet sensor can miss a block by chance. |
+| **Per-minute archive: hourly sums** | warning | For full hours both tables cover, each sensor-hour's minutes (the latest poll's value of each) add up to its hourly count within 5% (or 2 people), for at least 95% of sensor-hours. A match also shows the absent minutes were zeros. Left out: the sensors with missing blocks, the archive's first hour if it began part-way through, and the hourly table's newest hour, which the portal publishes unfinished. On 27 October, 0.1% of 4,280 sensor-hours differed. |
 
-The per-minute checks are all warnings: the archive is extra evidence for within-hour profiles, not the training table. Their settings are under `minute_feed` in `configs/validation.yaml`; the code is `src/pipeline/minute_checks.py`.
+The per-minute checks are all warnings: the archive is extra evidence for within-hour profiles, not the training table. Their settings are under `minute_feed` in `configs/validation.yaml` (the 300-row rule is `gap_min_rows` under `minute_profiles` in `configs/features.yaml`, shared with the profiles); the code is `src/pipeline/minute_checks.py`.
 
 Each rule was checked against the real table before it was set: on clean data none of the error checks fail, and every rule that failed on a test copy with planted errors (negative counts, duplicate sensor-hours, a dropped column, a retyped column, an unknown `source`, a located sensor with no segment, 3% of rows removed) was reported as an error.
 
@@ -52,6 +53,8 @@ The full DAG on a fresh clone (table rebuilt from public sources, 6,176,935 rows
 - The newest hour was 6.3 days old (the local copy was a week old; a scheduled run pulls the latest counts first).
 
 On 26 October the hourly-sums check warned that 28.9% of 253 sensor-hours didn't add up. Every one of them is the archive's first hour, 00:00 on 25 October: the archive began at 00:55 that night, so it holds only that hour's last 5 minutes (minute sums a median 116 below the hourly count). The two full hours after it matched for every sensor. Only three hours overlap so far, because the hourly table trails the per-minute feed, so this one partial hour weighs heavily; its share falls as hours arrive. `minute_profiles` already leaves that hour out.
+
+That explained the 26 October warning but not all of the problem. With three days of overlap on 27 October, the check as it stood still warned: 6.1% of 4,742 sensor-hours differed. Without the partial first hour, 4.5% still did, nearly all of them at the eight sensors that never publish minutes :00–:04, which the night hours of the first run were too quiet to show: five missing minutes at 1 a.m. is a person or two, inside the tolerance. Two more problems showed up at the same time: 57 sensors report 5-minute blocks rather than minutes, and the duplicates check counted the portal's revisions, so it would have warned on every run from about 28 October (41 rows against a limit of 50 on the 27th). The data card has the details (`docs/data_cards/melbourne_minute_feed.md`, "What was found on 27 October 2026"). Since then the hourly-sums check leaves out those eight sensors and the partial first hour, the new missing-blocks check names the eight sensors, and the duplicates check counts only true duplicates.
 
 The outlier check also finds 9 older hours, at sensors 8, 10, 71 and 75. They are real crowds, not glitches: sensor 8 at 7 a.m. on four July Sundays (2019, 2022, 2025, 2026) is Run Melbourne, sensor 10 at midnight on 1 January 2025 is New Year's Eve, and sensor 71 is Christmas morning. That is why only new hours warn.
 

@@ -13,7 +13,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Course requirement | Where to look |
 |---|---|
 | Data acquisition | `src/ingest/`, sources listed in `configs/data.yaml`. See [Running steps by hand](#running-steps-by-hand) |
-| Preprocessing and features | `src/features/`. The hourly table is described in [docs/features/counts_hourly.md](docs/features/counts_hourly.md) |
+| Preprocessing and features | `src/features/`. Steps in [Preprocessing](#preprocessing); the hourly table is described in [docs/features/counts_hourly.md](docs/features/counts_hourly.md) |
 | Airflow DAG | `dags/stoa_pipeline.py`. See [The pipeline](#the-pipeline) |
 | Data versioning (DVC) | `data/*.dvc`, `dvc.yaml`, `dvc.lock`. See [Data versioning with DVC](#data-versioning-with-dvc) |
 | Schema and statistics | `src/pipeline/validate.py`, `configs/schemas/counts_hourly.yaml`. See [Validation, anomalies and alerts](#validation-anomalies-and-alerts) |
@@ -24,6 +24,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Tests | `tests/`, which mirrors `src/`. See [Tests and lint](#tests-and-lint) |
 | Reproducibility | [Quickstart](#quickstart) |
 | Folder structure | [Repository layout](#repository-layout) |
+| Code style (PEP 8) | `pyproject.toml` (ruff settings). See [Tests and lint](#tests-and-lint) |
 
 ## Quickstart
 
@@ -73,6 +74,10 @@ validate ─┬─► bias_slices ─────┬─► bias_errors ───
 
 `pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations, and `pull_static_layers` also feeds `bias_slices`.
 
+The same DAG in Airflow's graph view, after a run on 27 October 2026 (4 min 31 s). It ran on a fresh clone of main whose data had been fetched with `dvc pull`, so the street-network steps found their outputs up to date and the long `bias_errors` retrain wasn't due. The containers had no `.env` or `.secrets/`, so `pull_minute_feed` and `dvc_push` skipped (pink) as described in the [Quickstart](#quickstart); every other task succeeded.
+
+![stoa_pipeline graph view after a successful run](docs/pipeline/dag_graph_run.png)
+
 | Task | What it does |
 |---|---|
 | `pull_counts` | Hourly counts and sensor locations from the City of Melbourne portal |
@@ -104,6 +109,24 @@ What a daily run re-does:
 To move to a newer OSM extract, trigger the DAG with `refresh_osm` set to true (Trigger, then advanced options). That renumbers the graph's segments, so `osm_sensor_match` fails until any sensor overrides that point at old segments are fixed.
 
 NYC (a transfer test only) and NEU Boston (a demonstration) aren't in the DAG. They're fixed snapshots, downloaded once by hand (see [Running steps by hand](#running-steps-by-hand)) and versioned with DVC like the rest.
+
+## Preprocessing
+
+`join_all` (`src/features/counts_hourly.py`) turns the downloads into the hourly table, one row per sensor and hour. In order:
+
+1. **One source per hour.** The counts come from three copies of the City's table: the 2009–2022 archive, the live table (a rolling window of about two years) and an Internet Archive copy of the portal's export, which fills November 2022 to October 2024. Each hour is taken from exactly one of them, the Internet Archive copy only where neither of the others has it. The live table is merged into the rows already held, never overwritten, because the portal drops its oldest rows.
+2. **Cleaning.**
+   - In September 2010 the archive stamps every hour as midnight. The rows are still in hour order, so each sensor-day's 24 rows are renumbered 0–23 (12,240 rows).
+   - Any other duplicate sensor-hour is dropped and counted.
+   - The archive has rows for the hour the clocks skip each October; they're dropped (370 rows).
+   - The 18 retired sensors get their locations from the October 2022 copy of the sensor table.
+   - A run of 3 or more zero hours that reaches into the daytime is flagged `suspect_outage_zero`, since it's more likely a sensor fault than an empty street. Missing hours stay missing and are never filled with zeros.
+3. **Time.** Hour, weekday and every calendar column use Melbourne's local clock, daylight saving included, because people follow the clock. Weather is joined on UTC (Open-Meteo's files are fixed at UTC+10 all year), and sun elevation is computed for the middle of each hour.
+4. **Features.** Weather (ERA5), public holidays, school and university terms, footpath slope and elevation per sensor (`sensor_steepness`), and the street features of each sensor's OSM segment (`osm_sensor_match`).
+
+The street features come from the OSM steps (`src/features/osm.py`, run as `osm_extract`, `osm_graph`, `osm_segment_features` and `osm_sensor_match`). The walkable network is split into segments, and each segment gets network metrics at 400, 800 and 1,600 m, counts of amenities within 100–400 m along the network, the network distance to the nearest tram stop, bus stop and train station, and opening hours by hour of the week.
+
+Each step is its own function or module with its settings in `configs/features.yaml`, so a step can be changed or rerun on its own ([Running steps by hand](#running-steps-by-hand)). `validate` then checks the result. The column dictionaries and the reasoning behind each step are in [docs/features/counts_hourly.md](docs/features/counts_hourly.md) and [docs/features/osm_features.md](docs/features/osm_features.md).
 
 ## Data versioning with DVC
 
@@ -248,13 +271,17 @@ A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minu
 .venv/bin/ruff check src tests && .venv/bin/ruff format src tests
 ```
 
-The tests use small made-up tables and cover ingestion, features, validation (including planted errors such as negative counts, duplicate rows and dropped columns), bias, DVC versioning and the DAG itself. The DAG tests (`tests/dags/`) need Airflow, so they're skipped in `.venv`. To run them in the Airflow image (no Postgres needed; the override gives the run a throwaway database):
+The tests use small made-up tables and cover ingestion, features, validation (including planted errors such as negative counts, duplicate rows and dropped columns), bias, DVC versioning and the DAG itself. They also test edge cases: empty inputs (no per-minute archive yet, an empty poll), missing values and the cases where they're allowed, the daylight-saving changes, outage zeros, cut-short or empty downloads, and missing credentials.
+
+The DAG tests (`tests/dags/`) need Airflow, so they're skipped in `.venv`. To run them in the Airflow image (no Postgres needed; the override gives the run a throwaway database):
 
 ```bash
 docker compose run --rm --no-deps \
   -e AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////tmp/airflow.db airflow-init \
   bash -c "pip install -q pytest && cd /opt/stoa && python -m pytest tests/dags"
 ```
+
+The code follows PEP 8: ruff checks pycodestyle errors and warnings and PEP 8 naming on top of its defaults, and the formatter keeps the layout consistent (settings in `pyproject.toml`).
 
 ## Running steps by hand
 

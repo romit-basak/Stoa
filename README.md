@@ -86,7 +86,7 @@ validate ─┬─► bias_slices ─────┬─► bias_errors ───
 | `validate` | Checks the table's schema, values, anomalies and drift. Fails the run on errors |
 | `bias_slices` | How much data each group (place, time, weather, era...) has |
 | `bias_errors` | A baseline model's error for each group, with and without mitigations. Retrains weekly |
-| `minute_profiles` | How people spread across the minutes of each hour, from the per-minute archive |
+| `minute_profiles` | How people spread across each hour in 5-minute blocks, from the per-minute archive |
 | `minute_coverage` | Which groups the per-minute profiles under-cover, and the pooled profiles that fix it |
 | `dvc_push` | Saves the result as a new DVC version |
 
@@ -155,7 +155,7 @@ Without that key, `dvc_push` falls back to your `gcloud auth application-default
 - **Values:** one row per sensor-hour; no missing values except where documented; values in physical ranges; categories from an allowed list.
 - **Anomalies:** new per-sensor outliers, stuck sensors, gaps in the last week's daytime hours, stale data, and too many outage zeros.
 - **Drift:** row count, sensor count, missing values and mean count compared with the last good run.
-- **The per-minute archive:** missing days, late polls, duplicate rows, and minutes that don't add up to the hourly counts.
+- **The per-minute archive:** missing days, late polls, duplicate rows, sensors that never publish part of the hour, and minutes that don't add up to the hourly counts.
 
 **Statistics over time.** Every run writes a statistics profile of each column and a report of every check to `data/processed/validation/melbourne/`. Each good run adds a summary line to a history file, and the next run's drift checks compare against it. A failed run doesn't join the history, so bad data never becomes the baseline. These files sit under `data/processed/`, so DVC versions them with the data they describe.
 
@@ -196,7 +196,7 @@ We slice the hourly table 20 ways, including precinct, how busy the sensor is, n
 1. **How much data each group has** (`bias_slices`). Each group's share is compared with a fair reference: hours in the study period for time and weather, walkable network for precincts, and footpath length for slope. Place is the most uneven: the city centre has five times its share of sensors, while Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less.
 2. **Where a model does worse** (`bias_errors`). The real flow model comes later, so a gradient-boosting baseline stands in for it. It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, night, public holidays and the COVID era. The thin outer precincts are not among them.
 3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about a third (WAPE 0.55 to 0.38) and fixed the quiet, low-amenity and Southbank sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights.
-4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the first run that raised quiet sensors' coverage from 7% to 65%.
+4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the run of 27 October that raised coverage from 63% to 91% of sensor-hours (quiet sensors from 45% to 96%). Carlton and Parkville stay under-covered, because three of their sensors never publish the first 5 minutes of each hour.
 
 [docs/bias/bias_slicing.md](docs/bias/bias_slicing.md) has every number, the trade-offs we accepted, and the next steps.
 
@@ -310,7 +310,7 @@ Outputs go to `data/interim/osm/<site>/` (GeoParquet layers and the graph) and `
 - `sensor_osm_features.parquet` joins onto the counts on `location_id`. Columns and caveats: [docs/features/osm_features.md](docs/features/osm_features.md).
 - `sensor_steepness.parquet` gives each outdoor sensor its footpath slope and elevation, which the hourly table carries.
 
-**The per-minute counts.** The portal also publishes per-minute counts, but only for the current day: it keeps them from 00:55 Melbourne time until a reset at about 02:00 the next morning. So the `stoa_minute_feed` DAG polls every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. One poll has to land between Melbourne midnight and the reset (about 11 am Boston time, 10 am from 1 November), or the end of the previous day and the first hour of the new one are lost. A Slurm job on Northeastern's Explorer cluster runs the same poll around the clock ([ops/hpc/README.md](ops/hpc/README.md)). Writes are checked against the file's version, so several machines can poll without overwriting each other. More in [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
+**The per-minute counts.** The portal also publishes per-minute counts (every minute at 42 sensors, every 5 minutes at the other 57), but only for the current day: it keeps them from 00:55 Melbourne time until a reset at about 02:00 the next morning. So the `stoa_minute_feed` DAG polls every 15 minutes and merges each poll into one parquet file per Melbourne day in `gs://stoa-dvc-data/minute_feed/`. One poll has to land between Melbourne midnight and the reset (about 11 am Boston time, 10 am from 1 November), or the end of the previous day and the first hour of the new one are lost. A Slurm job on Northeastern's Explorer cluster runs the same poll around the clock ([ops/hpc/README.md](ops/hpc/README.md)). Writes are checked against the file's version, so several machines can poll without overwriting each other. More in [docs/data_cards/melbourne_minute_feed.md](docs/data_cards/melbourne_minute_feed.md).
 
 ## Repository layout
 

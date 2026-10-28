@@ -9,7 +9,9 @@ CFG = {
     "max_duplicates": 0,
     "sum_tolerance": 0.05,
     "max_mismatch_share": 0.05,
+    "max_gappy_sensors": 0,
 }
+REPORTING = {"five_minute_share": 0.99, "gap_min_rows": 300}
 NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)  # 2 pm on 27 Oct in Melbourne
 # The hourly table's newest hour is never compared (the portal publishes it unfinished), so
 # tables end with this later hour.
@@ -127,3 +129,54 @@ def test_the_hourly_tables_unfinished_newest_hour_is_not_compared():
     c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
     check = c["minute feed: minutes add up to the hourly counts"]
     assert check.passed and check.observed["compared"] == 0
+
+
+def test_a_minute_revised_by_a_later_poll_is_not_a_duplicate_and_its_latest_value_counts():
+    first = pd.Timestamp("2026-10-26 00:00", tz="UTC")
+    m = pd.concat(
+        [
+            minutes((1, "2026-10-26 10:00", 4)).assign(polled_at=first),
+            minutes((1, "2026-10-26 10:00", 26)).assign(
+                polled_at=first + pd.Timedelta(minutes=15)
+            ),
+            minutes((1, "2026-10-26 23:30", 1)).assign(
+                polled_at=first + pd.Timedelta(hours=14)
+            ),
+        ]
+    )
+    hourly = pd.DataFrame(
+        {
+            "location_id": [1, 1],
+            "ts_local": pd.to_datetime(["2026-10-26 10:00", LATER]).tz_localize(mc.TZ),
+            "pedestriancount": [26, 0],
+        }
+    )
+    c = by_name(mc.minute_checks(m, hourly, CFG, NOW))
+    dup = c["minute feed: one row per sensor and minute"]
+    assert dup.passed and dup.observed == {"duplicates": 0, "revised": 1}
+    sums = c["minute feed: minutes add up to the hourly counts"]
+    assert sums.passed and sums.observed["compared"] == 1
+
+
+def test_sensors_missing_a_block_warn_and_are_left_out_of_the_sums():
+    # Sensor 1 never publishes minutes :00-:04, so its hours run short of the hourly table.
+    hours = pd.date_range("2026-10-26 00:00", periods=8, freq="h")
+    rows = [
+        (1, str(h + pd.Timedelta(minutes=k)), 3) for h in hours for k in range(5, 60)
+    ]
+    rows += [(2, str(h), 10) for h in hours]
+    m = minutes(*rows)
+    hourly = pd.DataFrame(
+        {
+            "location_id": [1] * 8 + [2] * 8 + [2],
+            "ts_local": [*hours, *hours, pd.Timestamp(LATER)],
+            "pedestriancount": [60 * 3] * 8 + [10] * 8 + [0],
+        }
+    )
+    hourly["ts_local"] = pd.to_datetime(hourly["ts_local"]).dt.tz_localize(mc.TZ)
+    c = by_name(mc.minute_checks(m, hourly, CFG, NOW, REPORTING))
+    gap = c["minute feed: sensors publish every 5-minute block"]
+    assert not gap.passed and gap.observed["sensors"] == [1] and "(0-4)" in gap.detail
+    sums = c["minute feed: minutes add up to the hourly counts"]
+    # Only sensor 2's hours are compared (the newest of them is the archive's newest, left out).
+    assert sums.passed and sums.observed["compared"] == 7

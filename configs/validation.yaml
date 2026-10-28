@@ -108,6 +108,7 @@ drift:
 minute_feed:
   dir: data/raw/melbourne_portal/minute_feed
   min_last_local: "23:00"     # a finished day whose last minute is earlier was polled too early
-  max_duplicates: 50
+  max_duplicates: 50          # two rows for one minute in the same poll; later revisions don't count
+  max_gappy_sensors: 8        # sensors with a 5-minute block never published (8 since 27 Oct 2026)
   sum_tolerance: 0.05         # minutes and hourly count agree within 5% (or 2 people)
   max_mismatch_share: 0.05

@@ -13,7 +13,7 @@ jobs:
     env:
       DC: docker compose exec -T airflow-scheduler
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Machine
         run: |
@@ -92,6 +92,23 @@ jobs:
           # Job logs need a GitHub login to read; annotations don't, so the summary goes there too.
           python3 -c 'import sys; t=open("summary.txt").read().replace("%","%25").replace("\r","").replace("\n","%0A"); print("::notice title=Run summary::" + t)'
 
+      # The end of each failed task's log, as an annotation (readable without a GitHub login).
+      - name: Logs of failed tasks
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import glob, json
+          t = open("states.json").read() if glob.glob("states.json") else ""
+          rows = json.loads(t[t.index("["):]) if "[" in t else []
+          for r in rows:
+              if r.get("state") != "failed":
+                  continue
+              for path in sorted(glob.glob(f"logs/dag_id=stoa_pipeline/*/task_id={r['task_id']}/attempt=*.log")):
+                  tail = "".join(open(path, errors="replace").readlines()[-40:])
+                  tail = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                  print(f"::warning title={r['task_id']} {path.rsplit('/', 1)[-1]}::" + tail)
+          EOF
+
       # Airflow's log paths contain colons, which artifact uploads reject, so they go in a tarball.
       - name: Pack the task logs
         if: always()
@@ -99,7 +116,7 @@ jobs:
 
       - name: Keep the task logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: airflow-logs
           path: airflow-logs.tgz

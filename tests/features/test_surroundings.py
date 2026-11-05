@@ -1,5 +1,6 @@
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pytest
 import rasterio
 from rasterio.transform import from_origin
@@ -108,3 +109,36 @@ def test_ground_outside_the_dem_survey_is_missing_not_a_cliff(tmp_path):
     out = su.segment_slope(edges, path, 10.0, nodata=0)
     assert out.loc[0, "dem_slope_max_pct"] == pytest.approx(0.0, abs=1e-6)
     assert np.isnan(out.loc[1, "dem_slope_max_pct"])
+
+
+def clue_blocks(tmp_path):
+    path = tmp_path / "blocks.geojson"
+    gpd.GeoDataFrame(
+        {"block_id": [1, 2]},
+        geometry=[box(X0, Y0, X0 + 50, Y0 + 50), box(X0 + 50, Y0, X0 + 100, Y0 + 50)],
+        crs=CRS,
+    ).to_file(path, driver="GeoJSON")
+    return path
+
+
+def test_clue_blocks_without_the_jobs_table_give_no_jobs(tmp_path):
+    # A fresh clone can hold the blocks (fetched for the bias slices) but not the jobs table.
+    blocks = clue_blocks(tmp_path)
+    assert su.clue_jobs(blocks, tmp_path / "missing.parquet") is None
+    assert su.clue_jobs(None, None) is None
+
+
+def test_clue_jobs_are_the_latest_census_year_inside_each_block(tmp_path):
+    blocks = clue_blocks(tmp_path)
+    jobs = tmp_path / "jobs.parquet"
+    pd.DataFrame(
+        {
+            "census_year": [2021, 2022, 2022],
+            "block_id": [1, 1, 2],
+            "total_jobs_in_block": [5.0, 7.0, 3.0],
+        }
+    ).to_parquet(jobs)
+    b = su.clue_jobs(blocks, jobs)
+    assert sorted(b["total_jobs_in_block"]) == [3.0, 7.0]
+    assert (b.geometry.geom_type == "Point").all()
+    assert b.within(gpd.read_file(blocks).union_all()).all()

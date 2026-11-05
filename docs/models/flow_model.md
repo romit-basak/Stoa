@@ -30,22 +30,24 @@ Each fold's training rows are a 600,000-row sample of the other folds, drawn onc
 
 ## Metrics
 
-Named as in `experiment_tracking.md`. `*_cv` is the mean over the folds.
+All scoring is in `src/models/flow/evaluate.py`, named as in `experiment_tracking.md`. Every model is scored on the hours after each sensor's calibration window (`scored_mask`), so calibrated and uncalibrated scores cover the same hours. `*_fold<k>` is one location fold and `*_cv` is the mean over the folds (`cv_metrics`, which refuses holdout rows).
 
 | Metric | Meaning |
 |---|---|
-| `mae_log_cv` | MAE on log1p counts: the success criterion and the selection metric |
+| `log_mae_cv` | MAE on log1p counts: the success criterion and the selection metric |
 | `wape_cv`, `wape_fold0..4` | Sum of absolute errors over sum of counts, overall and per fold |
 | `mae_cv`, `rmse_cv` | On raw counts |
-| `wape_cv_cal`, `mae_log_cv_cal` | After scaling each sensor to its first 28 days of counts, scored on its later hours (per-site calibration) |
-| `coverage80_cv` | Share of counts inside the 10 to 90% interval (selected model only) |
-| `wape_holdout` | On the holdout precincts (selected model only) |
+| `bias_cv` | Predicted total over counted total, minus one |
+| `sensor_rank_corr_cv` | Spearman correlation of sensors' mean predicted and mean counted volume |
+| `log_mae_cv_cal`, `wape_cv_cal` | After scaling each sensor to its first 28 days of counts (`calibrated_cv_metrics`) |
+| `coverage80_cv`, `coverage80_fold<k>` | Share of counts inside the 10 to 90% interval (`cv_coverage`; selected model only) |
+| `log_mae_holdout`, `wape_holdout` | On the holdout precincts, once (selected model only) |
+| `log_mae_<part>`, `wape_<part>` | Event days, other days and each era of `configs/bias.yaml`, scored apart (`standard_parts`, `score_parts`; selected model only) |
 | `worst_slice_ratio` | Worst bias-slice WAPE over overall WAPE (selected model only) |
-| `wape_cv_event_days`, `wape_cv_other_days` | Event days reported apart (selected model only) |
 
 ## Hyperparameters
 
-Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by mae_log on two inner folds over the fold sensors, split by spatial group, on 200,000-row samples. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
+Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by log MAE on two inner folds over the fold sensors, split by spatial group, on 200,000-row samples. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
 
 | Family | Searched |
 |---|---|
@@ -58,7 +60,7 @@ The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_c
 ## Selection, after the bias check
 
 `src.models.flow.select`, per variant:
-1. Rank the candidates by `mae_log_cv`.
+1. Rank the candidates by `log_mae_cv`.
 2. Shortlist those within 3% of the best.
 3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions. The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
 4. The candidate with the smallest worst slice wins, so a slightly more accurate model can't win while failing one group.
@@ -70,14 +72,14 @@ Then, for the winner:
 - the calibration curve: one site-wide scale from k = 1, 3, 5, 10, 20 random sensors, applied to the rest, 20 draws each;
 - feature importance: mean |SHAP| (TreeExplainer) on a 2,000-row sample, with permutation importance as the fallback.
 
-The selected run (`stoa.role = selected`) holds the three models, `features.json`, and a `selection/` folder: `ranking.csv`, `slices.csv`, `bias_check.csv`, `holdout_precincts.csv`, `calibration_curve.csv` and `feature_importance.csv`, with charts of the model comparison, the calibration curve and the feature importance.
+The selected run (`stoa.role = selected`) holds the three models, `features.json`, and a `selection/` folder: `ranking.csv`, `slices.csv`, `bias_check.csv`, `holdout_precincts.csv`, `parts.csv`, `calibration_curve.csv` and `feature_importance.csv`, with charts of the model comparison, the calibration curve and the feature importance.
 
 If a slice is flagged, the mitigations to try are the ones `src/bias/slice_errors.py` already compares (sensor-equal and precinct-to-network weights, per-site calibration), with results in `docs/bias/bias_slicing.md`.
 
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
-- its `mae_log_cv` is at least 15% below Space Syntax's;
+- its `log_mae_cv` is at least 15% below Space Syntax's;
 - its `coverage80_cv` is between 0.75 and 0.85;
 - optionally, its worst slice is under `gates.max_worst_slice_ratio` (off by default: reported, not blocking).
 

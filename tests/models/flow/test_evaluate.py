@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from src.models.flow.evaluate import (
+    cv_metrics,
     log_mae,
     score,
     score_parts,
@@ -98,3 +99,30 @@ def test_an_empty_part_reports_zero_rows():
     out = score_parts(rows_for([1, 2]), y, y, parts)
     assert out["none"] == {"rows": 0, "sensors": 0}
     assert out["all"]["rows"] == 2
+
+
+def test_rmse_is_the_root_of_the_mean_squared_error():
+    s = score(rows_for([1, 2]), np.array([1.0, 1.0]), np.array([4.0, 5.0]))
+    assert s["rmse"] == pytest.approx(np.sqrt(12.5))
+
+
+def test_each_fold_is_scored_and_the_folds_are_averaged():
+    sensors = np.repeat([1, 2, 3, 4, 5, 6], 2)
+    y = np.repeat([10.0, 20, 30, 40, 50, 60], 2)
+    folds = np.repeat([0, 0, 0, 1, 1, 1], 2)
+    pred = np.where(folds == 1, 2 * y, y)  # fold 0 perfect, fold 1 twice too busy
+    m = cv_metrics(rows_for(sensors), y, pred, folds)
+    assert m["wape_fold0"] == 0 and m["wape_fold1"] == pytest.approx(1.0)
+    assert m["wape_cv"] == pytest.approx(0.5)
+    expected = {
+        f"{n}_{p}"
+        for n in ("wape", "log_mae", "mae", "rmse", "bias", "sensor_rank_corr")
+        for p in ("fold0", "fold1", "cv")
+    }
+    assert set(m) == expected
+
+
+def test_holdout_rows_are_refused_by_the_fold_scores():
+    y = np.array([5.0, 6.0])
+    with pytest.raises(ValueError):
+        cv_metrics(rows_for([1, 2]), y, y, np.array([0, -1]))

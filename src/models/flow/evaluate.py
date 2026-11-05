@@ -6,11 +6,15 @@ src/features/training_frame.py). The rules are fixed before any model is trained
 
 - Score only the hours after each sensor's calibration window (`scored_mask`), so calibrated
   and uncalibrated predictions are measured on the same hours.
-- `log_mae` decides between models. It weighs a quiet and a busy street alike: 0.5 means off
-  by about 1.6 times either way. WAPE, MAE in people, overall bias and how well the model
-  ranks sensors by volume are reported beside it (`score`).
+- Every model gets WAPE, log MAE, MAE in people, RMSE, overall bias and how well it ranks
+  sensors by volume (`score`). Which one decides, and by how much a model must win, is set
+  with the thresholds, which the team hasn't decided. Log MAE is the proposal: it weighs a
+  quiet and a busy street alike (0.5 means off by about 1.6 times either way).
+- Each location fold is scored on its own and the folds are averaged (`cv_metrics`), under
+  the names MLflow runs use (docs/models/experiment_tracking.md): `wape_fold0`, `wape_cv`.
 - Event days, other days and each era are also scored on their own (`standard_parts`).
-- The holdout precincts are scored once, for the final model only, with the same `score`.
+- The holdout precincts are scored once, for the final model only, with the same `score`;
+  `cv_metrics` refuses their rows.
 
 Per-slice errors for the bias report come from src.bias.slice_errors.slice_errors, given the
 same predictions.
@@ -34,7 +38,7 @@ def scored_mask(
 
 
 def log_mae(y: np.ndarray, pred: np.ndarray) -> float:
-    """Mean absolute error of log(1 + count): the score that decides between models."""
+    """Mean absolute error of log(1 + count): the proposed deciding score."""
     return float(np.abs(np.log1p(pred) - np.log1p(y)).mean())
 
 
@@ -64,6 +68,7 @@ def score(
         "log_mae": log_mae(y, pred),
         "wape": wape(y, pred),
         "mae": mae(y, pred),
+        "rmse": float(np.sqrt(np.mean((pred - y) ** 2))),
         "bias": bias_share(y, pred),
         "sensor_rank_corr": float(spearmanr(means["y"], means["p"]).statistic)
         if ranked
@@ -73,6 +78,34 @@ def score(
         "rows": len(y),
         "sensors": len(means),
     }
+
+
+CV_METRICS = ("wape", "log_mae", "mae", "rmse", "bias", "sensor_rank_corr")
+
+
+def cv_metrics(
+    rows: pd.DataFrame, y: np.ndarray, pred: np.ndarray, folds: np.ndarray
+) -> dict[str, float]:
+    """Each location fold's scores and their mean, named for MLflow: `wape_fold0`, `wape_cv`.
+
+    `folds` is each row's fold from splits.parquet. Holdout rows (fold -1) are refused: the
+    holdout precincts never take part in choosing a model (CLAUDE.md core rule 2).
+    """
+    y, pred, folds = (np.asarray(y, float), np.asarray(pred, float), np.asarray(folds))
+    if len(folds) != len(rows) or len(folds) == 0:
+        raise ValueError(f"{len(rows)} rows and {len(folds)} folds")
+    if (folds < 0).any():
+        raise ValueError("holdout rows (fold -1) can't be scored with the folds")
+    out: dict[str, float] = {}
+    per_fold: dict[str, list[float]] = {name: [] for name in CV_METRICS}
+    for k in np.unique(folds):
+        m = folds == k
+        s = score(rows[m], y[m], pred[m])
+        for name in CV_METRICS:
+            out[f"{name}_fold{int(k)}"] = s[name]
+            per_fold[name].append(s[name])
+    out.update({f"{name}_cv": float(np.nanmean(v)) for name, v in per_fold.items()})
+    return out
 
 
 def standard_parts(

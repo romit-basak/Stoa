@@ -103,8 +103,19 @@ jobs:
           for r in rows:
               if r.get("state") != "failed":
                   continue
-              for path in sorted(glob.glob(f"logs/dag_id=stoa_pipeline/*/task_id={r['task_id']}/attempt=*.log")):
-                  tail = "".join(open(path, errors="replace").readlines()[-40:])
+              paths = sorted(glob.glob(f"logs/dag_id=stoa_pipeline/*/task_id={r['task_id']}/attempt=*.log"))
+              for path in paths[-1:]:
+                  # Airflow writes JSON lines; keep just each line's message, so the end of the
+                  # traceback fits in an annotation (GitHub cuts them at about 4 KB).
+                  events = []
+                  for line in open(path, errors="replace"):
+                      try:
+                          rec = json.loads(line)
+                      except ValueError:
+                          rec = None
+                      msg = rec.get("event", "") if isinstance(rec, dict) else line.rstrip()
+                      events.append(str(msg)[:160])
+                  tail = "\n".join(events[-22:])
                   tail = tail.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
                   print(f"::warning title={r['task_id']} {path.rsplit('/', 1)[-1]}::" + tail)
           EOF

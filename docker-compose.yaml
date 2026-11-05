@@ -3,6 +3,7 @@
 #
 #   docker compose up -d --build    # first run builds the image (a few minutes)
 #   open http://localhost:8080      # no login needed locally
+#   open http://localhost:5001      # MLflow: experiment runs and the model registry
 #   docker compose down             # stop (add -v to also wipe the Airflow database)
 
 x-airflow-common: &airflow-common
@@ -28,6 +29,8 @@ x-airflow-common: &airflow-common
     # instead of skipping, which is meant for clones outside the team.
     STOA_REQUIRE_DVC_PUSH: ${STOA_REQUIRE_DVC_PUSH:-}
     AIRFLOW_CONN_SMTP_DEFAULT: '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, "login": "${STOA_SMTP_USER:-}", "password": "${STOA_SMTP_PASSWORD:-}", "extra": {"disable_ssl": true}}'
+    # Training tasks log their runs to the mlflow service below (src/models/tracking.py).
+    MLFLOW_TRACKING_URI: http://mlflow:5000
   volumes:
     - ./dags:/opt/airflow/dags
     - .:/opt/stoa # whole repo: tasks run src/ and write to data/ on the host
@@ -52,6 +55,34 @@ services:
       retries: 5
       start_period: 5s
     restart: always
+
+  # Experiment tracking and model registry (ops/mlflow). UI and API at http://localhost:5001
+  # (5000 is taken by macOS AirPlay). Runs are stored in a `mlflow` database on the Postgres
+  # above; model files go to STOA_MLFLOW_ARTIFACTS (default: the mlflow-artifacts volume).
+  mlflow:
+    build: ./ops/mlflow
+    image: stoa-mlflow:latest
+    environment:
+      MLFLOW_ADMIN_DSN: postgresql://airflow:airflow@postgres/airflow
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://airflow:airflow@postgres/mlflow
+      MLFLOW_ARTIFACTS_DESTINATION: ${STOA_MLFLOW_ARTIFACTS:-/mlflow/artifacts}
+      # Used only when STOA_MLFLOW_ARTIFACTS is a gs:// path.
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/stoa-airflow-dvc.json
+    volumes:
+      - mlflow-artifacts:/mlflow/artifacts
+      - ./.secrets:/secrets:ro
+    ports:
+      - "5001:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   airflow-init:
     <<: *airflow-common
@@ -110,3 +141,4 @@ services:
 
 volumes:
   postgres-db-volume:
+  mlflow-artifacts:

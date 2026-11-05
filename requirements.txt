@@ -19,12 +19,18 @@ altair==6.3.0
     # via great-expectations
 amqp==5.4.1
     # via kombu
+annotated-doc==0.0.5
+    # via fastapi
 annotated-types==0.8.0
     # via pydantic
 antlr4-python3-runtime==4.9.3
     # via
     #   hydra-core
     #   omegaconf
+anyio==4.16.0
+    # via
+    #   mlflow-skinny
+    #   starlette
 appdirs==1.4.4
     # via iterative-telemetry
 asyncssh==2.24.1
@@ -43,12 +49,15 @@ attrs==26.1.0
     #   sqltrie
 billiard==4.3.1
     # via celery
+cachetools==7.3.0
+    # via mlflow-skinny
 celery==5.6.3
     # via
     #   dvc
     #   dvc-task
 certifi==2026.10.19
     # via
+    #   databricks-sdk
     #   pyogrio
     #   pyproj
     #   rasterio
@@ -67,7 +76,9 @@ click==8.5.0
     #   click-repl
     #   cligj
     #   gto
+    #   mlflow-skinny
     #   rasterio
+    #   uvicorn
 click-didyoumean==0.3.1
     # via celery
 click-plugins==1.1.1.2
@@ -79,7 +90,9 @@ click-repl==0.4.1
 cligj==0.7.2
     # via rasterio
 cloudpickle==3.1.2
-    # via joblib
+    # via
+    #   joblib
+    #   mlflow-skinny
 colorama==0.4.6
     # via dvc
 configobj==5.0.9
@@ -93,6 +106,8 @@ cryptography==50.0.2
     #   great-expectations
 cycler==0.12.1
     # via matplotlib
+databricks-sdk==0.162.0
+    # via mlflow-skinny
 decorator==5.3.1
     # via gcsfs
 dictdiffer==0.10.0
@@ -134,6 +149,8 @@ entrypoints==0.4.2
     # via gto
 fairlearn==0.15.0
     # via stoa (pyproject.toml)
+fastapi==0.162.0
+    # via mlflow-skinny
 filelock==4.2.4
     # via iterative-telemetry
 flatten-dict==0.5.0
@@ -169,7 +186,9 @@ geopandas==1.2.0
 gitdb==4.0.12
     # via gitpython
 gitpython==3.2.1
-    # via scmrepo
+    # via
+    #   mlflow-skinny
+    #   scmrepo
 google-api-core==2.42.0
     # via
     #   google-cloud-core
@@ -178,6 +197,7 @@ google-api-core==2.42.0
 google-auth==2.62.0
     # via
     #   stoa (pyproject.toml)
+    #   databricks-sdk
     #   gcsfs
     #   google-api-core
     #   google-auth-oauthlib
@@ -220,14 +240,19 @@ grpcio-status==1.84.0
     # via google-api-core
 gto==1.10.1
     # via dvc
+h11==0.16.0
+    # via uvicorn
 holidays==0.105
     # via stoa (pyproject.toml)
 hydra-core==1.3.7
     # via dvc
 idna==3.20
     # via
+    #   anyio
     #   requests
     #   yarl
+importlib-metadata==9.1.0
+    # via mlflow-skinny
 iniconfig==2.3.1
     # via pytest
 iterative-telemetry==0.0.10
@@ -265,6 +290,8 @@ mdurl==0.1.2
     # via markdown-it-py
 mistune==3.4.0
     # via great-expectations
+mlflow-skinny==3.17.2
+    # via stoa (pyproject.toml)
 multidict==7.1.0
     # via
     #   aiohttp
@@ -294,6 +321,7 @@ numpy==2.4.6
     #   scikit-learn
     #   scipy
     #   shapely
+    #   skops
 oauthlib==4.0.0
     # via requests-oauthlib
 omegaconf==2.3.1
@@ -301,7 +329,18 @@ omegaconf==2.3.1
     #   dvc
     #   hydra-core
 opentelemetry-api==1.45.1
-    # via google-api-core
+    # via
+    #   fastapi
+    #   google-api-core
+    #   mlflow-skinny
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+opentelemetry-proto==1.45.2
+    # via mlflow-skinny
+opentelemetry-sdk==1.45.1
+    # via mlflow-skinny
+opentelemetry-semantic-conventions==0.66b1
+    # via opentelemetry-sdk
 orjson==3.13.0
     # via
     #   dvc-data
@@ -317,8 +356,10 @@ packaging==26.3
     #   hydra-core
     #   kombu
     #   matplotlib
+    #   mlflow-skinny
     #   pyogrio
     #   pytest
+    #   skops
 pandas==3.0.6
     # via
     #   stoa (pyproject.toml)
@@ -335,6 +376,8 @@ platformdirs==4.13.5
     # via dvc
 pluggy==1.7.0
     # via pytest
+prettytable==3.18.0
+    # via skops
 prompt-toolkit==3.0.53
     # via click-repl
 propcache==0.5.4
@@ -347,11 +390,14 @@ proto-plus==1.29.0
     #   google-cloud-storage-control
 protobuf==7.36.2
     # via
+    #   databricks-sdk
     #   google-api-core
     #   google-cloud-storage-control
     #   googleapis-common-protos
     #   grpc-google-iam-v1
     #   grpcio-status
+    #   mlflow-skinny
+    #   opentelemetry-proto
     #   proto-plus
 psutil==7.2.2
     # via
@@ -367,8 +413,10 @@ pycparser==3.11
     # via cffi
 pydantic==2.14.1
     # via
+    #   fastapi
     #   great-expectations
     #   gto
+    #   mlflow-skinny
     #   pydantic-settings
 pydantic-core==2.50.1
     # via pydantic
@@ -412,10 +460,13 @@ python-dateutil==2.9.0.post0
     #   matplotlib
     #   pandas
 python-dotenv==1.2.4
-    # via pydantic-settings
+    # via
+    #   mlflow-skinny
+    #   pydantic-settings
 pyyaml==6.0.3
     # via
     #   stoa (pyproject.toml)
+    #   mlflow-skinny
     #   omegaconf
 rasterio==1.4.4
     # via stoa (pyproject.toml)
@@ -426,6 +477,7 @@ referencing==0.37.0
 requests==2.34.2
     # via
     #   stoa (pyproject.toml)
+    #   databricks-sdk
     #   dvc
     #   dvc-studio-client
     #   gcsfs
@@ -433,6 +485,7 @@ requests==2.34.2
     #   google-cloud-storage
     #   great-expectations
     #   iterative-telemetry
+    #   mlflow-skinny
     #   osmium
     #   requests-oauthlib
 requests-oauthlib==2.0.0
@@ -456,12 +509,14 @@ scikit-learn==1.9.1
     # via
     #   stoa (pyproject.toml)
     #   fairlearn
+    #   skops
 scipy==1.17.1
     # via
     #   stoa (pyproject.toml)
     #   fairlearn
     #   great-expectations
     #   scikit-learn
+    #   skops
 scmrepo==3.6.2
     # via
     #   dvc
@@ -482,10 +537,18 @@ shtab==1.12.1
     # via dvc
 six==1.17.0
     # via python-dateutil
+skops==0.16.0
+    # via stoa (pyproject.toml)
 smmap==5.0.3
     # via gitdb
+sqlparse==0.6.1
+    # via mlflow-skinny
 sqltrie==0.11.3
     # via dvc-data
+starlette==1.10.0
+    # via
+    #   fastapi
+    #   mlflow-skinny
 tabulate==0.10.0
     # via
     #   dvc
@@ -506,19 +569,26 @@ typing-extensions==4.16.0
     #   aiohttp
     #   aiosignal
     #   altair
+    #   anyio
     #   asyncssh
     #   click-repl
     #   dulwich
+    #   fastapi
     #   great-expectations
     #   grpcio
+    #   mlflow-skinny
     #   opentelemetry-api
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
     #   pydantic
     #   pydantic-core
     #   pydantic-settings
     #   referencing
+    #   starlette
     #   typing-inspection
 typing-inspection==0.4.4
     # via
+    #   fastapi
     #   pydantic
     #   pydantic-settings
 tzdata==2026.5
@@ -529,8 +599,11 @@ tzlocal==5.4.4
     #   great-expectations
 urllib3==2.8.0
     # via
+    #   databricks-sdk
     #   dulwich
     #   requests
+uvicorn==0.54.0
+    # via mlflow-skinny
 vine==5.1.0
     # via
     #   amqp
@@ -541,8 +614,12 @@ voluptuous==0.16.0
     #   dvc
     #   dvc-studio-client
 wcwidth==0.9.3
-    # via prompt-toolkit
+    # via
+    #   prettytable
+    #   prompt-toolkit
 yarl==1.25.1
     # via aiohttp
 zc-lockfile==4.0
     # via dvc
+zipp==4.1.2
+    # via importlib-metadata

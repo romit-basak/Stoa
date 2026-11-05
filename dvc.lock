@@ -7,12 +7,12 @@ stages:
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/common.py
       hash: md5
-      md5: a29132df32f3cd77980b4f8d604ccb8b
-      size: 4786
+      md5: 3811a250bfbb1627124c8605b60edac1
+      size: 5234
     - path: src/ingest/melbourne_portal.py
       hash: md5
       md5: a28bf760d0bce3948a76c2bdfc6ee6fe
@@ -22,12 +22,12 @@ stages:
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/common.py
       hash: md5
-      md5: a29132df32f3cd77980b4f8d604ccb8b
-      size: 4786
+      md5: 3811a250bfbb1627124c8605b60edac1
+      size: 5234
     - path: src/ingest/weather.py
       hash: md5
       md5: 2868483ae9f09995bb0a77251359d405
@@ -37,36 +37,31 @@ stages:
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/calendars.py
       hash: md5
       md5: 2b94e43746fd6fbc7e5ad700e42fd878
       size: 2552
     - path: src/ingest/common.py
       hash: md5
-      md5: a29132df32f3cd77980b4f8d604ccb8b
-      size: 4786
+      md5: 3811a250bfbb1627124c8605b60edac1
+      size: 5234
   pull_static_layers:
     cmd: '{ test -f data/raw/melbourne_portal/footpath-steepness.geojson || python
       -m src.ingest.melbourne_portal --only footpath-steepness; } && { test -f data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
       || python -m src.ingest.melbourne_portal --only blocks-for-census-of-land-use-and-employment-clue;
       } && { test -f data/raw/dem/melbourne_ga_lidar_5m.tif || python -m src.ingest.dem
-      --site melbourne; } && { test -f data/raw/events/afl_attendance.csv || python
-      -m src.ingest.afl_attendance; }'
+      --site melbourne; }'
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
-    - path: src/ingest/afl_attendance.py
-      hash: md5
-      md5: e9dc1e386f63474f7e1ddd0e9192c8c8
-      size: 2579
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/dem.py
       hash: md5
-      md5: 659ff39ab6e74f49bf92430113b4b53b
-      size: 3075
+      md5: c3e4bf718e6b2f132ef8bd025b33fea3
+      size: 5310
     - path: src/ingest/melbourne_portal.py
       hash: md5
       md5: a28bf760d0bce3948a76c2bdfc6ee6fe
@@ -76,8 +71,8 @@ stages:
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/osm.py
       hash: md5
       md5: 621f5daa6438abe52b99c00502779c22
@@ -87,73 +82,73 @@ stages:
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/raw/osm/melbourne.osm.pbf
       hash: md5
       md5: 22b7b6bde426cfd50e6a93692c06ad86
       size: 88975238
     - path: src/features
       hash: md5
-      md5: e48c444a54b112819025c8a1f5fa0849.dir
-      size: 119335
-      nfiles: 12
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
   osm_graph:
     cmd: python -m src.features.osm --site melbourne --only graph --if-stale
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/interim/osm/melbourne/ways.parquet
       hash: md5
       md5: 7f98b09a999e550fab7ec4b6e95b3f38
       size: 5440155
     - path: src/features
       hash: md5
-      md5: e48c444a54b112819025c8a1f5fa0849.dir
-      size: 119335
-      nfiles: 12
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
   osm_segment_features:
     cmd: python -m src.features.osm --site melbourne --only features --if-stale
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/interim/osm/melbourne/graph
       hash: md5
-      md5: 245b7a3a5ce2a068037c5a627913d5f4.dir
-      size: 10586477
-      nfiles: 2
+      md5: cb3b2a63c897fe0473b73efb6d679f95.dir
+      size: 19540436
+      nfiles: 4
     - path: data/interim/osm/melbourne/pois.parquet
       hash: md5
       md5: 699d30bfb359a69ab676bbee86e29092
       size: 1255488
     - path: data/interim/osm/melbourne/transit.parquet
       hash: md5
-      md5: bb8a6e53a744afe2bc50539c33871927
-      size: 132929
+      md5: 7e4a8ba188315c8f2330ab052422b31a
+      size: 134403
     - path: src/features
       hash: md5
-      md5: e48c444a54b112819025c8a1f5fa0849.dir
-      size: 119335
-      nfiles: 12
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
   osm_sensor_match:
     cmd: python -m src.features.osm --site melbourne --only sensors --if-stale
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: configs/sensor_overrides.yaml
       hash: md5
       md5: 4cfc27e84fd1db23ae2a06f5d20cd624
       size: 260
     - path: data/processed/features/melbourne/osm_segment_features.parquet
       hash: md5
-      md5: 00d1e6dd5d3d04119933cead7cf79511
-      size: 47646722
+      md5: 453f913d104ae98f253b8a6c5bf5247e
+      size: 49886004
     - path: 
         data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
       hash: md5
@@ -165,16 +160,16 @@ stages:
       size: 36209
     - path: src/features
       hash: md5
-      md5: e48c444a54b112819025c8a1f5fa0849.dir
-      size: 119335
-      nfiles: 12
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
   sensor_steepness:
     cmd: python -m src.features.sensor_steepness
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/raw/dem/melbourne_ga_lidar_5m.tif
       hash: md5
       md5: 08d3fd4d28ab659d822f5cfc0e7cbe78
@@ -210,20 +205,20 @@ stages:
       nfiles: 3
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/processed/features/melbourne/sensor_osm_features.parquet
       hash: md5
-      md5: a81261e6b930f4659e672a051e65de63
-      size: 150451
+      md5: dab22f2cc1f6a9683d77214798006c56
+      size: 167904
     - path: data/processed/features/melbourne/sensor_steepness.parquet
       hash: md5
-      md5: 19a3774b5386c93ecf6b2f28816a7912
+      md5: 634c7a9e634ca785d660fc24549059de
       size: 12758
     - path: data/raw/calendars/melbourne_public_holidays.csv
       hash: md5
-      md5: 4cecb47a9b29f44f1cbdc4cb0f5f2203
-      size: 7408
+      md5: e8cca7d3deff982993c477adc8532ded
+      size: 7387
     - path: 
         data/raw/melbourne_portal/counts_per_hour_2009-05_to_2022-12-14.csv.zip
       hash: md5
@@ -232,52 +227,52 @@ stages:
     - path: 
         data/raw/melbourne_portal/pedestrian-counting-system-monthly-counts-per-hour.parquet
       hash: md5
-      md5: 2cbb4a6620725cffc9276d5cbbaf89c1
-      size: 15409636
+      md5: 7a3814374c08510abf9cbf9807d60479
+      size: 15364701
     - path: data/raw/weather
       hash: md5
-      md5: 35635cb77faa33d24733130c08b3cf5c.dir
-      size: 27228778
+      md5: 35c4ecafb33f6ff820389ede7a6bcfa1.dir
+      size: 27226066
       nfiles: 57
     - path: src/features/common.py
       hash: md5
-      md5: 199df545c8998ef11f1b242812623a43
-      size: 3221
+      md5: 323e730f42841824bfdfdbf9d3146280
+      size: 4816
     - path: src/features/counts_hourly.py
       hash: md5
-      md5: 727fa96a7a6e7ca72d7e9a0ded906216
-      size: 19770
+      md5: b03554b0346f6954a2a629c91f714887
+      size: 18935
   bias_slices:
     cmd: python -m src.bias.representation
     deps:
     - path: configs/bias.yaml
       hash: md5
-      md5: ece404f5be9654aa81a1fcbc909ab8bb
-      size: 4841
+      md5: fa5e04b98d6d9790a09ec0f8606ce60b
+      size: 5014
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/interim/osm/melbourne/graph/edges.parquet
       hash: md5
-      md5: 4d6b46a28be28a2f0e0ae1e04e695273
-      size: 8687470
+      md5: 36cc18a50ec3456ee73c18eb5b916050
+      size: 8781802
     - path: data/processed/features/melbourne/counts_hourly.parquet
       hash: md5
-      md5: 571298237cbbe0b8572a00792a7e91dc
-      size: 34018362
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
     - path: data/processed/features/melbourne/sensor_osm_features.parquet
       hash: md5
-      md5: a81261e6b930f4659e672a051e65de63
-      size: 150451
+      md5: dab22f2cc1f6a9683d77214798006c56
+      size: 167904
     - path: data/processed/features/melbourne/sensor_steepness.parquet
       hash: md5
-      md5: 19a3774b5386c93ecf6b2f28816a7912
+      md5: 634c7a9e634ca785d660fc24549059de
       size: 12758
     - path: data/raw/calendars/melbourne_public_holidays.csv
       hash: md5
-      md5: 4cecb47a9b29f44f1cbdc4cb0f5f2203
-      size: 7408
+      md5: e8cca7d3deff982993c477adc8532ded
+      size: 7387
     - path: data/raw/events/afl_attendance.csv
       hash: md5
       md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
@@ -302,64 +297,64 @@ stages:
       size: 36209
     - path: data/raw/weather
       hash: md5
-      md5: 35635cb77faa33d24733130c08b3cf5c.dir
-      size: 27228778
+      md5: 35c4ecafb33f6ff820389ede7a6bcfa1.dir
+      size: 27226066
       nfiles: 57
     - path: src/bias
       hash: md5
-      md5: e5249da8ec3249eeb3e01407ce1a8897.dir
-      size: 51036
+      md5: 1a061762b44784d5d2006309edd007f6.dir
+      size: 48641
       nfiles: 5
   validate:
     cmd: python -m src.pipeline.validate
     deps:
     - path: configs/schemas/counts_hourly.yaml
       hash: md5
-      md5: 4cef544ed47b81fef8ab6cfdb1b7b79b
-      size: 1157
+      md5: 028315df34f78720e8b8e6d64f34eba5
+      size: 1236
     - path: configs/validation.yaml
       hash: md5
-      md5: 6f3639f33d7b71325479fb4f3fc591c0
-      size: 4832
+      md5: 022d19511a871695e15052c7dfa4d547
+      size: 5389
     - path: data/processed/features/melbourne/counts_hourly.parquet
       hash: md5
-      md5: 571298237cbbe0b8572a00792a7e91dc
-      size: 34018362
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
     - path: src/pipeline/validate.py
       hash: md5
-      md5: f2ac840b2d6f48555d09297d98a8b0f3
-      size: 29512
+      md5: 68599e8cb1d6f01fbe8802e5d111c1a2
+      size: 31839
   bias_errors:
     cmd: python -m src.bias.slice_errors --if-older-than 7
     deps:
     - path: configs/bias.yaml
       hash: md5
-      md5: ece404f5be9654aa81a1fcbc909ab8bb
-      size: 4841
+      md5: fa5e04b98d6d9790a09ec0f8606ce60b
+      size: 5014
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/interim/osm/melbourne/graph/edges.parquet
       hash: md5
-      md5: 4d6b46a28be28a2f0e0ae1e04e695273
-      size: 8687470
+      md5: 36cc18a50ec3456ee73c18eb5b916050
+      size: 8781802
     - path: data/processed/features/melbourne/counts_hourly.parquet
       hash: md5
-      md5: 571298237cbbe0b8572a00792a7e91dc
-      size: 34018362
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
     - path: data/processed/features/melbourne/sensor_osm_features.parquet
       hash: md5
-      md5: a81261e6b930f4659e672a051e65de63
-      size: 150451
+      md5: dab22f2cc1f6a9683d77214798006c56
+      size: 167904
     - path: data/processed/features/melbourne/sensor_steepness.parquet
       hash: md5
-      md5: 19a3774b5386c93ecf6b2f28816a7912
+      md5: 634c7a9e634ca785d660fc24549059de
       size: 12758
     - path: data/raw/calendars/melbourne_public_holidays.csv
       hash: md5
-      md5: 4cecb47a9b29f44f1cbdc4cb0f5f2203
-      size: 7408
+      md5: e8cca7d3deff982993c477adc8532ded
+      size: 7387
     - path: data/raw/events/afl_attendance.csv
       hash: md5
       md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
@@ -384,83 +379,481 @@ stages:
       size: 36209
     - path: data/raw/weather
       hash: md5
-      md5: 35635cb77faa33d24733130c08b3cf5c.dir
-      size: 27228778
+      md5: 35c4ecafb33f6ff820389ede7a6bcfa1.dir
+      size: 27226066
       nfiles: 57
     - path: src/bias
       hash: md5
-      md5: e5249da8ec3249eeb3e01407ce1a8897.dir
-      size: 51036
+      md5: 1a061762b44784d5d2006309edd007f6.dir
+      size: 48641
       nfiles: 5
   pull_minute_feed:
     cmd: python -m src.ingest.minute_feed --sync
     deps:
     - path: configs/data.yaml
       hash: md5
-      md5: b06d11159c9f4e169eb58970e68b9d7b
-      size: 11287
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
     - path: src/ingest/minute_feed.py
       hash: md5
       md5: a7d7ddd8284840da0be9c0bdc345f3fb
       size: 12416
-  minute_profiles:
-    cmd: python -m src.features.minute_profiles
+  pull_events:
+    cmd: python -m src.ingest.afl_attendance && python -m src.ingest.events
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/afl_attendance.py
+      hash: md5
+      md5: 6884b44cff2155f1b6102e5e666d8467
+      size: 3264
+    - path: src/ingest/events.py
+      hash: md5
+      md5: b66f28227ff5e941774128b7a55f653b
+      size: 1332
+  osm_shade:
+    cmd: python -m src.features.osm --site melbourne --only shade --if-stale
     deps:
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/interim/osm/melbourne/buildings.parquet
+      hash: md5
+      md5: d907df434504a66a250f3aa6e1e44a79
+      size: 8752277
+    - path: data/interim/osm/melbourne/graph/edges.parquet
+      hash: md5
+      md5: 36cc18a50ec3456ee73c18eb5b916050
+      size: 8781802
+    - path: data/raw/melbourne_portal/2023-building-footprints.geojson
+      hash: md5
+      md5: 5ff1ccc77b1d4266482c0a9da40f21f2
+      size: 35327263
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  training_frame:
+    cmd: python -m src.features.training_frame
+    deps:
+    - path: configs/bias.yaml
+      hash: md5
+      md5: fa5e04b98d6d9790a09ec0f8606ce60b
+      size: 5014
+    - path: configs/events.yaml
+      hash: md5
+      md5: 7348233a7172845d329f80ae1c4ee6fd
+      size: 13847
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/interim/osm/melbourne/extract_meta.json
+      hash: md5
+      md5: 28902a9a0270b184abd3409dcba5ff85
+      size: 438
     - path: data/processed/features/melbourne/counts_hourly.parquet
       hash: md5
-      md5: 571298237cbbe0b8572a00792a7e91dc
-      size: 34018362
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
+    - path: data/processed/features/melbourne/sensor_osm_features.parquet
+      hash: md5
+      md5: dab22f2cc1f6a9683d77214798006c56
+      size: 167904
+    - path: data/raw/events/afl_attendance.csv
+      hash: md5
+      md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
+      size: 179220
+    - path: 
+        data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      hash: md5
+      md5: aee474f7a7946aafa95e692ad49fae1f
+      size: 51576
+    - path: data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      hash: md5
+      md5: ee1a296afd1f05a8c7d2ea0d7bea901a
+      size: 36209
+    - path: src/features/schema.py
+      hash: md5
+      md5: f7574d6f9331151b46a26fc13f04cfcb
+      size: 14367
+    - path: src/features/training_frame.py
+      hash: md5
+      md5: 84f2a2f0ee6df457b9d32399a0800aa5
+      size: 21874
+  minute_profiles:
+    cmd: python -m src.features.minute_profiles
+    deps:
+    - path: configs/events.yaml
+      hash: md5
+      md5: 7348233a7172845d329f80ae1c4ee6fd
+      size: 13847
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/processed/features/melbourne/counts_hourly.parquet
+      hash: md5
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
+    - path: data/processed/features/melbourne/osm_segment_venue_dist.parquet
+      hash: md5
+      md5: 9dd62da2cc973178f0b87ddef78df2c8
+      size: 2547891
+    - path: data/processed/features/melbourne/sensor_osm_features.parquet
+      hash: md5
+      md5: dab22f2cc1f6a9683d77214798006c56
+      size: 167904
     - path: data/raw/melbourne_portal/minute_feed
       hash: md5
-      md5: d5b5e47278d8c001e0662de1702cdbcc.dir
-      size: 669163
+      md5: 49a865ea22c63cdece2fe23daa355fb3.dir
+      size: 686712
       nfiles: 5
     - path: src/features/minute_profiles.py
       hash: md5
-      md5: 5118870ee4169a1ca6f9f6d0af054481
-      size: 14247
+      md5: 974c127e70425c3801f8a2de9975cbbd
+      size: 15373
+    - path: src/features/training_frame.py
+      hash: md5
+      md5: 84f2a2f0ee6df457b9d32399a0800aa5
+      size: 21874
+  poll_minute_feed:
+    cmd: python -m src.ingest.minute_feed --bucket
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/minute_feed.py
+      hash: md5
+      md5: a7d7ddd8284840da0be9c0bdc345f3fb
+      size: 12416
+  site_pull_osm@neu_boston:
+    cmd: python -m src.ingest.osm --site neu_boston
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/osm.py
+      hash: md5
+      md5: 621f5daa6438abe52b99c00502779c22
+      size: 1837
+  site_pull_osm@nyc:
+    cmd: python -m src.ingest.osm --site nyc
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/osm.py
+      hash: md5
+      md5: 621f5daa6438abe52b99c00502779c22
+      size: 1837
+  site_pull_dem@neu_boston:
+    cmd: python -m src.ingest.dem --site neu_boston
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/dem.py
+      hash: md5
+      md5: c3e4bf718e6b2f132ef8bd025b33fea3
+      size: 5310
+  site_pull_dem@nyc:
+    cmd: python -m src.ingest.dem --site nyc
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/dem.py
+      hash: md5
+      md5: c3e4bf718e6b2f132ef8bd025b33fea3
+      size: 5310
+  site_pull_worldcover@neu_boston:
+    cmd: python -m src.ingest.worldcover --site neu_boston
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/worldcover.py
+      hash: md5
+      md5: cdb48b1268d2d4fc8050d1a849afaedf
+      size: 1609
+  site_pull_worldcover@nyc:
+    cmd: python -m src.ingest.worldcover --site nyc
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/worldcover.py
+      hash: md5
+      md5: cdb48b1268d2d4fc8050d1a849afaedf
+      size: 1609
+  site_pull_weather@neu_boston:
+    cmd: python -m src.ingest.weather --site neu_boston
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/weather.py
+      hash: md5
+      md5: 2868483ae9f09995bb0a77251359d405
+      size: 2308
+  site_pull_weather@nyc:
+    cmd: python -m src.ingest.weather --site nyc
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/weather.py
+      hash: md5
+      md5: 2868483ae9f09995bb0a77251359d405
+      size: 2308
+  site_pull_calendars:
+    cmd: python -m src.ingest.calendars
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest/calendars.py
+      hash: md5
+      md5: 2b94e43746fd6fbc7e5ad700e42fd878
+      size: 2552
+  site_pull_extras@neu_boston:
+    cmd: python -m src.pipeline.site_extras --site neu_boston
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest
+      hash: md5
+      md5: 35d5a4ee022c5f4237be2a064c5fcb7a.dir
+      size: 58616
+      nfiles: 15
+    - path: src/pipeline/site_extras.py
+      hash: md5
+      md5: 2bd8c03bd9f309a6570a3d64af22bfa8
+      size: 1220
+  site_pull_extras@nyc:
+    cmd: python -m src.pipeline.site_extras --site nyc
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: src/ingest
+      hash: md5
+      md5: 35d5a4ee022c5f4237be2a064c5fcb7a.dir
+      size: 58616
+      nfiles: 15
+    - path: src/pipeline/site_extras.py
+      hash: md5
+      md5: 2bd8c03bd9f309a6570a3d64af22bfa8
+      size: 1220
+  site_osm_extract@neu_boston:
+    cmd: python -m src.features.osm --site neu_boston --only extract --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/raw/osm/neu_boston.osm.pbf
+      hash: md5
+      md5: 2a32bce9b82d518a42d47711843a3b4c
+      size: 84756053
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_extract@nyc:
+    cmd: python -m src.features.osm --site nyc --only extract --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/raw/osm/nyc.osm.pbf
+      hash: md5
+      md5: 906aba89c7e4b6c77ad7ba1a25409b9f
+      size: 153141130
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_graph@neu_boston:
+    cmd: python -m src.features.osm --site neu_boston --only graph --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_graph@nyc:
+    cmd: python -m src.features.osm --site nyc --only graph --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_segment_features@neu_boston:
+    cmd: python -m src.features.osm --site neu_boston --only features --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_segment_features@nyc:
+    cmd: python -m src.features.osm --site nyc --only features --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_validate_segments@neu_boston:
+    cmd: python -m src.pipeline.validate_segments --site neu_boston
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features/schema.py
+      hash: md5
+      md5: f7574d6f9331151b46a26fc13f04cfcb
+      size: 14367
+    - path: src/pipeline/validate_segments.py
+      hash: md5
+      md5: 10fd999d39e550bfabb7be48805a7985
+      size: 5923
+  site_validate_segments@nyc:
+    cmd: python -m src.pipeline.validate_segments --site nyc
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features/schema.py
+      hash: md5
+      md5: f7574d6f9331151b46a26fc13f04cfcb
+      size: 14367
+    - path: src/pipeline/validate_segments.py
+      hash: md5
+      md5: 10fd999d39e550bfabb7be48805a7985
+      size: 5923
+  site_osm_shade@neu_boston:
+    cmd: python -m src.features.osm --site neu_boston --only shade --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  site_osm_shade@nyc:
+    cmd: python -m src.features.osm --site nyc --only shade --if-stale
+    deps:
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: src/features
+      hash: md5
+      md5: cda976e4ea709081241f1e2ed8630646.dir
+      size: 217393
+      nfiles: 18
+  watch_osm_changes:
+    cmd: python -m src.pipeline.osm_watch
+    deps:
+    - path: configs/data.yaml
+      hash: md5
+      md5: 4cecf479375c8e2199c2e2d9b607aa28
+      size: 12265
+    - path: configs/features.yaml
+      hash: md5
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
+    - path: data/raw/osm/melbourne.osm.pbf
+      hash: md5
+      md5: 22b7b6bde426cfd50e6a93692c06ad86
+      size: 88975238
+    - path: src/pipeline/osm_watch.py
+      hash: md5
+      md5: e82ddd5c1bde3d239a0f9a532c66e158
+      size: 6118
   minute_coverage:
     cmd: python -m src.bias.minute_coverage
     deps:
     - path: configs/bias.yaml
       hash: md5
-      md5: ece404f5be9654aa81a1fcbc909ab8bb
-      size: 4841
+      md5: fa5e04b98d6d9790a09ec0f8606ce60b
+      size: 5014
     - path: configs/features.yaml
       hash: md5
-      md5: 77071817f5fd07a0af750feec8bd6b9d
-      size: 6892
+      md5: a3a4d069b4ae010dfbacf24e288877af
+      size: 12268
     - path: data/processed/bias/melbourne/sensor_slices.csv
       hash: md5
-      md5: 18a17873d8870421d93aa8eb147f9ea8
-      size: 14176
+      md5: 55fdcda923e8d8716181829ad33b38c8
+      size: 14181
     - path: data/processed/features/melbourne/counts_hourly.parquet
       hash: md5
-      md5: 571298237cbbe0b8572a00792a7e91dc
-      size: 34018362
+      md5: 2871f56e9f4bb3ebdac5392a276d5263
+      size: 34780110
     - path: data/processed/features/melbourne/minute_hour_status.parquet
       hash: md5
-      md5: 063717b07afb185c1ef41e3985aa8025
-      size: 28073
+      md5: c0d6fffcb7e36564fa92bb86ac31c864
+      size: 6684
     - path: data/raw/events/afl_attendance.csv
       hash: md5
       md5: 73ecaa3c0d3c229ab7afaedc72f4b9c8
       size: 179220
     - path: data/raw/melbourne_portal/minute_feed
       hash: md5
-      md5: d5b5e47278d8c001e0662de1702cdbcc.dir
-      size: 669163
+      md5: 49a865ea22c63cdece2fe23daa355fb3.dir
+      size: 686712
       nfiles: 5
     - path: src/bias
       hash: md5
-      md5: e5249da8ec3249eeb3e01407ce1a8897.dir
-      size: 51036
+      md5: 1a061762b44784d5d2006309edd007f6.dir
+      size: 48641
       nfiles: 5
     - path: src/features/minute_profiles.py
       hash: md5
-      md5: 5118870ee4169a1ca6f9f6d0af054481
-      size: 14247
+      md5: 974c127e70425c3801f8a2de9975cbbd
+      size: 15373

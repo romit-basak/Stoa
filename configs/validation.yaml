@@ -6,11 +6,13 @@
 #             the report; the run carries on.
 # Paths are relative to the repo root.
 
-table: data/processed/features/melbourne/counts_hourly.parquet
-# Generated from the data with `python -m src.pipeline.validate --write-schema`; review the diff
+site: melbourne
+# {site} in the two paths below is replaced by the site above.
+table: data/processed/features/{site}/counts_hourly.parquet
+# Generated from src/features/schema.py with `python -m src.features.schema --write`; review the diff
 # before committing it.
 schema: configs/schemas/counts_hourly.yaml
-reports_dir: data/processed/validation/melbourne
+reports_dir: data/processed/validation/{site}
 
 keys: [location_id, ts_utc]
 
@@ -31,6 +33,7 @@ ranges:
   weekday: [0, 6]
   hour_of_week: [0, 167]
   sun_elevation_deg: [-90, 90]
+  sun_azimuth_deg: [0, 360]
   wx_temperature_2m: [-10, 50]
   wx_apparent_temperature: [-20, 55]
   wx_relative_humidity_2m: [0, 100]
@@ -94,6 +97,12 @@ drift:
   max_null_increase_pp: 5
   # Change in the mean hourly count (warning).
   max_mean_count_change: 0.2
+  # Each feature's distribution in the rows a model may use, against the training reference
+  # (src/features/training_frame.py): population stability index above this is a warning.
+  # Point training_reference at the frame_spec.json a deployed model was trained from; by
+  # default it is the latest frame, so the check catches a change in how features are built.
+  psi_warn: 0.25
+  training_reference: data/processed/training/{site}/frame_spec.json
 
 # The per-minute counts archive (src/pipeline/minute_checks.py); every check is a warning.
 minute_feed:

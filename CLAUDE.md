@@ -56,7 +56,7 @@ Public data ──> ingest ──> validate ──> features ──> models ─�
 
 Agree and freeze these early; build against fake data until real modules exist.
 - **Graph:** nodes = intersections and entrances; edges = path segments with stable IDs. OSM graph built (GeoParquet, `segment_id` = `<way_id>-<k>`, stable within one pinned extract; see `docs/features/osm_features.md`). CoM-network graph and the shared format **TBD**.
-- **Feature table:** one row per (segment_id, hour). Schema in `src/features/schema.py` **TBD**.
+- **Feature table:** one row per (segment_id, hour) for prediction; for training, one row per (sensor, hour) built by `src/features/training_frame.py`. Every column's type, role (key, label, feature, aux, meta) and portability is declared in `src/features/schema.py`; the validation schema is generated from it.
 - **Predictions:** (segment_id, hour, predicted_count, lower, upper, model_version).
 - **Event spec:** structured output of the intake agent. Schema in `src/agents/event_spec.py` **TBD**. Every field carries a `source` attribute.
 - **Adjustment spec:** a parsed local-knowledge statement: segments, conditions, direction, user-chosen strength level, source text. Schema **TBD**.
@@ -146,6 +146,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
   - Run tests: `.venv/bin/python -m pytest`; lint: `.venv/bin/ruff check src tests && .venv/bin/ruff format src tests`
   - Pull data: `.venv/bin/python -m src.ingest.<source> [--site melbourne|neu_boston|nyc]` (full list in README)
   - Build OSM features: `.venv/bin/python -m src.features.osm [--site melbourne] [--only extract,graph,features,sensors]` (column dictionary and join recipe in `docs/features/osm_features.md`)
+  - Build the training frame: `.venv/bin/python -m src.features.training_frame` (splits, event days, feature spec; `docs/features/training_frame.md`). Other sites: `stoa_site_build` or `.venv/bin/python -m src.features.osm --site neu_boston` (`docs/pipeline/site_build.md`).
   - Build the hourly table: `.venv/bin/python -m src.features.sensor_steepness`, then `.venv/bin/python -m src.features.counts_hourly` (counts + time + weather + calendars + footpath slope; `docs/features/counts_hourly.md`). Time features use the local clock; weather joins on UTC.
   - Bias slicing: `.venv/bin/python -m src.bias.representation` (data per slice), then `.venv/bin/python -m src.bias.slice_errors` (baseline error per slice on held-out sensors, and mitigations; ~16 min). Slices in `configs/bias.yaml`; method and findings in `docs/bias/bias_slicing.md`.
   - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Quickstart"). The OSM extract is pinned; trigger with `refresh_osm=true` to replace it, then re-check sensor overrides.

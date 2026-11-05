@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Entrances near one footway (700: nodes 601, 602, 603, west to east, about 35 m apart).
+     611 is not used. 602 is itself an entrance on the path (no link needed).
+     612 is 4 m north of 601 (joins that node). 613 is 14 m north of the middle of 602 to 603
+     (joins the edge there, splitting it). 614 is a station entrance east of 603 and 18 m from
+     the station node 615, "Town Hall". 616 is 55 m away (left unconnected). 617 is a garage
+     (not a pedestrian entrance).
+-->
+<osm version="0.6" generator="hand">
+  <node id="601" lat="-37.8100" lon="144.9600"/>
+  <node id="602" lat="-37.8100" lon="144.9604">
+    <tag k="entrance" v="main"/>
+  </node>
+  <node id="603" lat="-37.8100" lon="144.9608"/>
+  <node id="612" lat="-37.80996" lon="144.9600">
+    <tag k="entrance" v="yes"/>
+  </node>
+  <node id="613" lat="-37.80987" lon="144.9606">
+    <tag k="entrance" v="shop"/>
+  </node>
+  <node id="614" lat="-37.80995" lon="144.9610">
+    <tag k="railway" v="subway_entrance"/>
+  </node>
+  <node id="615" lat="-37.8100" lon="144.9612">
+    <tag k="railway" v="station"/>
+    <tag k="name" v="Town Hall"/>
+  </node>
+  <node id="616" lat="-37.8095" lon="144.9600">
+    <tag k="entrance" v="yes"/>
+  </node>
+  <node id="617" lat="-37.80996" lon="144.9602">
+    <tag k="entrance" v="garage"/>
+  </node>
+  <way id="700">
+    <nd ref="601"/><nd ref="602"/><nd ref="603"/>
+    <tag k="highway" v="footway"/>
+  </way>
+</osm>

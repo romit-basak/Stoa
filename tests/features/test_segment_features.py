@@ -160,3 +160,12 @@ def test_transit_distance_is_network_and_capped(hairpin, fcfg):
     )  # via the link at node 0
     cap = fcfg["built_form"]["max_distance_m"]
     assert out["bus_stop_dist_m"].eq(cap).all()
+
+
+def test_preflight_stops_a_graph_over_the_segment_limit():
+    from src.features.segment_features import preflight
+
+    preflight("small", 10, {"max_segments": 100})
+    preflight("no_limit", 10**9, {})
+    with pytest.raises(ValueError, match="feature mask"):
+        preflight("big", 101, {"max_segments": 100})

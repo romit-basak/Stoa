@@ -134,12 +134,29 @@ def test_peak15_is_one_for_an_even_hour_and_four_for_one_busy_quarter():
     assert out["day_type"].tolist() == ["weekend", "weekday"]
 
 
+def test_hour_types_put_during_before_pre_and_post():
+    ev = pd.DataFrame(
+        {
+            "event_pre": [True, True, False, False],
+            "event_during": [True, False, False, False],
+            "event_post": [False, True, True, False],
+        }
+    )
+    assert mp.hour_types(ev).tolist() == [
+        "event_during",
+        "event_pre",
+        "event_post",
+        "ordinary",
+    ]
+
+
 def test_profiles_average_the_shares_by_group():
     summary = pd.DataFrame(
         {
             "location_id": [1, 1],
             "day_type": ["weekday", "weekday"],
             "hour_local": [12, 12],
+            "hour_type": ["ordinary", "ordinary"],
         }
     )
     a, b = np.zeros(12), np.zeros(12)
@@ -189,6 +206,19 @@ def test_no_archive_files_give_empty_results_not_an_error(tmp_path):
     assert mp.sensor_reporting(mp.archive_minutes(minutes), CFG).empty
     # The rest of what main() runs.
     assert mp.profiles(mp.hour_summary(hours, grid), grid).empty
+
+
+def test_the_archives_first_hour_is_left_out_when_it_began_mid_hour():
+    minutes = pd.concat(
+        [
+            feed(1, "2026-10-25 12:00", {55: 3}),  # the archive's first minute is 12:55
+            feed(1, "2026-10-25 13:00", {0: 40}),
+            tail_hour(1),
+        ]
+    )
+    table = hourly([(1, "2026-10-25 12:00", 30), (1, "2026-10-25 13:00", 40)])
+    s = mp.hour_status(mp.archive_minutes(minutes), table, CFG)
+    assert s["ts_local"].dt.hour.tolist() == [13] and s["kept"].all()
 
 
 def busy_days(sensor: int, minutes_of_hour: list[int], days: int = 2) -> pd.DataFrame:

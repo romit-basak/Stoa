@@ -56,14 +56,20 @@ stages:
       { test -f data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson ||
       python -m src.ingest.melbourne_portal --only blocks-for-census-of-land-use-and-employment-clue; } &&
       { test -f data/raw/dem/melbourne_ga_lidar_5m.tif ||
-      python -m src.ingest.dem --site melbourne; } &&
-      { test -f data/raw/events/afl_attendance.csv ||
-      python -m src.ingest.afl_attendance; }
+      python -m src.ingest.dem --site melbourne; }
     deps:
       - src/ingest/melbourne_portal.py
       - src/ingest/dem.py
-      - src/ingest/afl_attendance.py
       - configs/data.yaml
+
+  pull_events:
+    # The current AFL season and any season not held yet (crowds and fixtures).
+    cmd: python -m src.ingest.afl_attendance && python -m src.ingest.events
+    deps:
+      - src/ingest/afl_attendance.py
+      - src/ingest/events.py
+      - configs/data.yaml
+    always_changed: true
 
   pull_osm:
     cmd: python -m src.ingest.osm --site melbourne
@@ -93,6 +99,15 @@ stages:
       - data/interim/osm/melbourne/graph
       - data/interim/osm/melbourne/pois.parquet
       - data/interim/osm/melbourne/transit.parquet
+      - src/features
+      - configs/features.yaml
+
+  osm_shade:
+    cmd: python -m src.features.osm --site melbourne --only shade --if-stale
+    deps:
+      - data/interim/osm/melbourne/graph/edges.parquet
+      - data/interim/osm/melbourne/buildings.parquet
+      - data/raw/melbourne_portal/2023-building-footprints.geojson
       - src/features
       - configs/features.yaml
 
@@ -173,13 +188,32 @@ stages:
       - configs/bias.yaml
       - configs/features.yaml
 
+  training_frame:
+    cmd: python -m src.features.training_frame
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/interim/osm/melbourne/extract_meta.json
+      - data/raw/melbourne_portal/pedestrian-counting-system-sensor-locations.geojson
+      - data/raw/melbourne_portal/sensor_locations_wayback_2022-10-24.json
+      - data/raw/events/afl_attendance.csv
+      - configs/events.yaml
+      - configs/bias.yaml
+      - configs/features.yaml
+      - src/features/training_frame.py
+      - src/features/schema.py
+
   minute_profiles:
     cmd: python -m src.features.minute_profiles
     deps:
       - data/raw/melbourne_portal/minute_feed
       - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/features/melbourne/osm_segment_venue_dist.parquet
+      - configs/events.yaml
       - configs/features.yaml
       - src/features/minute_profiles.py
+      - src/features/training_frame.py
 
   minute_coverage:
     cmd: python -m src.bias.minute_coverage
@@ -201,3 +235,91 @@ stages:
       - src/pipeline/validate.py
       - configs/validation.yaml
       - configs/schemas/counts_hourly.yaml
+
+  # --- Per-minute counts (stoa_minute_feed): written to the bucket, not to data/ ---
+
+  poll_minute_feed:
+    cmd: python -m src.ingest.minute_feed --bucket
+    deps:
+      - src/ingest/minute_feed.py
+      - configs/data.yaml
+    always_changed: true
+
+  # --- Site builds (stoa_site_build), one stage per site ---
+
+  site_pull_osm:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.osm --site ${item}
+      deps: [src/ingest/osm.py, configs/data.yaml]
+
+  site_pull_dem:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.dem --site ${item}
+      deps: [src/ingest/dem.py, configs/data.yaml]
+
+  site_pull_worldcover:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.worldcover --site ${item}
+      deps: [src/ingest/worldcover.py, configs/data.yaml]
+
+  site_pull_weather:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.ingest.weather --site ${item}
+      deps: [src/ingest/weather.py, configs/data.yaml]
+      always_changed: true
+
+  site_pull_calendars:
+    cmd: python -m src.ingest.calendars
+    deps: [src/ingest/calendars.py, configs/data.yaml]
+    always_changed: true
+
+  site_pull_extras:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.pipeline.site_extras --site ${item}
+      deps: [src/pipeline/site_extras.py, src/ingest, configs/data.yaml]
+
+  site_osm_extract:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only extract --if-stale
+      deps: ["data/raw/osm/${item}.osm.pbf", src/features, configs/features.yaml]
+
+  site_osm_graph:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only graph --if-stale
+      deps: [src/features, configs/features.yaml]
+
+  site_osm_segment_features:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only features --if-stale
+      deps: [src/features, configs/features.yaml]
+
+  site_validate_segments:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.pipeline.validate_segments --site ${item}
+      deps: [src/pipeline/validate_segments.py, src/features/schema.py, configs/features.yaml]
+
+  site_osm_shade:
+    foreach: [neu_boston, nyc]
+    do:
+      cmd: python -m src.features.osm --site ${item} --only shade --if-stale
+      deps: [src/features, configs/features.yaml]
+
+  # --- Monitoring (stoa_osm_watch) ---
+
+  watch_osm_changes:
+    cmd: python -m src.pipeline.osm_watch
+    deps:
+      - data/raw/osm/melbourne.osm.pbf
+      - src/pipeline/osm_watch.py
+      - configs/data.yaml
+      - configs/features.yaml
+    always_changed: true

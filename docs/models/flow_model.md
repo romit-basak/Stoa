@@ -12,7 +12,7 @@ The flow model predicts the hourly pedestrian count on a path segment. It is tra
 | `lgbm_<variant>` | LightGBM, Poisson objective | Candidate |
 | `xgb_<variant>` | XGBoost, `count:poisson`, histogram trees | Candidate |
 
-Space Syntax gives movement potential per segment, not hourly counts, and needs calibrating against counts. So both baselines take the same form: the typical log count for each hour of the week, plus a ridge regression of the remainder on the rung's network terms (log1p), both fitted on the training sensors. A held-out sensor is predicted from its network terms alone, the same way the candidates predict it.
+Space Syntax gives movement potential per segment, not hourly counts, and needs calibrating against counts. So both baselines take the same form: the typical log count for each hour of the week, plus a ridge regression of the remainder on the rung's network terms (log1p), both fitted on the training sensors. The network terms are constant per sensor, so the ridge is fitted on one row per sensor, with its penalty chosen by leave-one-out over the sensors. A held-out sensor is predicted from its network terms alone, the same way the candidates predict it.
 
 Each candidate is trained in two variants, which differ only in features (`src/features/schema.py` marks each one):
 - `rich`: every feature, including the Melbourne-only layers (CLUE jobs and floor space, City business data, canopy, the footpath-steepness survey).

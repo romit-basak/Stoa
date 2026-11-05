@@ -205,7 +205,10 @@ def run(
                 metrics = cv_metrics(
                     data.y, p, plan, data.sensors, data.ts, fcfg["calibration_days"]
                 )
-                bparams = {"rung": name.removeprefix("baseline_"), "ridge_alpha": 1.0}
+                bparams = {
+                    "rung": name.removeprefix("baseline_"),
+                    "ridge_alpha": "leave-one-sensor-out",
+                }
                 run_id = log_run(
                     name,
                     bparams,

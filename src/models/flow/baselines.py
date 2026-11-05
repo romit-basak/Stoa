@@ -9,16 +9,22 @@ counts (docs/scoping, "Space Syntax ... needs calibration"). So every rung has t
 log1p(count) = typical log count for the hour of the week + a ridge regression of the rest on
 the rung's network terms, both fitted to the training sensors' counts. Held-out sensors are
 predicted from their network terms alone, like the candidates.
+
+The network terms are constant per sensor, so the ridge is fitted on one row per sensor (its
+mean log residual), with the penalty chosen by leave-one-out over those sensors. Fitted on
+every hourly row instead, a few dozen sensors' terms repeated 200,000 times overfit, and the
+richer Space Syntax rung scored worse than betweenness alone.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, RidgeCV
 from sklearn.preprocessing import StandardScaler
 
 RUNGS = ("betweenness", "space_syntax")
+ALPHAS = np.logspace(-3, 3, 13)
 
 
 def network_columns(rung: str, osm: pd.DataFrame) -> list[str]:
@@ -28,9 +34,12 @@ def network_columns(rung: str, osm: pd.DataFrame) -> list[str]:
 
 
 class NetworkBaseline:
-    """Hour-of-week profile in log counts plus a ridge on per-sensor network terms."""
+    """Hour-of-week profile in log counts plus a ridge on per-sensor network terms.
 
-    def __init__(self, columns: list[str], alpha: float = 1.0):
+    alpha None: the penalty is chosen by leave-one-out over the training sensors.
+    """
+
+    def __init__(self, columns: list[str], alpha: float | None = None):
         self.columns = columns
         self.alpha = alpha
 
@@ -46,13 +55,16 @@ class NetworkBaseline:
         ly = np.log1p(y[rows])
         prof = pd.Series(ly).groupby(how).mean()
         self.profile_ = prof.reindex(range(168)).fillna(float(ly.mean())).to_numpy()
-        x = self._terms(osm, hourly["location_id"].to_numpy()[rows])
+        sensors = hourly["location_id"].to_numpy()[rows]
+        resid = pd.Series(ly - self.profile_[how]).groupby(sensors).mean()
+        x = self._terms(osm, resid.index.to_numpy())
         self.fill_ = np.nan_to_num(np.nanmean(x, axis=0))
         x = np.where(np.isnan(x), self.fill_, x)
         self.scaler_ = StandardScaler().fit(x)
-        self.ridge_ = Ridge(alpha=self.alpha).fit(
-            self.scaler_.transform(x), ly - self.profile_[how]
+        ridge = (
+            RidgeCV(alphas=ALPHAS) if self.alpha is None else Ridge(alpha=self.alpha)
         )
+        self.ridge_ = ridge.fit(self.scaler_.transform(x), resid.to_numpy())
         return self
 
     def predict(

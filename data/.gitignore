@@ -2,3 +2,5 @@
 /interim
 /processed
 /notebooks
+# Flow-model outputs (src/models/flow): not DVC-tracked, the models live in MLflow.
+/models

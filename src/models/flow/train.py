@@ -1,16 +1,23 @@
-"""Train the Melbourne flow model: Melbourne-rich and portable variants.
+"""Train the flow model's candidates and the baseline ladder on the location folds.
 
-Usage: python -m src.models.flow.train [--variant rich|portable|both] [--tune]
-       [--if-older-than DAYS]
+Usage: python -m src.models.flow.train [--variant rich|portable|both] [--families ...]
+       [--tune] [--n-trials N] [--folds N] [--max-trees N] [--train-rows N]
+       [--output-dir DIR]
 
-For each variant:
-- Grouped K-fold OOF predictions (Poisson loss + quantile models for 80% intervals)
-- MLflow experiment tracking with metrics, params, and artefacts
-- OOF predictions saved to data/processed/models/flow/{variant}/oof_predictions.parquet
-- Final model saved to data/processed/models/flow/{variant}/model.pkl
+For each variant, every candidate family (src/models/flow/candidates.py) trains on each fold's
+training sample and predicts that fold's sensors, so every prediction comes from a model that
+never saw the sensor or its neighbours (CLAUDE.md core rule 2). The baseline ladder
+(src/models/flow/baselines.py) is fitted on the same plan. Holdout precincts are in no fold;
+src.models.flow.select scores them for the selected model only.
 
-The --tune flag runs Optuna search before training (see src/models/flow/tune.py).
-The --if-older-than DAYS guard skips when a recent model exists with the same settings.
+Each model is one MLflow run in experiment stoa-flow (src/models/tracking.py records the code
+and data version): `<family>_<variant>` for candidates, `baseline_<rung>` for the ladder, with
+the fold metrics named as in docs/models/experiment_tracking.md. The baselines use only network
+features, which both variants share, so they run once.
+
+Writes to <output_dir>/<variant>/: oof.parquet (one prediction column per model) and
+candidates.json (each model's run id, parameters and metrics). src.models.flow.select reads
+them next.
 """
 
 from __future__ import annotations
@@ -18,341 +25,250 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import joblib
+import mlflow
 import numpy as np
 import pandas as pd
-import yaml
-from sklearn.ensemble import HistGradientBoostingRegressor
 
-from src.features.common import load_features_config
-from src.features.training_frame import VARIANTS, fold_plan, load
-from src.ingest.common import REPO_ROOT, load_config, setup_logging
-from src.models.flow.baselines import run_baselines
-from src.models.flow.evaluate import (
-    baseline_ladder,
-    calibration_curve,
-    check_gates,
-    interval_coverage,
-    mae_log,
-    shap_summary,
-    transfer_precinct_eval,
-    wape,
-)
-from src.models.flow.features import (
-    calibration_window,
-    design_matrix,
-    feature_names,
-)
-
-MODEL_YAML = REPO_ROOT / "configs" / "model.yaml"
-BIAS_YAML = REPO_ROOT / "configs" / "bias.yaml"
+from src.features.common import log
+from src.ingest.common import setup_logging
+from src.models import tracking
+from src.models.flow import baselines, candidates
+from src.models.flow import data as flow_data
+from src.models.flow import tune as flow_tune
+from src.models.flow.data import Data
+from src.models.flow.metrics import cv_metrics
 
 
-def _load_configs() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    model_cfg = yaml.safe_load(MODEL_YAML.read_text())
-    data_cfg = load_config()
-    return model_cfg, data_cfg, load_features_config()
+def plan_tag(n_folds: int, train_rows: int, seed: int) -> str:
+    """Identifies a fold plan, so the gate only compares runs scored on the same rows."""
+    return f"folds={n_folds};train_rows={train_rows};seed={seed}"
 
 
-def _out_dir(variant: str) -> Path:
-    return REPO_ROOT / "data" / "processed" / "models" / "flow" / variant
+def oof_candidates(
+    data: Data,
+    families: list[str],
+    params: dict[str, dict[str, Any]],
+    plan: list[tuple[np.ndarray, np.ndarray]],
+    seed: int,
+) -> tuple[dict[str, np.ndarray], dict[str, float]]:
+    """Out-of-fold predictions per family, building each fold's matrices once for all."""
+    n = len(data.y)
+    preds = {f: np.full(n, np.nan, dtype="float32") for f in families}
+    seconds = dict.fromkeys(families, 0.0)
+    for k, (train, test) in enumerate(plan):
+        x_train, x_test = data.frame.matrix(train), data.frame.matrix(test)
+        for f in families:
+            t = time.perf_counter()
+            model = candidates.make(f, params[f], seed).fit(x_train, data.y[train])
+            preds[f][test] = candidates.predict(model, x_test)
+            seconds[f] += time.perf_counter() - t
+            log.info("fold %d %s: %.0f s", k, f, time.perf_counter() - t)
+        del x_train, x_test
+    return preds, seconds
 
 
-def _model_params(cfg: dict[str, Any], variant: str) -> dict[str, Any]:
-    best = cfg.get("best_params", {}).get(variant)
-    return best if best else cfg["default_params"]
+def oof_baselines(
+    data: Data, plan: list[tuple[np.ndarray, np.ndarray]]
+) -> dict[str, np.ndarray]:
+    return {
+        f"baseline_{r}": baselines.oof(
+            r, data.frame.hourly, data.frame.osm, data.y, plan
+        )
+        for r in baselines.RUNGS
+    }
 
 
-def run_variant(
-    hourly: pd.DataFrame,
-    osm: pd.DataFrame,
-    cfg: dict[str, Any],
-    variant: str,
-    n_iter: int | None = None,
-    folds: int | None = None,
-    out_dir: Path | None = None,
+def log_run(
+    name: str,
+    params: dict[str, Any],
+    tags: dict[str, str],
+    metrics: dict[str, float],
+) -> str:
+    with tracking.run(name, params=params, tags=tags) as active:
+        mlflow.log_metrics(metrics)
+        return active.info.run_id
+
+
+def train_variant(
+    data: Data,
+    fcfg: dict[str, Any],
+    families: list[str],
+    plan: list[tuple[np.ndarray, np.ndarray]],
+    out: Path,
+    params: dict[str, dict[str, Any]],
+    baseline_preds: dict[str, np.ndarray],
+    baseline_runs: dict[str, dict[str, Any]],
+    plan_id: str,
 ) -> dict[str, Any]:
-    """Train one variant and return a results dict.
+    """Candidates for one variant, logged; writes oof.parquet and candidates.json."""
+    preds, seconds = oof_candidates(data, families, params, plan, fcfg["seed"])
+    models: dict[str, Any] = {}
+    for f in families:
+        metrics = cv_metrics(
+            data.y, preds[f], plan, data.sensors, data.ts, fcfg["calibration_days"]
+        )
+        run_id = log_run(
+            f"{f}_{data.variant}",
+            {**params[f], "variant": data.variant, "family": f},
+            {
+                "stoa.role": "candidate",
+                "stoa.family": f,
+                "stoa.variant": data.variant,
+                "stoa.plan": plan_id,
+            },
+            {**metrics, "fit_s": seconds[f]},
+        )
+        models[f] = {"run_id": run_id, "params": params[f], "metrics": metrics}
+        log.info(
+            "%s_%s: mae_log_cv %.3f, wape_cv %.3f",
+            f,
+            data.variant,
+            metrics["mae_log_cv"],
+            metrics["wape_cv"],
+        )
 
-    Exposed as a function (not just CLI) so the smoke tests can call it
-    without subprocess overhead and without a real MLflow server.
-    """
-    tcfg = cfg["training"]
-    station_cap_m = 2000.0
-    cal_days = tcfg["calibration_days"]
-
-    from src.features.training_frame import derived_features, row_features
-    r_cols = row_features(variant)
-    d_cols = derived_features(variant)
-    all_row_cols = [c for c in r_cols + d_cols if c in hourly.columns]
-    feat_names = feature_names(osm, all_row_cols)
-
-    # `osm` is expected to be sensor_features() output: indexed by location_id, float32.
-    # If it's not yet indexed, index it here so both paths work.
-    if "location_id" in osm.columns:
-        osm = osm.set_index("location_id").astype("float32")
-    elif osm.index.name != "location_id":
-        osm = osm.astype("float32")
-
-    sensors = hourly["location_id"].to_numpy()
-    y = hourly["pedestriancount"].to_numpy(dtype=float)
-    ts = hourly["ts_utc"]
-
-    n_folds = folds if folds is not None else tcfg["folds"]
-    plan = fold_plan(sensors, n_folds, 600_000, tcfg["seed"])
-
-    params = _model_params(cfg, variant)
-    if n_iter is not None:
-        params = dict(params)
-        params["max_iter"] = n_iter
-
-    window = calibration_window(sensors, ts, cal_days)
-
-    # OOF predictions: Poisson (mean) + quantile models for 80% intervals
-    oof_mean = np.full(len(hourly), np.nan)
-    oof_q10 = np.full(len(hourly), np.nan)
-    oof_q90 = np.full(len(hourly), np.nan)
-
-    for train_pos, test_pos in plan:
-        def _build_x(pos: np.ndarray) -> np.ndarray:
-            return np.nan_to_num(
-                design_matrix(hourly, pos, osm, station_cap_m, all_row_cols), nan=0.0
-            )
-
-        x_train, x_test = _build_x(train_pos), _build_x(test_pos)
-        y_train = y[train_pos]
-
-        base_params = {k: v for k, v in params.items() if k not in ("early_stopping",)}
-
-        m_mean = HistGradientBoostingRegressor(loss="poisson", **base_params)
-        m_mean.fit(x_train, y_train)
-        oof_mean[test_pos] = np.maximum(m_mean.predict(x_test), 0.0)
-
-        for q, arr in [(0.1, oof_q10), (0.9, oof_q90)]:
-            m_q = HistGradientBoostingRegressor(
-                loss="quantile", quantile=q, **{k: v for k, v in base_params.items() if k != "loss"}
-            )
-            m_q.fit(x_train, y_train)
-            arr[test_pos] = np.maximum(m_q.predict(x_test), 0.0)
-
-    # Score on non-calibration-window rows
-    scored = ~window & ~np.isnan(oof_mean)
-    w = wape(y[scored], oof_mean[scored])
-    ml = mae_log(y[scored], oof_mean[scored])
-    cov = interval_coverage(y[scored], oof_q10[scored], oof_q90[scored])
-
-    # Save OOF predictions
-    effective_out = out_dir or _out_dir(variant)
-    effective_out.mkdir(parents=True, exist_ok=True)
-    oof_df = pd.DataFrame(
+    out.mkdir(parents=True, exist_ok=True)
+    tested = np.concatenate([t for _, t in plan])
+    oof = pd.DataFrame(
         {
-            "location_id": sensors,
-            "ts_utc": ts.to_numpy(),
-            "pedestriancount": y,
-            "oof_mean": oof_mean,
-            "oof_q10": oof_q10,
-            "oof_q90": oof_q90,
-            "in_calibration_window": window,
+            "row": tested,
+            "location_id": data.sensors[tested],
+            "ts_utc": data.ts.to_numpy()[tested],
+            "fold": data.fold[tested],
+            "y": data.y[tested].astype("float32"),
         }
     )
-    oof_df.to_parquet(effective_out / "oof_predictions.parquet", index=False)
-
-    # Train final model on all rows
-    x_all = np.nan_to_num(
-        design_matrix(hourly, np.arange(len(hourly)), osm, station_cap_m, all_row_cols),
-        nan=0.0,
-    )
-    final_model = HistGradientBoostingRegressor(
-        loss="poisson", **{k: v for k, v in params.items() if k not in ("early_stopping",)}
-    )
-    final_model.fit(x_all, y)
-    joblib.dump(final_model, effective_out / "model.pkl")
-    (effective_out / "feature_names.json").write_text(json.dumps(feat_names))
-
-    return {
-        "wape": w,
-        "mae_log": ml,
-        "coverage": cov,
-        "out_dir": str(effective_out),
-        "n_rows_scored": int(scored.sum()),
-        "params": params,
-        "feature_names": feat_names,
-        "final_model": final_model,
-        "oof_mean": oof_mean,
-        "oof_q10": oof_q10,
-        "oof_q90": oof_q90,
-        "y": y,
-        "scored": scored,
-        "hourly": hourly,
-        "osm": osm,
-        "all_row_cols": all_row_cols,
-        "station_cap_m": station_cap_m,
+    for name, p in {**preds, **baseline_preds}.items():
+        oof[name] = p[tested]
+    oof.to_parquet(out / "oof.parquet", index=False)
+    summary = {
+        "variant": data.variant,
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "plan": plan_id,
+        "n_folds": len(plan),
+        "train_rows": int(fcfg["train_rows_per_fold"]),
+        "seed": int(fcfg["seed"]),
+        "families": families,
+        "models": models,
+        "baselines": baseline_runs,
     }
+    (out / "candidates.json").write_text(json.dumps(summary, indent=2))
+    return summary
+
+
+def run(
+    variants: list[str],
+    families: list[str],
+    fcfg: dict[str, Any],
+    out_root: Path,
+    load_data=flow_data.load,
+    n_folds: int | None = None,
+    max_trees: int | None = None,
+    tune: bool = False,
+    n_trials: int | None = None,
+) -> dict[str, Any]:
+    """Train every variant; returns each variant's candidates.json content."""
+    seed, train_rows = fcfg["seed"], fcfg["train_rows_per_fold"]
+    baseline_preds: dict[str, np.ndarray] | None = None
+    baseline_runs: dict[str, dict[str, Any]] = {}
+    reference: np.ndarray | None = None
+    summaries = {}
+    for variant in variants:
+        t = time.perf_counter()
+        data = load_data(variant)
+        plan = flow_data.fold_plan(data.fold, train_rows, seed, n_folds)
+        plan_id = plan_tag(len(plan), train_rows, seed)
+        params = {
+            f: candidates.capped(f, fcfg["candidates"][f]["params"], max_trees)
+            for f in families
+        }
+        if tune:
+            for f in families:
+                tags = {
+                    "stoa.role": "tuning",
+                    "stoa.family": f,
+                    "stoa.variant": variant,
+                }
+                with tracking.run(f"tune_{f}_{variant}", tags=tags):
+                    best = flow_tune.tune(data, f, fcfg, n_trials, max_trees)
+                params[f] = candidates.capped(f, best, max_trees)
+
+        # Both variants have the same rows; the baselines use network features only.
+        if baseline_preds is None:
+            reference = data.sensors
+            baseline_preds = oof_baselines(data, plan)
+            for name, p in baseline_preds.items():
+                metrics = cv_metrics(
+                    data.y, p, plan, data.sensors, data.ts, fcfg["calibration_days"]
+                )
+                bparams = {"rung": name.removeprefix("baseline_"), "ridge_alpha": 1.0}
+                run_id = log_run(
+                    name,
+                    bparams,
+                    {
+                        "stoa.role": "baseline",
+                        "stoa.family": name,
+                        "stoa.variant": "network",
+                        "stoa.plan": plan_id,
+                    },
+                    metrics,
+                )
+                baseline_runs[name] = {"run_id": run_id, "metrics": metrics}
+                log.info("%s: mae_log_cv %.3f", name, metrics["mae_log_cv"])
+        elif not np.array_equal(reference, data.sensors):
+            raise ValueError("the variants' training frames have different rows")
+
+        summaries[variant] = train_variant(
+            data,
+            fcfg,
+            families,
+            plan,
+            out_root / variant,
+            params,
+            baseline_preds,
+            baseline_runs,
+            plan_id,
+        )
+        log.info("%s: %.0f s", variant, time.perf_counter() - t)
+        del data
+    return summaries
 
 
 def main() -> None:
     setup_logging()
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--variant", choices=[*VARIANTS, "both"], default="both")
-    ap.add_argument("--tune", action="store_true")
-    ap.add_argument("--if-older-than", type=float, metavar="DAYS")
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--variant", choices=["rich", "portable", "both"], default="both")
+    ap.add_argument("--families", nargs="+", choices=candidates.FAMILIES)
+    ap.add_argument(
+        "--tune", action="store_true", help="Optuna search per family first"
+    )
+    ap.add_argument("--n-trials", type=int)
+    ap.add_argument("--folds", type=int, help="use only the first N folds (quick runs)")
+    ap.add_argument("--max-trees", type=int, help="cap trees per model (quick runs)")
+    ap.add_argument("--train-rows", type=int, help="training rows per fold")
+    ap.add_argument("--output-dir")
     args = ap.parse_args()
 
-    import mlflow
-
-    cfg, _, _ = _load_configs()
-
-    if args.if_older_than is not None:
-        # Check the meta file for all requested variants
-        variants_to_run = []
-        for v in (list(VARIANTS) if args.variant == "both" else [args.variant]):
-            meta_path = _out_dir(v) / "train_meta.json"
-            if meta_path.exists():
-                meta = json.loads(meta_path.read_text())
-                age = datetime.now(UTC) - datetime.fromisoformat(meta.get("run_at", "2000-01-01"))
-                if age < timedelta(days=args.if_older_than):
-                    continue
-            variants_to_run.append(v)
-        if not variants_to_run:
-            print(f"Models are under {args.if_older_than} days old; skipped.")
-            return
-    else:
-        variants_to_run = list(VARIANTS) if args.variant == "both" else [args.variant]
-
-    if args.tune:
-        import mlflow as _mlf
-
-        from src.models.flow import tune
-        _mlf.set_tracking_uri(f"file:{REPO_ROOT / 'mlruns'}")
-        for v in variants_to_run:
-            fr = load(variant=v)
-            best = tune.build_study(fr.hourly, fr.osm, cfg, v)
-            if "best_params" not in cfg:
-                cfg["best_params"] = {}
-            cfg["best_params"][v] = best
-        MODEL_YAML.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True))
-
-    mlflow.set_tracking_uri(f"file:{REPO_ROOT / 'mlruns'}")
-    mlflow.set_experiment("stoa_flow_model")
-    bias_cfg = yaml.safe_load(BIAS_YAML.read_text())
-
-    for variant in variants_to_run:
-        frame = load(variant=variant)
-        hourly, osm = frame.hourly, frame.osm
-
-        t = time.perf_counter()
-        with mlflow.start_run(run_name=f"flow_{variant}") as run:
-            results = run_variant(hourly, osm, cfg, variant)
-            mlflow.log_params(
-                {f"param_{k}": v for k, v in results["params"].items()}
-            )
-            mlflow.log_metrics(
-                {
-                    "wape": results["wape"],
-                    "mae_log": results["mae_log"],
-                    "interval_coverage": results["coverage"],
-                }
-            )
-
-            # Baseline ladder
-            baseline_preds = run_baselines(hourly, osm, cfg)
-            all_preds = {
-                "betweenness": baseline_preds["betweenness"],
-                "space_syntax": baseline_preds["space_syntax"],
-                f"learned_{variant}": results["oof_mean"],
-            }
-            ladder = baseline_ladder(results["y"], all_preds, results["scored"])
-            ladder_csv = ladder.to_csv(index=False)
-            mlflow.log_text(ladder_csv, "baseline_ladder.csv")
-            print(f"\nBaseline ladder ({variant}):\n{ladder.to_string(index=False)}\n")
-
-            # SHAP on 1000-row sample
-            rng = np.random.default_rng(42)
-            sample_idx = rng.choice(
-                np.flatnonzero(results["scored"]),
-                size=min(1000, int(results["scored"].sum())),
-                replace=False,
-            )
-            x_sample = np.nan_to_num(
-                design_matrix(
-                    results["hourly"],
-                    sample_idx,
-                    results["osm"],
-                    results["station_cap_m"],
-                    results["all_row_cols"],
-                ),
-                nan=0.0,
-            )
-            shap_summary(results["final_model"], x_sample, results["feature_names"])
-
-            # Calibration curve
-            cal_df = calibration_curve(
-                hourly,
-                results["oof_mean"],
-                cfg["calibration_curve"]["k_values"],
-                cfg["calibration_curve"]["reps"],
-                cfg["calibration_curve"]["seed"],
-            )
-            cal_csv = cal_df.to_csv(index=False)
-            mlflow.log_text(cal_csv, "calibration_curve.csv")
-
-            # Transfer precinct eval
-            tp_df = transfer_precinct_eval(
-                hourly=results["hourly"],
-                osm=results["osm"],
-                model=results["final_model"],
-                holdout_precincts=bias_cfg["holdout_precincts"],
-                row_cols=results["all_row_cols"],
-                station_cap_m=results["station_cap_m"],
-                metro_tunnel_date=cfg["transfer"]["metro_tunnel_date"],
-            )
-            if not tp_df.empty:
-                mlflow.log_text(tp_df.to_csv(index=False), "transfer_precincts.csv")
-                print(f"Transfer precincts:\n{tp_df.to_string(index=False)}\n")
-
-            # Gate check (informational here; enforced in registry.py)
-            ss_mae = baseline_ladder(
-                results["y"],
-                {"space_syntax": baseline_preds["space_syntax"]},
-                results["scored"],
-            ).iloc[0]["mae_log"]
-            passed, msg = check_gates(
-                results["mae_log"], float(ss_mae), results["coverage"], cfg
-            )
-            mlflow.log_metric("gates_passed", int(passed))
-            mlflow.set_tag("gates_message", msg)
-            mlflow.log_param("run_id", run.info.run_id)
-
-            mlflow.sklearn.log_model(results["final_model"], "model")
-            runtime = time.perf_counter() - t
-
-        # Write local meta
-        out_dir = Path(results["out_dir"])
-        (out_dir / "train_meta.json").write_text(
-            json.dumps(
-                {
-                    "variant": variant,
-                    "run_at": datetime.now(UTC).isoformat(),
-                    "mlflow_run_id": run.info.run_id,
-                    "wape": results["wape"],
-                    "mae_log": results["mae_log"],
-                    "coverage": results["coverage"],
-                    "runtime_s": round(runtime, 1),
-                    "params": results["params"],
-                    "gates_passed": passed,
-                    "gates_message": msg,
-                },
-                indent=2,
-            )
-        )
-        print(
-            f"{variant}: WAPE={results['wape']:.4f} MAE-log={results['mae_log']:.4f} "
-            f"coverage={results['coverage']:.3f} ({runtime:.0f} s)  {msg}"
-        )
+    fcfg = flow_data.flow_config()
+    if args.train_rows:
+        fcfg["train_rows_per_fold"] = args.train_rows
+    out = flow_data.output_dir(fcfg, args.output_dir)
+    variants = fcfg["variants"] if args.variant == "both" else [args.variant]
+    families = args.families or list(fcfg["candidates"])
+    run(
+        variants,
+        families,
+        fcfg,
+        out,
+        n_folds=args.folds,
+        max_trees=args.max_trees,
+        tune=args.tune,
+        n_trials=args.n_trials,
+    )
 
 
 if __name__ == "__main__":

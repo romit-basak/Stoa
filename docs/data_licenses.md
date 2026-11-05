@@ -23,6 +23,7 @@ Check this file before adding any dataset (CLAUDE.md rule 5). **Train** = may fe
 | University of Melbourne semester dates | Facts; website terms forbid scraping (entered by hand) | Train | Cite the archived pages |
 | Northeastern academic calendar | Facts (registrar PDF) | Train (demo) | — |
 | AFL Tables attendance | No licence, no robots.txt (facts) | Train, low risk | Credit AFL Tables; don't redistribute the pages |
+| Event listings for `configs/events.yaml` (venue sites: MCG, Marvel Stadium, AAMI Park, Melbourne Park; City of Melbourne What's On; news articles) | No licence for reuse of the pages; we record facts only (event, venue, date, published start time), never page text | Train, low risk | Each row cites its page and a Wayback Machine copy. Venues are OSM objects (ODbL) |
 | USGS 3DEP (Boston) | Public domain | Train | Credit USGS |
 | NAIP (Planetary Computer) | Public domain (USDA FSA) | Train | Credit USDA FSA NAIP |
 | City of Boston buildings with roof breaks | PDDL 1.0 | Train | — |

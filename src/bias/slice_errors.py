@@ -44,96 +44,31 @@ import numpy as np
 import pandas as pd
 from fairlearn.metrics import MetricFrame
 from sklearn.ensemble import HistGradientBoostingRegressor
-from sklearn.model_selection import GroupKFold
 
 from src.bias.representation import network_reference, sliced_rows
 from src.bias.slices import load_bias_config
 from src.features.common import config_hash, load_features_config, log, write_meta
+from src.features.training_frame import (
+    add_derived,
+    derived_features,
+    design_matrix,
+    feature_names,
+    fold_plan,
+    row_features,
+    sensor_features,
+)
 from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
-TIME_FEATURES = [
-    "hour_local",
-    "weekday",
-    "is_weekend",
-    "is_public_holiday",
-    "school_term",
-    "uni_teaching",
-    "uni_exams",
-    "sun_elevation_deg",
-    "covid_period",
-    "post_metro_tunnel",
-]
-WEATHER_FEATURES = [
-    "wx_temperature_2m",
-    "wx_apparent_temperature",
-    "wx_relative_humidity_2m",
-    "wx_cloud_cover",
-    "wx_wind_speed_10m",
-    "wx_is_day",
-    "wx_precipitation",
-    "wx_rain",
-    "wx_shortwave_radiation",
-]
-PLACE_FEATURES = ["slope_pct", "slope_pct_local_mean", "elevation_m"]
-# Columns of sensor_osm_features.parquet that are never features: IDs, names, match details,
-# and segment geometry that depends on how the way was split rather than on the place.
-OSM_EXCLUDED = {
-    "location_id",
-    "sensor_description",
-    "location_type",
-    "segment_id",
-    "match_distance_m",
-    "match_method",
-    "needs_review",
-    "way_id",
-    "name",
-    "highway",
-    "bearing_deg",
-    "length_m",
-}
-ROW_FEATURES = TIME_FEATURES + WEATHER_FEATURES + PLACE_FEATURES
+# The baseline's features are the training frame's: the hourly table's own features, then the
+# matched segment's (src/features/training_frame.py, chosen by role in src/features/schema.py).
+ROW_FEATURES = row_features()
+# Shade and events, which the frame derives per row (training_frame.add_derived).
+DERIVED_FEATURES = derived_features()
 
 
 # --------------------------------------------------------------------------------------------
 # Features
 # --------------------------------------------------------------------------------------------
-
-
-def sensor_features(osm: pd.DataFrame) -> pd.DataFrame:
-    """Numeric OSM segment features per sensor, indexed by location_id."""
-    cols = [
-        c
-        for c in osm.columns
-        if c not in OSM_EXCLUDED
-        and (
-            pd.api.types.is_numeric_dtype(osm[c]) or pd.api.types.is_bool_dtype(osm[c])
-        )
-    ]
-    return osm.set_index("location_id")[cols].astype("float32")
-
-
-def design_matrix(
-    hourly: pd.DataFrame,
-    index: np.ndarray,
-    osm: pd.DataFrame,
-    station_cap_m: float,
-) -> np.ndarray:
-    """Feature matrix for hourly rows `index`: row features, then the sensor's OSM features.
-
-    The OSM snapshot postdates the Metro Tunnel, so before the opening each new station's
-    distance is set to the cap, as if it weren't there (docs/features/counts_hourly.md).
-    """
-    part = hourly.iloc[index]
-    rows = part[ROW_FEATURES].astype("float32").to_numpy()
-    seg = osm.reindex(part["location_id"].to_numpy())
-    if "recent_station_dist_m" in seg.columns:
-        before = ~part["post_metro_tunnel"].to_numpy(dtype=bool)
-        seg.loc[before, "recent_station_dist_m"] = station_cap_m
-    return np.hstack([rows, seg.to_numpy(dtype="float32")])
-
-
-def feature_names(osm: pd.DataFrame) -> list[str]:
-    return ROW_FEATURES + list(osm.columns)
 
 
 # --------------------------------------------------------------------------------------------
@@ -209,24 +144,6 @@ def calibrate(
 # --------------------------------------------------------------------------------------------
 # Out-of-fold predictions
 # --------------------------------------------------------------------------------------------
-
-
-def fold_plan(
-    groups: np.ndarray, n_folds: int, train_rows: int, seed: int
-) -> list[tuple[np.ndarray, np.ndarray]]:
-    """(training sample, held-out rows) per fold, as positions into the eligible rows.
-
-    Folds split by sensor. The training sample is drawn once per fold, so every mitigation
-    trains on the same rows and differs only in their weights.
-    """
-    rng = np.random.default_rng(seed)
-    folds = GroupKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    plan = []
-    for train, test in folds.split(groups, groups=groups):
-        if len(train) > train_rows:
-            train = np.sort(rng.choice(train, train_rows, replace=False))
-        plan.append((train, test))
-    return plan
 
 
 def oof_predict(
@@ -390,8 +307,11 @@ def build(
     ecfg = cfg["errors"]
     site = cfg["site"]
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
-    sliced = sliced_rows(data_cfg, fcfg, cfg, extra_columns=ROW_FEATURES)
+    extra = ROW_FEATURES + ["ts_local", "sun_azimuth_deg"]
+    sliced = sliced_rows(data_cfg, fcfg, cfg, extra_columns=extra)
     hourly, rows = sliced["hourly"], sliced["rows"]
+    hourly = add_derived(hourly, site, data_cfg, fcfg)
+    row_cols = ROW_FEATURES + DERIVED_FEATURES
     # Step 2 measures error, so the slices that only describe data coverage are left out:
     # every evaluated sensor is located, and its source and era are already sliced.
     dims = [d for d in sliced["dims"] if d not in ecfg["skip_dimensions"]]
@@ -406,7 +326,7 @@ def build(
     cap = fcfg["built_form"]["max_distance_m"]
 
     def build_x(pos: np.ndarray) -> np.ndarray:
-        return design_matrix(hourly, eligible[pos], osm, cap)
+        return design_matrix(hourly, eligible[pos], osm, cap, row_cols)
 
     plan = fold_plan(groups, ecfg["folds"], ecfg["train_rows_per_fold"], ecfg["seed"])
     edges = gpd.read_parquet(
@@ -458,7 +378,7 @@ def build(
             "loss": "poisson",
             **ecfg["model"],
         },
-        "features": feature_names(osm),
+        "features": feature_names(osm, row_cols),
         "dimensions": dims,
     }
     return pd.concat(all_errors, ignore_index=True), pd.DataFrame(summaries), meta

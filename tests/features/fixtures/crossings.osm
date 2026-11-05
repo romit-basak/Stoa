@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A road whose sidewalks are mapped separately (sidewalk=separate), for the metric-graph tests.
+     Grid: 0.0004 deg of longitude is about 35 m, 0.0001 deg of latitude about 11 m.
+
+        a1 ======== a2 ======== a3        north sidewalk (about 70 m west to east), f1 above a2
+        |            |           |
+        r1 ======== r2 ======== r3        road R, sidewalk=separate; side road Q south from r2
+        |          / | \         |
+        b1 ===== b2  |  b3 ===== b4       south sidewalk, broken by the side road
+                     q1
+
+  Mapped crossings X (a1-r1-b1) and Y (a3-r3-b4) are at the road's ends, about 35 m from r2.
+  No crossing is mapped at r2, so one is inferred across each arm of R there.
+-->
+<osm version="0.6" generator="hand">
+  <node id="201" lat="-37.8100" lon="144.9600"/>
+  <node id="202" lat="-37.8100" lon="144.9604"/>
+  <node id="203" lat="-37.8100" lon="144.9608"/>
+  <node id="204" lat="-37.8105" lon="144.9604"/>
+  <node id="211" lat="-37.8099" lon="144.9600"/>
+  <node id="212" lat="-37.8099" lon="144.9604"/>
+  <node id="213" lat="-37.8099" lon="144.9608"/>
+  <node id="214" lat="-37.8095" lon="144.9604"/>
+  <node id="221" lat="-37.8101" lon="144.9600"/>
+  <node id="222" lat="-37.8101" lon="144.96035"/>
+  <node id="223" lat="-37.8101" lon="144.96045"/>
+  <node id="224" lat="-37.8101" lon="144.9608"/>
+  <way id="300">
+    <nd ref="201"/><nd ref="202"/><nd ref="203"/>
+    <tag k="highway" v="residential"/>
+    <tag k="sidewalk" v="separate"/>
+    <tag k="name" v="Main Road"/>
+  </way>
+  <way id="301">
+    <nd ref="202"/><nd ref="204"/>
+    <tag k="highway" v="residential"/>
+    <tag k="sidewalk" v="both"/>
+    <tag k="name" v="Side Street"/>
+  </way>
+  <way id="302">
+    <nd ref="211"/><nd ref="212"/><nd ref="213"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+  <way id="303">
+    <nd ref="212"/><nd ref="214"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="304">
+    <nd ref="221"/><nd ref="222"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+  <way id="305">
+    <nd ref="223"/><nd ref="224"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="sidewalk"/>
+  </way>
+  <way id="306">
+    <nd ref="211"/><nd ref="201"/><nd ref="221"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="crossing"/>
+  </way>
+  <way id="307">
+    <nd ref="213"/><nd ref="203"/><nd ref="224"/>
+    <tag k="highway" v="footway"/>
+    <tag k="footway" v="crossing"/>
+  </way>
+</osm>

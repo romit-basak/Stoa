@@ -6,10 +6,20 @@ processed_dir: data/processed
 sites:
   melbourne:
     crs: 28355  # GDA94 / MGA zone 55 (metres), same as configs/analysis.yaml
+    # The Metro Tunnel.
+    recent_stations:
+      - {name: Arden, opened: "2025-11-30"}
+      - {name: Parkville, opened: "2025-11-30"}
+      - {name: State Library, opened: "2025-11-30"}
+      - {name: Town Hall, opened: "2025-11-30"}
+      - {name: Anzac, opened: "2025-11-30"}
   neu_boston:
     crs: 26919  # NAD83 / UTM 19N
   nyc:
     crs: 32618  # WGS 84 / UTM 18N
+    # The transfer test needs features only at the 114 count locations: build within 200 m of
+    # them (and clip the graph far enough out that their metrics stay exact).
+    feature_mask: {points: nyc/bi_annual_pedestrian_counts.geojson, radius_m: 200}
 
 walk_filter:
   # Based on OSMnx's "walk" network filter. A way is walkable if it has a highway tag not listed
@@ -60,15 +70,10 @@ transit:
   tram_stop: ["railway=tram_stop"]
   bus_stop: ["highway=bus_stop"]
   rail_station: ["railway=station"]
-  # Stations that opened during the count record. Their distances go in a separate column, so the
-  # training join can ignore them before the opening date (the OSM snapshot postdates it).
-  # Names are matched case-insensitively against the station's OSM name.
-  recent_stations:
-    - {name: Arden, opened: "2025-11-30"}
-    - {name: Parkville, opened: "2025-11-30"}
-    - {name: State Library, opened: "2025-11-30"}
-    - {name: Town Hall, opened: "2025-11-30"}
-    - {name: Anzac, opened: "2025-11-30"}
+  # Stations that opened during a site's count record are listed per site (`recent_stations`
+  # under `sites`). Their distances go in a separate column, so the training frame can ignore
+  # them before the opening date (the OSM snapshot postdates it). Names are matched
+  # case-insensitively against the station's OSM name.
 
 green_tags: ["leisure=park", "leisure=garden", "leisure=nature_reserve", "landuse=grass",
              "landuse=recreation_ground", "landuse=village_green", "landuse=forest",
@@ -84,9 +89,108 @@ built_form:
   buffer_m: 25            # building coverage around each segment
   max_distance_m: 2000    # distance features are capped here (and flagged as "none nearby")
 
+# The metric graph (src/features/graph.py): network metrics leave out road centrelines whose
+# sidewalks are mapped as their own ways, after inferring crossings where none is mapped.
+graph:
+  exclude_separate_roads: true
+  road_classes: [living_street, residential, service, unclassified, tertiary, secondary,
+                 primary, trunk]
+  inferred_crossings:
+    junction_radius_m: 20        # sidewalk ends this close to the junction are candidates
+    max_length_m: 30             # no wider than this
+    mapped_crossing_radius_m: 30 # none if a mapped crossing is this close to the link
+    detour_factor: 3             # none if the sidewalks already join within 3x the link
+  # The build fails if leaving the roads out shrinks the main component's share of length by
+  # more than this (the guard that keeps bridging roads should prevent it).
+  max_main_component_drop: 0.01
+  # Edges across pedestrian plazas (highway=pedestrian areas), which the walk filter drops as
+  # ways: straight lines between where paths reach the plaza, kept inside its outline.
+  plaza_edges:
+    enabled: true
+    access_tolerance_m: 2   # a path ending this close to the outline reaches the plaza
+    max_neighbours: 6       # each access point joins at most this many others
+
+# Entrances (src/features/osm_extract.py, graph.py): building and station entrances, joined to
+# the walking network in a separate routing graph. Station entrances are also rail access
+# points for the transit distances.
+entrances:
+  exclude_values: [garage, emergency, "no", service]
+  station_within_m: 300   # an entrance belongs to the nearest station this close
+  node_snap_m: 10         # join an entrance to an existing node this close
+  max_link_m: 30          # else to the nearest edge this close, splitting it
+
+# Building shade on each segment per sun position (src/features/shade.py).
+shade:
+  azimuth_step_deg: 30
+  # The sun counts as down below the first edge (fully shaded, no rows).
+  elevation_edges_deg: [5, 10, 20, 30, 45, 60, 90]
+  step_m: 5                # sample points along each segment
+  level_height_m: 3.0      # OSM: building:levels x this when there is no height tag
+  default_height_m: 9.0    # OSM: assumed when neither is tagged (a labelled assumption)
+  # A site's own heights, for the Melbourne-rich variant. Paths are under data/raw/.
+  city_heights:
+    melbourne:
+      path: melbourne_portal/2023-building-footprints.geojson
+      height_field: footprint_extrusion   # metres from the footprint's base to its top
+    neu_boston:
+      path: boston_buildings/neu_boston_buildings.geojson
+      height_field: BLDG_HGT_2010
+      scale: 0.3048                       # feet to metres
+
+# Event features (src/features/events.py): from AFL games at the MCG and Marvel and the log
+# in configs/events.yaml, for the sites listed here.
+events:
+  sites: [melbourne]
+  pre_hours: 2
+  post_hours: 2
+  # How long an event lasts when its source gives no end time (a labelled assumption; a log
+  # row's duration_h overrides it).
+  default_hours: {afl: 3, cricket: 7, football: 2, basketball: 2.5, netball: 2,
+                  concert: 3, graduation: 3, halloween: 3}
+  max_distance_m: 3000   # walking distances beyond this count as "not near an event"
+  venue_reach_m: 50      # graph nodes this close to a venue's outline reach it
+
+# Within-hour profiles from the per-minute archive (src/features/minute_profiles.py).
+minute_profiles:
+  sum_tolerance: 0.05     # an hour is kept when its minutes add up to the hourly count within 5% (or 2 people)
+  min_hour_count: 30      # quieter hours give noisy shares and are left out
+  # A sensor whose rows fall on minutes :00, :05, ... at least this often reports 5-minute blocks.
+  five_minute_share: 0.99
+  # With at least this many rows, a 5-minute block with no row at all is one the portal never
+  # publishes for that sensor (eight sensors never publish minutes :00-:04), so it is left out.
+  gap_min_rows: 300
+
+# Surroundings of each segment (src/features/surroundings.py). Paths are under data/raw/; a
+# site without a file gets empty columns for it.
+surroundings:
+  landcover_radius_m: 50
+  slope_step_m: 10        # the same along every DEM, whatever its resolution
+  canopy_buffer_m: 25
+  jobs_radii_m: [400, 800]
+  business_radii_m: [200, 400]
+  snap_m: 100             # blocks and businesses farther than this from the graph are dropped
+  sites:
+    melbourne:
+      worldcover: worldcover/melbourne_worldcover_2021.tif
+      dem: dem/melbourne_ga_lidar_5m.tif
+      dem_nodata: 0         # the tile fills ground outside the survey with 0
+      canopy: melbourne_portal/tree-canopies-2021-urban-forest.geojson
+      clue_blocks: melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson
+      clue_jobs: melbourne_portal/employment-by-block-by-clue-industry.parquet
+      businesses: melbourne_portal/business-establishments-with-address-and-industry-classification.parquet
+    neu_boston:
+      worldcover: worldcover/neu_boston_worldcover_2021.tif
+      dem: dem/neu_boston_usgs_3dep_1m.tif
+    nyc:
+      worldcover: worldcover/nyc_worldcover_2021.tif
+      dem: dem/nyc_usgs_3dep_10m.tif
+
 network_metrics:
   radii_m: [400, 800, 1600]
   workers: 8              # processes for the source loop; 0 = os.cpu_count()
+  # The segment stage stops at once above this (src/features/segment_features.py, preflight):
+  # the NYC clip's 594,712 segments peaked at 4.8 GB, and the Docker VM has 8 GB.
+  max_segments: 800000
 
 sensor_match:
   search_radius_m: 30
@@ -125,12 +229,10 @@ sensor_steepness:
   local_radius_m: 25     # length-weighted mean slope over sections this close
   dem_offset_m: 10       # DEM fallback: terrain slope from samples this far to each side
 
-# Within-hour profiles from the per-minute archive (src/features/minute_profiles.py).
-minute_profiles:
-  sum_tolerance: 0.05     # an hour is kept when its minutes add up to the hourly count within 5% (or 2 people)
-  min_hour_count: 30      # quieter hours give noisy shares and are left out
-  # A sensor whose rows fall on minutes :00, :05, ... at least this often reports 5-minute blocks.
-  five_minute_share: 0.99
-  # With at least this many rows, a 5-minute block with no row at all is one the portal never
-  # publishes for that sensor (eight sensors never publish minutes :00-:04), so it is left out.
-  gap_min_rows: 300
+# Training frame (src/features/training_frame.py): splits by location for every model.
+training_frame:
+  folds: 5
+  seed: 7
+  # Sensors within this distance of each other share a group, so neighbours on one street are
+  # never split between training and testing.
+  group_radius_m: 200

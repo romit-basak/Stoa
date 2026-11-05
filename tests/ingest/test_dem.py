@@ -74,7 +74,7 @@ def test_us_site_gets_a_3dep_clip_with_exact_1m_pixels(calls):
 
     xmin, ymin, xmax, ymax = map(float, params["bbox"].split(","))
     width, height = map(int, params["size"].split(","))
-    res = CFG["dem"]["usgs_3dep_res_m"]
+    res = CFG["sites"]["neu_boston"]["dem"]["res_m"]
     # The bbox is widened to whole pixels, so each pixel is exactly res metres.
     assert math.isclose((xmax - xmin) / width, res)
     assert math.isclose((ymax - ymin) / height, res)
@@ -88,3 +88,24 @@ def test_dag_and_sensor_steepness_look_for_the_file_dem_writes():
     steepness = (REPO_ROOT / "src" / "features" / "sensor_steepness.py").read_text()
     assert "dem/melbourne_ga_lidar_5m.tif" in dag
     assert re.search(r"_ga_lidar_5m\.tif", steepness)
+
+
+def test_a_large_clip_is_requested_in_tiles_that_cover_it():
+    parts = dem.tiles(0.0, 0.0, 4500, 3000, 10.0, 2000)
+    assert len(parts) == 6  # 3 across, 2 up
+    assert max(w for _, _, w, _, _ in parts) <= 2000
+    assert sum(w * h for _, _, w, h, _ in parts) == 4500 * 3000
+    # The tiles sit on one grid: each starts where the previous one ends.
+    assert sorted({x for x, _, _, _, _ in parts}) == [0.0, 20000.0, 40000.0]
+
+
+def test_neu_stays_one_request_and_nyc_comes_in_tiles():
+    assert len(dem.tiles(0.0, 0.0, 1950, 2268, 1.0, 2500)) == 1
+    assert len(dem.tiles(0.0, 0.0, 3600, 3500, 10.0, 2500)) == 4
+
+
+def test_a_site_without_a_dem_source_fails_loudly(calls, monkeypatch):
+    sites = {**CFG["sites"], "nowhere": {"bbox": [0, 0, 1, 1]}}
+    monkeypatch.setattr(dem, "load_config", lambda: {**CFG, "sites": sites})
+    with pytest.raises(SystemExit, match="dem.source"):
+        calls("nowhere")

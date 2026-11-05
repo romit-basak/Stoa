@@ -67,7 +67,7 @@ flow:
     train_rows: 200000
 
   # Selection after the bias check (src/models/flow/select.py): candidates within
-  # `tolerance` of the best mae_log_cv are compared on their worst slice (WAPE of the worst
+  # `tolerance` of the best log_mae_cv are compared on their worst slice (WAPE of the worst
   # group over overall WAPE, over the slices in configs/bias.yaml), and the fairest wins.
   selection:
     tolerance: 0.03
@@ -79,8 +79,8 @@ flow:
   # Deployment gates (docs/PROJECT_CONTEXT.md, "Decided success criteria"). Checked by
   # src/models/flow/registry.py before a model is registered.
   gates:
-    # mae_log_cv at least this much lower than baseline_space_syntax on the same data version.
-    mae_log_improvement: 0.15
+    # log_mae_cv at least this much lower than baseline_space_syntax on the same data version.
+    log_mae_improvement: 0.15
     coverage80: [0.75, 0.85]
     # Variants that must pass for the gate task to succeed; others are registered only if
     # they pass, and reported either way.

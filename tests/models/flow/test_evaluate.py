@@ -3,6 +3,9 @@ import pandas as pd
 import pytest
 
 from src.models.flow.evaluate import (
+    calibrated_cv_metrics,
+    coverage,
+    cv_coverage,
     cv_metrics,
     log_mae,
     score,
@@ -126,3 +129,52 @@ def test_holdout_rows_are_refused_by_the_fold_scores():
     y = np.array([5.0, 6.0])
     with pytest.raises(ValueError):
         cv_metrics(rows_for([1, 2]), y, y, np.array([0, -1]))
+
+
+def test_coverage_counts_the_hours_inside_the_interval():
+    y = np.array([5.0, 10, 15, 20])
+    assert coverage(y, y - 1, y + 1) == 1.0
+    assert coverage(y, np.full(4, 8.0), np.full(4, 16.0)) == 0.5
+    assert coverage(y, y + 1, y + 2) == 0.0
+
+
+def test_coverage_refuses_bad_input():
+    with pytest.raises(ValueError):
+        coverage(np.array([1.0]), np.array([0.0, 0.0]), np.array([2.0]))
+    with pytest.raises(ValueError):
+        coverage(np.array([]), np.array([]), np.array([]))
+    with pytest.raises(ValueError):
+        coverage(np.array([1.0]), np.array([np.nan]), np.array([2.0]))
+
+
+def test_coverage_is_scored_per_fold_and_averaged():
+    y = np.array([5.0, 5, 5, 5])
+    low = np.array([4.0, 4, 6, 4])
+    high = np.full(4, 6.0)
+    m = cv_coverage(y, low, high, np.array([0, 0, 1, 1]))
+    assert m == {
+        "coverage80_fold0": 1.0,
+        "coverage80_fold1": 0.5,
+        "coverage80_cv": 0.75,
+    }
+    with pytest.raises(ValueError):
+        cv_coverage(y, low, high, np.array([0, 0, 1, -1]))
+
+
+def test_calibration_fixes_a_constant_scale_and_scores_only_later_hours():
+    ts = pd.Series(
+        pd.to_datetime(
+            ["2026-01-01", "2026-01-10", "2026-02-15", "2026-03-01"] * 2, utc=True
+        )
+    )
+    rows = pd.DataFrame({"location_id": np.repeat([1, 2], 4), "ts_utc": ts})
+    y = np.array([10.0, 20, 30, 40, 50, 60, 70, 80])
+    folds = np.repeat([0, 1], 4)
+    m = calibrated_cv_metrics(rows, y, 3 * y, folds, 28)
+    assert m["wape_cv_cal"] == pytest.approx(0.0, abs=1e-12)
+    assert m["log_mae_cv_cal"] == pytest.approx(0.0, abs=1e-12)
+    assert set(m) == {f"{k}_cal" for k in cv_metrics(rows, y, y, folds)}
+    # The window hours are left out: two later hours per sensor are scored.
+    assert m["wape_fold0_cal"] == 0.0
+    with pytest.raises(ValueError):
+        calibrated_cv_metrics(rows, y[:-1], 3 * y[:-1], folds[:-1], 28)

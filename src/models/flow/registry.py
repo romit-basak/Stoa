@@ -12,7 +12,7 @@ rollback moves `champion` back to `previous`.
 
 The gate (configs/models.yaml, flow.gates) compares the latest selected run with the latest
 baseline_space_syntax run on the same data version (stoa.dvc.processed) and fold plan
-(stoa.plan): mae_log_cv must be at least 15% lower, and coverage80_cv within [0.75, 0.85].
+(stoa.plan): log_mae_cv must be at least 15% lower, and coverage80_cv within [0.75, 0.85].
 If a variant in `required_variants` fails, nothing is registered and the command exits 1;
 other variants that fail are reported and left out.
 
@@ -63,16 +63,16 @@ def evaluate_gate(
     """(passed, reasons it failed, improvement over Space Syntax) from the runs' metrics."""
     reasons = []
     improvement = None
-    if baseline is None or not baseline.get("mae_log_cv"):
+    if baseline is None or not baseline.get("log_mae_cv"):
         reasons.append(
             "no baseline_space_syntax run on the same data version and fold plan"
         )
     else:
-        improvement = 1 - selected["mae_log_cv"] / baseline["mae_log_cv"]
-        if improvement < gates["mae_log_improvement"]:
+        improvement = 1 - selected["log_mae_cv"] / baseline["log_mae_cv"]
+        if improvement < gates["log_mae_improvement"]:
             reasons.append(
-                f"mae_log_cv is {improvement:.1%} below Space Syntax "
-                f"(needs {gates['mae_log_improvement']:.0%})"
+                f"log_mae_cv is {improvement:.1%} below Space Syntax "
+                f"(needs {gates['log_mae_improvement']:.0%})"
             )
     low, high = gates["coverage80"]
     cov = selected.get("coverage80_cv")

@@ -15,6 +15,9 @@ src/features/training_frame.py). The rules are fixed before any model is trained
 - Event days, other days and each era are also scored on their own (`standard_parts`).
 - The holdout precincts are scored once, for the final model only, with the same `score`;
   `cv_metrics` refuses their rows.
+- A model's 80% interval is scored by how many counts fall inside it (`cv_coverage`), and
+  per-site calibration by the fold scores after scaling each sensor to its first weeks of
+  counts (`calibrated_cv_metrics`, names ending in `_cal`).
 
 Per-slice errors for the bias report come from src.bias.slice_errors.slice_errors, given the
 same predictions.
@@ -26,7 +29,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from src.bias.slice_errors import bias_share, calibration_window, mae, wape
+from src.bias.slice_errors import bias_share, calibrate, calibration_window, mae, wape
 from src.bias.slices import era
 
 
@@ -130,3 +133,74 @@ def score_parts(
         name: score(rows[m], y[m], pred[m]) if m.any() else {"rows": 0, "sensors": 0}
         for name, m in parts.items()
     }
+
+
+def coverage(y: np.ndarray, low: np.ndarray, high: np.ndarray) -> float:
+    """Share of counts inside [low, high]: about 0.8 for good 10% and 90% quantiles."""
+    y, low, high = (np.asarray(a, dtype=float) for a in (y, low, high))
+    if not len(y) == len(low) == len(high):
+        raise ValueError(
+            f"{len(y)} counts, {len(low)} lower and {len(high)} upper bounds"
+        )
+    if len(y) == 0:
+        raise ValueError("nothing to score")
+    if not (np.isfinite(low).all() and np.isfinite(high).all()):
+        raise ValueError("interval bounds must be finite")
+    return float(((y >= low) & (y <= high)).mean())
+
+
+def cv_coverage(
+    y: np.ndarray,
+    low: np.ndarray,
+    high: np.ndarray,
+    folds: np.ndarray,
+    name: str = "coverage80",
+) -> dict[str, float]:
+    """Each location fold's interval coverage and their mean: `coverage80_fold0`, `_cv`.
+
+    Holdout rows (fold -1) are refused, as in `cv_metrics`.
+    """
+    y, low, high, folds = (
+        np.asarray(y, float),
+        np.asarray(low, float),
+        np.asarray(high, float),
+        np.asarray(folds),
+    )
+    if len(folds) != len(y) or len(folds) == 0:
+        raise ValueError(f"{len(y)} counts and {len(folds)} folds")
+    if (folds < 0).any():
+        raise ValueError("holdout rows (fold -1) can't be scored with the folds")
+    out: dict[str, float] = {}
+    for k in np.unique(folds):
+        m = folds == k
+        out[f"{name}_fold{int(k)}"] = coverage(y[m], low[m], high[m])
+    out[f"{name}_cv"] = float(np.mean(list(out.values())))
+    return out
+
+
+def calibrated_cv_metrics(
+    rows: pd.DataFrame,
+    y: np.ndarray,
+    pred: np.ndarray,
+    folds: np.ndarray,
+    calibration_days: float,
+) -> dict[str, float]:
+    """`cv_metrics` after per-site calibration, each name ending in `_cal`: `log_mae_cv_cal`.
+
+    Each sensor's predictions are scaled so they add up to its counts in its first
+    calibration_days (CLAUDE.md, "shape vs. scale"), then scored on the hours after that
+    window: the hours `scored_mask` keeps for the uncalibrated scores. `rows` needs
+    `location_id` and `ts_utc`, and covers the window hours too.
+    """
+    y, pred, folds = (np.asarray(y, float), np.asarray(pred, float), np.asarray(folds))
+    if not len(rows) == len(y) == len(pred) == len(folds):
+        raise ValueError(
+            f"{len(rows)} rows, {len(y)} counts, {len(pred)} predictions "
+            f"and {len(folds)} folds"
+        )
+    sensors = rows["location_id"].to_numpy()
+    window = calibration_window(sensors, rows["ts_utc"], calibration_days)
+    cal = calibrate(pred, y, sensors, window)
+    keep = ~window
+    m = cv_metrics(rows[keep], y[keep], cal[keep], folds[keep])
+    return {f"{k}_cal": v for k, v in m.items()}

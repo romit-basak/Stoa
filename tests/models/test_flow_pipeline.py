@@ -65,9 +65,16 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
 
     sel = json.loads((out / "rich" / "selected.json").read_text())
     assert sel["family"] in FAMILIES
-    assert {"mae_log_cv", "coverage80_cv", "wape_holdout", "worst_slice_ratio"} <= set(
-        sel["metrics"]
-    )
+    assert {
+        "log_mae_cv",
+        "log_mae_cv_cal",
+        "coverage80_cv",
+        "coverage80_fold0",
+        "log_mae_holdout",
+        "wape_holdout",
+        "worst_slice_ratio",
+        "log_mae_other_days",
+    } <= set(sel["metrics"])
     for name in ("ranking.csv", "model_comparison.png", "calibration_curve.png"):
         assert (out / "rich" / "selected" / name).exists()
 

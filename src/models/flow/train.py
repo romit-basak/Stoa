@@ -40,7 +40,31 @@ from src.models.flow import baselines, candidates
 from src.models.flow import data as flow_data
 from src.models.flow import tune as flow_tune
 from src.models.flow.data import Data
-from src.models.flow.metrics import cv_metrics
+from src.models.flow.evaluate import calibrated_cv_metrics, cv_metrics, scored_mask
+
+
+def fold_rows(data: Data, plan: list[tuple[np.ndarray, np.ndarray]]) -> np.ndarray:
+    """Row positions of every fold's test rows, in fold order."""
+    return np.concatenate([t for _, t in plan])
+
+
+def fold_scores(
+    data: Data,
+    pred: np.ndarray,
+    plan: list[tuple[np.ndarray, np.ndarray]],
+    calibration_days: float,
+) -> dict[str, float]:
+    """src.models.flow.evaluate's fold scores of out-of-fold predictions, uncalibrated
+    (after each sensor's calibration window) and calibrated (`_cal`)."""
+    tested = fold_rows(data, plan)
+    rows = data.frame.hourly.iloc[tested][["location_id", "ts_utc"]].reset_index(
+        drop=True
+    )
+    y, p, folds = data.y[tested], pred[tested], data.fold[tested]
+    keep = scored_mask(rows["location_id"].to_numpy(), rows["ts_utc"], calibration_days)
+    out = cv_metrics(rows[keep], y[keep], p[keep], folds[keep])
+    out.update(calibrated_cv_metrics(rows, y, p, folds, calibration_days))
+    return out
 
 
 def plan_tag(n_folds: int, train_rows: int, seed: int) -> str:
@@ -108,9 +132,7 @@ def train_variant(
     preds, seconds = oof_candidates(data, families, params, plan, fcfg["seed"])
     models: dict[str, Any] = {}
     for f in families:
-        metrics = cv_metrics(
-            data.y, preds[f], plan, data.sensors, data.ts, fcfg["calibration_days"]
-        )
+        metrics = fold_scores(data, preds[f], plan, fcfg["calibration_days"])
         run_id = log_run(
             f"{f}_{data.variant}",
             {**params[f], "variant": data.variant, "family": f},
@@ -124,15 +146,15 @@ def train_variant(
         )
         models[f] = {"run_id": run_id, "params": params[f], "metrics": metrics}
         log.info(
-            "%s_%s: mae_log_cv %.3f, wape_cv %.3f",
+            "%s_%s: log_mae_cv %.3f, wape_cv %.3f",
             f,
             data.variant,
-            metrics["mae_log_cv"],
+            metrics["log_mae_cv"],
             metrics["wape_cv"],
         )
 
     out.mkdir(parents=True, exist_ok=True)
-    tested = np.concatenate([t for _, t in plan])
+    tested = fold_rows(data, plan)
     oof = pd.DataFrame(
         {
             "row": tested,
@@ -202,9 +224,7 @@ def run(
             reference = data.sensors
             baseline_preds = oof_baselines(data, plan)
             for name, p in baseline_preds.items():
-                metrics = cv_metrics(
-                    data.y, p, plan, data.sensors, data.ts, fcfg["calibration_days"]
-                )
+                metrics = fold_scores(data, p, plan, fcfg["calibration_days"])
                 bparams = {
                     "rung": name.removeprefix("baseline_"),
                     "ridge_alpha": "leave-one-sensor-out",
@@ -221,7 +241,7 @@ def run(
                     metrics,
                 )
                 baseline_runs[name] = {"run_id": run_id, "metrics": metrics}
-                log.info("%s: mae_log_cv %.3f", name, metrics["mae_log_cv"])
+                log.info("%s: log_mae_cv %.3f", name, metrics["log_mae_cv"])
         elif not np.array_equal(reference, data.sensors):
             raise ValueError("the variants' training frames have different rows")
 

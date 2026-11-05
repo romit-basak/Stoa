@@ -1,6 +1,6 @@
 """Optuna search over one candidate family's hyperparameters (TPE sampler).
 
-Trials are scored by mae_log on inner folds: the fold sensors split again by their spatial
+Trials are scored by log MAE on inner folds: the fold sensors split again by their spatial
 group, on a smaller row sample. Holdout precincts never enter. Tuned and untuned runs are scored
 on the same outer folds, which the inner folds also draw from, so tuned *_cv metrics are a
 little optimistic; the default (untuned) parameters in configs/models.yaml avoid that.
@@ -19,7 +19,7 @@ from sklearn.model_selection import GroupKFold
 
 from src.models.flow import candidates
 from src.models.flow.data import Data
-from src.models.flow.metrics import mae_log
+from src.models.flow.evaluate import log_mae
 
 
 def suggest(trial: Any, space: dict[str, Any]) -> dict[str, Any]:
@@ -83,11 +83,11 @@ def tune(
         losses = []
         for x_tr, x_te, tr, te in built:
             model = candidates.make(family, params, fcfg["seed"]).fit(x_tr, y[tr])
-            losses.append(mae_log(y[te], candidates.predict(model, x_te)))
+            losses.append(log_mae(y[te], candidates.predict(model, x_te)))
         loss = float(np.mean(losses))
         with mlflow.start_run(run_name=f"trial_{trial.number}", nested=True):
             mlflow.log_params(params)
-            mlflow.log_metric("mae_log_inner", loss)
+            mlflow.log_metric("log_mae_inner", loss)
         return loss
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -97,7 +97,7 @@ def tune(
     study.optimize(objective, n_trials=n_trials or tcfg["n_trials"])
     best = {**spec["params"], **study.best_params}
     mlflow.log_params({f"best_{k}": v for k, v in study.best_params.items()})
-    mlflow.log_metric("mae_log_inner_best", study.best_value)
+    mlflow.log_metric("log_mae_inner_best", study.best_value)
     if len(study.trials) > 1:
         try:
             importance = optuna.importance.get_param_importances(study)

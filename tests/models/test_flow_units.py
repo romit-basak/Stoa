@@ -1,4 +1,7 @@
-"""Unit tests for the flow model's folds, metrics, baselines, candidates and selection rule."""
+"""Unit tests for the flow model's folds, fold scores, baselines, candidates and selection.
+
+The scoring functions themselves are tested in tests/models/flow/test_evaluate.py.
+"""
 
 from __future__ import annotations
 
@@ -8,13 +11,7 @@ import pytest
 
 from src.models.flow import baselines, candidates, select
 from src.models.flow.data import final_rows, fold_plan
-from src.models.flow.metrics import (
-    calibration_curve,
-    coverage,
-    cv_metrics,
-    mae_log,
-    wape,
-)
+from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
 
 # --- folds ----------------------------------------------------------------------------------
@@ -48,30 +45,23 @@ def test_final_rows_exclude_holdouts(data):
     assert (data.fold[rows] >= 0).all()
 
 
-# --- metrics --------------------------------------------------------------------------------
+# --- fold scores --------------------------------------------------------------------------
 
 
-def test_metrics():
-    y = np.array([10.0, 20.0, 30.0])
-    assert wape(y, y) == 0 and mae_log(y, y) == 0
-    assert wape(y, 2 * y) == pytest.approx(1.0)
-    assert coverage(y, y - 1, y + 1) == 1.0
-    assert coverage(y, y + 1, y + 2) == 0.0
+def test_fold_scores_use_her_names_and_the_calibrated_hours(data):
+    from src.models.flow.train import fold_scores
 
-
-def test_cv_metrics_names(data):
     plan = fold_plan(data.fold, 10_000, 7)
-    m = cv_metrics(data.y, data.y * 1.1, plan, data.sensors, data.ts, 3)
-    assert {"wape_cv", "mae_cv", "rmse_cv", "mae_log_cv", "wape_cv_cal"} <= set(m)
+    m = fold_scores(data, data.y * 1.1, plan, 3)
+    assert {"wape_cv", "mae_cv", "rmse_cv", "log_mae_cv", "wape_cv_cal"} <= set(m)
     assert {f"wape_fold{k}" for k in range(3)} <= set(m)
     assert m["wape_cv"] == pytest.approx(0.1, rel=1e-6)
     assert m["wape_cv_cal"] < 0.01  # one scale per sensor fixes a constant 10% bias
 
 
 def test_calibration_curve_rescales_the_other_sensors(data):
-    curve = calibration_curve(
-        data.y, 2 * data.y, data.sensors, data.ts, 3, [1, 3], 3, 0
-    )
+    rows = data.frame.hourly[["location_id", "ts_utc"]]
+    curve = select.calibration_curve(rows, data.y, 2 * data.y, 3, [1, 3], 3, 0)
     by_k = curve.groupby("k")["wape"].mean()
     assert by_k[0] == pytest.approx(1.0)
     assert by_k[1] < 0.01 and by_k[3] < 0.01
@@ -102,7 +92,7 @@ def test_network_terms_help_when_they_drive_the_counts(data):
             data.frame.hourly, osm, test
         )
     rung1 = baselines.oof("betweenness", data.frame.hourly, osm, data.y, plan)
-    assert mae_log(data.y[tested], rung1[tested]) < mae_log(
+    assert log_mae(data.y[tested], rung1[tested]) < log_mae(
         data.y[tested], profile_only[tested]
     )
 
@@ -143,7 +133,7 @@ def test_selection_trades_a_little_accuracy_for_the_fairer_model():
         {
             "model": ["lgbm", "hgb", "xgb", "baseline_space_syntax"],
             "kind": ["candidate", "candidate", "candidate", "baseline"],
-            "mae_log_cv": [0.500, 0.510, 0.600, 0.700],
+            "log_mae_cv": [0.500, 0.510, 0.600, 0.700],
         }
     )
     short = select.shortlist(rank, tolerance=0.03)
@@ -174,13 +164,14 @@ def test_holdout_scores(data, fcfg):
         0,
         1,
     }  # two sensors: calibrate on one, score one
-    assert 0 < holdout < 1
+    assert set(holdout) == {"log_mae_holdout", "wape_holdout"}
+    assert 0 < holdout["wape_holdout"] < 1
 
 
 # --- gate -----------------------------------------------------------------------------------
 
 GATES = {
-    "mae_log_improvement": 0.15,
+    "log_mae_improvement": 0.15,
     "coverage80": [0.75, 0.85],
     "max_worst_slice_ratio": None,
 }
@@ -188,7 +179,7 @@ GATES = {
 
 def test_gate_passes():
     ok, reasons, imp = evaluate_gate(
-        {"mae_log_cv": 0.4, "coverage80_cv": 0.8}, {"mae_log_cv": 0.5}, GATES
+        {"log_mae_cv": 0.4, "coverage80_cv": 0.8}, {"log_mae_cv": 0.5}, GATES
     )
     assert ok and not reasons and imp == pytest.approx(0.2)
 
@@ -197,16 +188,16 @@ def test_gate_passes():
     "selected, baseline, why",
     [
         (
-            {"mae_log_cv": 0.45, "coverage80_cv": 0.8},
-            {"mae_log_cv": 0.5},
+            {"log_mae_cv": 0.45, "coverage80_cv": 0.8},
+            {"log_mae_cv": 0.5},
             "below Space Syntax",
         ),
         (
-            {"mae_log_cv": 0.4, "coverage80_cv": 0.9},
-            {"mae_log_cv": 0.5},
+            {"log_mae_cv": 0.4, "coverage80_cv": 0.9},
+            {"log_mae_cv": 0.5},
             "coverage80_cv",
         ),
-        ({"mae_log_cv": 0.4, "coverage80_cv": 0.8}, None, "no baseline"),
+        ({"log_mae_cv": 0.4, "coverage80_cv": 0.8}, None, "no baseline"),
     ],
 )
 def test_gate_fails(selected, baseline, why):
@@ -216,6 +207,6 @@ def test_gate_fails(selected, baseline, why):
 
 def test_gate_can_block_on_bias():
     gates = {**GATES, "max_worst_slice_ratio": 2.0}
-    selected = {"mae_log_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
-    ok, reasons, _ = evaluate_gate(selected, {"mae_log_cv": 0.5}, gates)
+    selected = {"log_mae_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
+    ok, reasons, _ = evaluate_gate(selected, {"log_mae_cv": 0.5}, gates)
     assert not ok and "worst slice" in reasons[0]

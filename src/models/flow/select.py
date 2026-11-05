@@ -4,7 +4,7 @@ Usage: python -m src.models.flow.select [--variant rich|portable|both] [--output
        [--final-train-rows N]
 
 Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flow.train, then:
-1. ranks the candidates by mae_log_cv (the success criterion);
+1. ranks the candidates by log_mae_cv (the success criterion);
 2. for those within `selection.tolerance` of the best, measures WAPE per slice of their
    out-of-fold predictions with the bias slices of configs/bias.yaml (src/bias: Fairlearn
    MetricFrame, sensor-bootstrap intervals). The candidate whose worst slice is least worse
@@ -12,7 +12,8 @@ Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flo
    group;
 3. fits the winner's 10% and 90% quantile models on the same folds, for coverage80_cv;
 4. fits the winner and its interval models on every fold sensor, and scores the holdout
-   precincts (never seen until now), the event days, the calibration curve and the feature
+   precincts (never seen until now), the event days, other days and eras
+   (src.models.flow.evaluate.standard_parts), the calibration curve and the feature
    importance;
 5. logs it as `<family>_<variant>` with stoa.role = selected: the three models, the ranking,
    the slice table and the comparison charts.
@@ -38,7 +39,14 @@ from src.models import tracking
 from src.models.flow import candidates
 from src.models.flow import data as flow_data
 from src.models.flow.data import Data, calibration_window
-from src.models.flow.metrics import calibration_curve, cv_coverage, mae_log, wape
+from src.models.flow.evaluate import (
+    cv_coverage,
+    log_mae,
+    score,
+    score_parts,
+    scored_mask,
+    standard_parts,
+)
 
 # --------------------------------------------------------------------------------------------
 # Ranking and the bias check
@@ -46,7 +54,7 @@ from src.models.flow.metrics import calibration_curve, cv_coverage, mae_log, wap
 
 
 def ranking(summary: dict[str, Any]) -> pd.DataFrame:
-    """Candidates and baselines with their fold metrics, best mae_log_cv first."""
+    """Candidates and baselines with their fold metrics, best log_mae_cv first."""
     rows = []
     for kind, models in (
         ("candidate", summary["models"]),
@@ -54,13 +62,13 @@ def ranking(summary: dict[str, Any]) -> pd.DataFrame:
     ):
         for name, m in models.items():
             rows.append({"model": name, "kind": kind, **m["metrics"]})
-    return pd.DataFrame(rows).sort_values("mae_log_cv").reset_index(drop=True)
+    return pd.DataFrame(rows).sort_values("log_mae_cv").reset_index(drop=True)
 
 
 def shortlist(rank: pd.DataFrame, tolerance: float) -> list[str]:
     cand = rank[rank["kind"] == "candidate"]
-    best = float(cand["mae_log_cv"].min())
-    return cand.loc[cand["mae_log_cv"] <= best * (1 + tolerance), "model"].tolist()
+    best = float(cand["log_mae_cv"].min())
+    return cand.loc[cand["log_mae_cv"] <= best * (1 + tolerance), "model"].tolist()
 
 
 def slice_rows(oof: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict[str, Any]]:
@@ -114,9 +122,9 @@ def bias_check(
 
 
 def choose(rank: pd.DataFrame, worst: pd.DataFrame) -> str:
-    """The shortlisted candidate with the smallest worst-slice ratio (ties: lower mae_log)."""
-    merged = worst.merge(rank[["model", "mae_log_cv"]], on="model")
-    return str(merged.sort_values(["worst_slice_ratio", "mae_log_cv"]).iloc[0]["model"])
+    """The shortlisted candidate with the smallest worst-slice ratio (ties: lower log MAE)."""
+    merged = worst.merge(rank[["model", "log_mae_cv"]], on="model")
+    return str(merged.sort_values(["worst_slice_ratio", "log_mae_cv"]).iloc[0]["model"])
 
 
 # --------------------------------------------------------------------------------------------
@@ -163,22 +171,24 @@ def fit_final(
 
 def holdout_scores(
     data: Data, model: Any, calibration_days: float
-) -> tuple[pd.DataFrame, float]:
+) -> tuple[pd.DataFrame, dict[str, float]]:
     """Each holdout precinct's error, uncalibrated and calibrated on 1-2 of its sensors.
 
     Calibrating on k sensors: one scale from their first calibration_days of counts, applied
     to the precinct's other sensors and scored on their later hours, averaged over every choice
     of k sensors. The UniMelb edge is split at the Metro Tunnel opening (CLAUDE.md).
-    Returns the table and wape_holdout (uncalibrated, every holdout precinct row).
+    Returns the table and the uncalibrated scores of every holdout precinct row after the
+    calibration windows (`log_mae_holdout`, `wape_holdout`).
     """
     named = (data.holdout != "") & (data.holdout != "neighbour")
-    rows = np.flatnonzero(named)
-    if not len(rows):
-        return pd.DataFrame(), float("nan")
-    pred = candidates.predict(model, data.frame.matrix(rows))
-    y, sensors, precinct = data.y[rows], data.sensors[rows], data.holdout[rows]
-    window = calibration_window(sensors, data.ts.iloc[rows], calibration_days)
-    post = data.frame.hourly["post_metro_tunnel"].to_numpy(dtype=bool)[rows]
+    idx = np.flatnonzero(named)
+    if not len(idx):
+        return pd.DataFrame(), {}
+    pred = candidates.predict(model, data.frame.matrix(idx))
+    rows = data.frame.hourly.iloc[idx][["location_id"]].reset_index(drop=True)
+    y, sensors, precinct = data.y[idx], data.sensors[idx], data.holdout[idx]
+    window = calibration_window(sensors, data.ts.iloc[idx], calibration_days)
+    post = data.frame.hourly["post_metro_tunnel"].to_numpy(dtype=bool)[idx]
     out = []
     for name in sorted(set(precinct)):
         in_p = precinct == name
@@ -195,14 +205,9 @@ def holdout_scores(
                     fit = mask & np.isin(sensors, chosen) & window
                     p_sum = float(pred[fit].sum())
                     scale = float(y[fit].sum()) / p_sum if k and p_sum > 0 else 1.0
-                    scored = mask & ~np.isin(sensors, chosen) & ~window
-                    if scored.any():
-                        scores.append(
-                            (
-                                wape(y[scored], scale * pred[scored]),
-                                mae_log(y[scored], scale * pred[scored]),
-                            )
-                        )
+                    m = mask & ~np.isin(sensors, chosen) & ~window
+                    if m.any():
+                        scores.append(score(rows[m], y[m], scale * pred[m]))
                 if scores:
                     out.append(
                         {
@@ -210,17 +215,29 @@ def holdout_scores(
                             "period": part,
                             "calibrated_on": k,
                             "sensors": len(ids),
-                            "wape": float(np.mean([s[0] for s in scores])),
-                            "mae_log": float(np.mean([s[1] for s in scores])),
+                            "log_mae": float(np.mean([s["log_mae"] for s in scores])),
+                            "wape": float(np.mean([s["wape"] for s in scores])),
                         }
                     )
-    return pd.DataFrame(out), wape(y, pred)
+    s = score(rows[~window], y[~window], pred[~window])
+    return pd.DataFrame(out), {
+        "log_mae_holdout": s["log_mae"],
+        "wape_holdout": s["wape"],
+    }
 
 
-def event_day_scores(
-    data: Data, oof: pd.DataFrame, pred: np.ndarray
-) -> dict[str, float]:
-    """Out-of-fold WAPE on event days and on other days, reported apart (CLAUDE.md)."""
+def part_scores(
+    data: Data, oof: pd.DataFrame, pred: np.ndarray, calibration_days: float
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Out-of-fold scores on event days, other days and each era, reported apart (CLAUDE.md).
+
+    The parts come from src.models.flow.evaluate.standard_parts, with the eras of
+    configs/bias.yaml and the event days the training frame lists, on the hours after each
+    sensor's calibration window. Returns one row per part and the metrics to log, named
+    `log_mae_<part>` and `wape_<part>`.
+    """
+    from src.bias.slices import load_bias_config
+
     path = (
         REPO_ROOT
         / load_features_config()["processed_dir"]
@@ -228,18 +245,70 @@ def event_day_scores(
         / data.site
         / "event_days.parquet"
     )
-    if not path.exists():
-        return {}
-    days = pd.to_datetime(pd.read_parquet(path)["date_local"]).dt.normalize()
-    dates = pd.to_datetime(data.frame.hourly["date_local"].to_numpy()[oof["row"]])
-    on = np.isin(dates.normalize(), days.to_numpy())
-    y = oof["y"].to_numpy(dtype=float)
-    out = {}
-    if on.any():
-        out["wape_cv_event_days"] = wape(y[on], pred[on])
-    if (~on).any():
-        out["wape_cv_other_days"] = wape(y[~on], pred[~on])
-    return out
+    event_dates = (
+        pd.read_parquet(path)["date_local"]
+        if path.exists()
+        else pd.Series([], dtype="datetime64[us]")
+    )
+    tested = oof["row"].to_numpy()
+    rows = data.frame.hourly.iloc[tested][["location_id", "ts_utc", "date_local"]]
+    rows = rows.reset_index(drop=True)
+    keep = scored_mask(rows["location_id"].to_numpy(), rows["ts_utc"], calibration_days)
+    rows = rows[keep].reset_index(drop=True)
+    y = oof["y"].to_numpy(dtype=float)[keep]
+    parts = standard_parts(rows, event_dates, load_bias_config()["eras"])
+    scored = score_parts(rows, y, pred[keep], parts)
+    table = pd.DataFrame([{"part": name, **s} for name, s in scored.items()])
+    metrics = {
+        f"{m}_{name}": float(s[m])
+        for name, s in scored.items()
+        if s["rows"]
+        for m in ("log_mae", "wape")
+    }
+    return table, metrics
+
+
+def calibration_curve(
+    rows: pd.DataFrame,
+    y: np.ndarray,
+    pred: np.ndarray,
+    calibration_days: float,
+    ks: list[int],
+    reps: int,
+    seed: int,
+) -> pd.DataFrame:
+    """Error on the other sensors after scaling the model to k sensors' first weeks of counts.
+
+    One scale for the whole site, from the k sensors' calibration windows, applied to every
+    other sensor and scored with src.models.flow.evaluate.score on their hours after the
+    window. k = 0 is the uncalibrated model. `rows` (location_id, ts_utc) are out-of-fold, so
+    no sensor is scored by a model that trained on it.
+    """
+    rng = np.random.default_rng(seed)
+    sensors = rows["location_id"].to_numpy()
+    window = calibration_window(sensors, rows["ts_utc"], calibration_days)
+    ids = np.unique(sensors)
+    out = []
+    for k in [0, *ks]:
+        if k >= len(ids):
+            continue
+        for rep in range(reps if k else 1):
+            chosen = rng.choice(ids, size=k, replace=False) if k else ids[:0]
+            fit = np.isin(sensors, chosen) & window
+            p_sum = float(pred[fit].sum())
+            scale = float(y[fit].sum()) / p_sum if k and p_sum > 0 else 1.0
+            m = ~np.isin(sensors, chosen) & ~window
+            s = score(rows[m], y[m], scale * pred[m])
+            out.append(
+                {
+                    "k": k,
+                    "rep": rep,
+                    "scale": scale,
+                    "log_mae": s["log_mae"],
+                    "wape": s["wape"],
+                }
+            )
+    return pd.DataFrame(out)
 
 
 def importance(
@@ -260,14 +329,14 @@ def importance(
             "SHAP unavailable for this model (%s); using permutation importance", e
         )
 
-        def neg_mae_log(yt: np.ndarray, yp: np.ndarray) -> float:
-            return -mae_log(yt, yp)
+        def neg_log_mae(yt: np.ndarray, yp: np.ndarray) -> float:
+            return -log_mae(yt, np.maximum(yp, 0.0))
 
         res = permutation_importance(
             model,
             x,
             y,
-            scoring=make_scorer(neg_mae_log),
+            scoring=make_scorer(neg_log_mae),
             n_repeats=3,
             random_state=seed,
         )
@@ -292,12 +361,12 @@ def comparison_chart(
     import matplotlib.pyplot as plt
 
     fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4.5))
-    order = rank.sort_values("mae_log_cv", ascending=False)
+    order = rank.sort_values("log_mae_cv", ascending=False)
     colors = [
         "#c0392b" if m == winner else ("#95a5a6" if k == "baseline" else "#2e86c1")
         for m, k in zip(order["model"], order["kind"])
     ]
-    a.barh(order["model"], order["mae_log_cv"], color=colors)
+    a.barh(order["model"], order["log_mae_cv"], color=colors)
     a.set_xlabel("MAE on log counts, mean over location folds (lower is better)")
     a.set_title("Candidates (blue), baselines (grey), selected (red)")
     w = worst.sort_values("worst_slice_ratio", ascending=False)
@@ -342,7 +411,7 @@ def importance_chart(table: pd.DataFrame, method: str, path: Path) -> None:
     fig, ax = plt.subplots(figsize=(7, 7))
     ax.barh(top["feature"], top["importance"])
     ax.set_xlabel(
-        "mean |SHAP|" if method == "shap" else "permutation importance (mae_log)"
+        "mean |SHAP|" if method == "shap" else "permutation importance (log MAE)"
     )
     fig.tight_layout()
     fig.savefig(path, dpi=140)
@@ -393,24 +462,27 @@ def select_variant(
         raise ValueError("oof.parquet doesn't match the training frame; rerun train")
     q = scfg["intervals"]
     low, high = oof_intervals(data, winner, params, plan, q, seed)
-    cover = cv_coverage(data.y, low, high, plan)
+    tested = oof["row"].to_numpy()
+    oof_rows = data.frame.hourly.iloc[tested][["location_id", "ts_utc"]]
+    oof_rows = oof_rows.reset_index(drop=True)
+    keep = scored_mask(
+        oof_rows["location_id"].to_numpy(), oof_rows["ts_utc"], fcfg["calibration_days"]
+    )
+    scored = tested[keep]
+    cover = cv_coverage(data.y[scored], low[scored], high[scored], data.fold[scored])
 
     rows = flow_data.final_rows(
         data.fold, final_train_rows or fcfg["final_train_rows"], seed
     )
     models = fit_final(data, winner, params, q, rows, seed)
-    precincts, wape_holdout = holdout_scores(
-        data, models["model"], fcfg["calibration_days"]
-    )
+    precincts, holdout = holdout_scores(data, models["model"], fcfg["calibration_days"])
     pred = oof[winner].to_numpy(dtype=float)
-    events = event_day_scores(data, oof, pred)
+    parts, part_metrics = part_scores(data, oof, pred, fcfg["calibration_days"])
     ccfg = fcfg["calibration_curve"]
-    tested = oof["row"].to_numpy()
     curve = calibration_curve(
+        oof_rows,
         oof["y"].to_numpy(dtype=float),
         pred,
-        data.sensors[tested],
-        data.ts.iloc[tested],
         fcfg["calibration_days"],
         ccfg["k"],
         ccfg["reps"],
@@ -426,11 +498,11 @@ def select_variant(
     w = worst.set_index("model").loc[winner]
     metrics = {
         **summary["models"][winner]["metrics"],
-        "coverage80_cv": cover,
-        "wape_holdout": wape_holdout,
+        **cover,
+        **holdout,
         "worst_slice_ratio": float(w["worst_slice_ratio"]),
         "groups_worse": int(w["groups_worse"]),
-        **events,
+        **part_metrics,
     }
     art = out / "selected"
     art.mkdir(parents=True, exist_ok=True)
@@ -438,6 +510,7 @@ def select_variant(
     slices.to_csv(art / "slices.csv", index=False)
     worst.to_csv(art / "bias_check.csv", index=False)
     precincts.to_csv(art / "holdout_precincts.csv", index=False)
+    parts.to_csv(art / "parts.csv", index=False)
     curve.to_csv(art / "calibration_curve.csv", index=False)
     imp.to_csv(art / "feature_importance.csv", index=False)
     comparison_chart(rank, worst, winner, art / "model_comparison.png")
@@ -483,12 +556,12 @@ def select_variant(
     }
     (out / "selected.json").write_text(json.dumps(result, indent=2))
     log.info(
-        "%s: selected %s, mae_log_cv %.3f, coverage80_cv %.3f, wape_holdout %.3f",
+        "%s: selected %s, log_mae_cv %.3f, coverage80_cv %.3f, wape_holdout %.3f",
         data.variant,
         winner,
-        metrics["mae_log_cv"],
-        cover,
-        wape_holdout,
+        metrics["log_mae_cv"],
+        metrics["coverage80_cv"],
+        metrics.get("wape_holdout", float("nan")),
     )
     return result
 

@@ -91,8 +91,8 @@ def test_wiring(dag):
         "pull_calendars",
     }
     assert upstream("validate") == {"join_all", "pull_minute_feed"}
-    # After validate, not beside it: side by side, the two overran Docker's 8 GB.
-    assert upstream("osm_shade") == {"osm_graph"}
+    # After validate, not beside it: side by side, they compete for Docker's 8 GB.
+    assert upstream("osm_shade") == {"osm_graph", "validate"}
     assert upstream("training_frame") == {"validate", "osm_shade", "pull_events"}
     assert upstream("bias_slices") == {"training_frame", "pull_static_layers"}
     assert upstream("minute_profiles") == {

@@ -62,18 +62,17 @@ One Airflow DAG, `stoa_pipeline` (`dags/stoa_pipeline.py`), runs the Melbourne p
 ```
 pull_counts ──────────────────────────────────────────────────────────────────────┐
 pull_osm ─► osm_extract ─► osm_graph ─► osm_segment_features ─► osm_sensor_match ─┤
-                                    └─► osm_shade
 pull_static_layers ─► sensor_steepness ───────────────────────────────────────────┤
 pull_weather ─────────────────────────────────────────────────────────────────────┼─► join_all ─┐
 pull_calendars ───────────────────────────────────────────────────────────────────┘             ├─► validate
 pull_minute_feed ───────────────────────────────────────────────────────────────────────────────┘
 
-validate ─┬─► training_frame ─► bias_slices ─┬─► bias_errors ──────┐
-          │                                  │                     ├─► dvc_push
-          └─► minute_profiles ───────────────┴─► minute_coverage ──┘
+validate ─┬─► osm_shade ─► training_frame ─► bias_slices ─┬─► bias_errors ──────┐
+          │                                               │                     ├─► dvc_push
+          └─► minute_profiles ────────────────────────────┴─► minute_coverage ──┘
 ```
 
-`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations, and `pull_static_layers` also feeds `bias_slices`. `osm_shade` and `pull_events` (AFL games) feed `training_frame`; `pull_events` and `osm_sensor_match` also feed `minute_profiles`.
+`pull_counts` also feeds `osm_sensor_match` and `sensor_steepness`, which need the sensor locations, and `pull_static_layers` also feeds `bias_slices`. `osm_graph` also feeds `osm_shade`, which waits for `validate` so that on a first run it doesn't build (about 3 minutes) while the hourly table is in memory. `pull_events` (AFL games) also feeds `training_frame`; `pull_events` and `osm_sensor_match` also feed `minute_profiles`.
 
 Airflow's graph view of the DAG as submitted, after a run on 27 October 2026 (4 min 31 s), before `osm_shade`, `pull_events` and `training_frame` were added. It ran on a fresh clone of main whose data had been fetched with `dvc pull`, so the street-network steps found their outputs up to date and the long `bias_errors` retrain wasn't due. The containers had no `.env` or `.secrets/`, so `pull_minute_feed` and `dvc_push` skipped (pink) as described in the [Quickstart](#quickstart); every other task succeeded.
 

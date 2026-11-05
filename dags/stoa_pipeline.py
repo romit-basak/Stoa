@@ -228,8 +228,6 @@ def stoa_pipeline():
     osm_features = osm_segment_features()
     built = osm_graph()
     pull_osm() >> extract >> built >> osm_features
-    shaded = osm_shade()
-    built >> shaded
 
     # Sensor matching needs both the segment features and the sensor locations.
     sensors = osm_sensor_match()
@@ -249,6 +247,10 @@ def stoa_pipeline():
     # passed the checks. Only data that went through all three is versioned.
     checked = validate()
     [joined, pull_minute_feed()] >> checked
+    # Shade waits for validate too. It only needs the graph, but on a first run it would
+    # otherwise build (about 3 min) while join_all and validate hold the hourly table.
+    shaded = osm_shade()
+    [built, checked] >> shaded
     # The training frame loads the table too (about 2 GB), so it also takes its turn.
     events = pull_events()
     frame = training_frame()

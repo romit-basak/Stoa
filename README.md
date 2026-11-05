@@ -25,6 +25,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Reproducibility | [Quickstart](#quickstart) |
 | Folder structure | [Repository layout](#repository-layout) |
 | Code style (PEP 8) | `pyproject.toml` (ruff settings). See [Tests and lint](#tests-and-lint) |
+| Experiment tracking (model phase) | `src/models/tracking.py` and the `mlflow` service. See [Experiment tracking](#experiment-tracking) |
 
 ## Quickstart
 
@@ -291,6 +292,10 @@ Along the way we found that the portal's `id` isn't unique. It glues together lo
 
 A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minutes and is the whole bottleneck. That's fine for a weekly fairness report. If it needs to be faster, the next step is fewer folds or mitigations per run, or giving it a schedule of its own. These runs came before the minute tasks were added; those take a few seconds each.
 
+## Experiment tracking
+
+Model runs are logged to MLflow, which runs as the `mlflow` service in `docker-compose.yaml` (http://localhost:5001; `docker compose up -d mlflow` starts it alone). Training code wraps its work in `src.models.tracking.run(...)`, which records the settings and metrics plus the git commit, the DVC version of each data folder and the training frame's `frame_spec.json`, so every run can be traced back to its code and data. `python -m src.models.tracking --smoke` checks the setup. How to log a run, the naming conventions and where runs are stored: [docs/models/experiment_tracking.md](docs/models/experiment_tracking.md).
+
 ## Tests and lint
 
 ```bash
@@ -407,6 +412,7 @@ configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 configs/validation.yaml  validation thresholds; configs/schemas/ holds the expected table schema
 configs/bias.yaml        bias slices: precincts, time and weather bins, eras, thresholds
 configs/analysis.yaml    parameters for src/analysis/
+configs/models.yaml      model settings (MLflow server and experiment)
 dags/                    Airflow DAGs (stoa_pipeline, stoa_site_build, stoa_minute_feed, stoa_osm_watch);
                          Dockerfile and docker-compose.yaml run them
 data/                    raw/, interim/, processed/ (git-ignored; versioned with DVC)
@@ -418,13 +424,16 @@ src/features/            feature building (osm.py runs extract -> graph -> featu
 src/pipeline/            validation (validate, validate_segments, minute_checks), DVC versioning, osm_watch
 src/bias/                bias slices, representation report, per-slice errors, per-minute coverage
 src/analysis/            one-off analyses (new_openings: before/after study feasibility)
+src/models/              model code (tracking.py: MLflow runs with code and data versions)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
 ops/hpc/                 the cluster job that polls the per-minute feed
+ops/mlflow/              the MLflow tracking server image (docker-compose service `mlflow`)
 notebooks/               exploration only; the pipeline doesn't run them (below)
 docs/data_cards/         one card per dataset: schema, coverage, known issues
 docs/features/           feature tables: how they're built, column dictionaries, joins
 docs/pipeline/           validation checks, site builds, Gantt charts, the gaps review
 docs/bias/               bias analysis and figures
+docs/models/             experiment tracking, and later the model write-ups
 docs/analysis/           write-ups of one-off analyses
 docs/data_licenses.md    license register; check it before adding a dataset
 docs/PROJECT_CONTEXT.md  the reasoning behind decisions, scope tiers, validation plan
@@ -482,9 +491,9 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 | Event scenario | Demonstration. Melbourne event days (centred on Marvel Stadium) are evaluated separately. |
 | Marathons (stretch) | Melbourne Marathon (validation) and Boston Marathon (demonstration) |
 
-**Done:** ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
+**Done:** ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI; MLflow experiment tracking (local server). The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
 
-**Planned:** the flow model (`src/models/flow/`), path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, and MLflow, deployment and Cloud Run.
+**Planned:** the flow model (`src/models/flow/`), path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, a shared MLflow server on a GCP VM, deployment and Cloud Run.
 
 ## Ground rules
 

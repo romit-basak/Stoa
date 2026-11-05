@@ -1,0 +1,10 @@
+# Model training settings shared by every model (src/models/).
+
+tracking:
+  # MLflow server (docker-compose service `mlflow`). MLFLOW_TRACKING_URI overrides it: the
+  # Airflow containers set it to http://mlflow:5000, and on the cloud VM it is the tunnel's
+  # local port.
+  uri: http://localhost:5001
+  # The experiment every flow-model run goes to unless the caller names another, so that all
+  # candidates can be compared side by side in one MLflow table.
+  experiment: stoa-flow

@@ -21,8 +21,12 @@ dependencies = [
     "pyyaml>=6",
     "rasterio>=1.4",
     "requests>=2.31",
+    "joblib>=1.4",        # model serialisation (included in scikit-learn; pinned for Docker)
+    "mlflow>=2.16",       # experiment tracking and model registry (Apache-2.0)
+    "optuna>=3.6",        # Bayesian hyperparameter search (MIT)
     "scikit-learn>=1.5",  # baseline model for the per-slice bias errors (BSD-3)
     "scipy>=1.13",
+    "shap>=0.46",         # SHAP TreeExplainer for feature importance (MIT)
     "shapely>=2.0",
     "skops>=0.16,<0.17",  # safe format MLflow saves scikit-learn models in (MIT)
 ]

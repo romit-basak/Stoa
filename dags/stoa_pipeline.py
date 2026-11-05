@@ -265,5 +265,36 @@ def stoa_pipeline():
     [profiles, slices] >> covered
     [checked, errors, covered] >> dvc_push()
 
+    # --- Flow model: tune → train → evaluate → push ---
+    # Runs after dvc_push so the model always trains on a versioned dataset.
+    # These tasks are expensive (~30-60 min) so they run once per week at most;
+    # trigger manually with --conf '{"run_model": true}' for an ad-hoc run.
+
+    @task.bash(trigger_rule="none_failed")
+    def tune_flow_model():
+        # Optuna TPE search, skipped when hyperparams are under a week old.
+        return f"{STOA} src.models.flow.tune --variant both --if-older-than 7"
+
+    @task.bash
+    def train_flow_model():
+        return f"{STOA} src.models.flow.train --variant both"
+
+    @task.bash(retries=0)
+    def evaluate_flow_model():
+        # Exits non-zero when the gates fail, which blocks push_model_to_registry.
+        return f"{STOA} src.models.flow.evaluate"
+
+    @task.bash(skip_on_exit_code=99)
+    def push_model_to_registry():
+        return f"{STOA} src.models.flow.registry --promote"
+
+    tune = tune_flow_model()
+    dvc_push() >> tune
+    train = train_flow_model()
+    tune >> train
+    eval_task = evaluate_flow_model()
+    train >> eval_task
+    eval_task >> push_model_to_registry()
+
 
 stoa_pipeline()

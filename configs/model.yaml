@@ -1,0 +1,125 @@
+# Flow model configuration: feature groups, hyperparameter search space, and evaluation gates.
+# The portable/rich distinction is defined in src/features/schema.py; this file documents
+# which groups those map to and holds the search space for Optuna tuning.
+site: melbourne
+
+# ---------------------------------------------------------------------------
+# Features
+# ---------------------------------------------------------------------------
+# Groups mirror the portable flag in schema.py.
+# portable: true  → present in both variants
+# portable: false → Melbourne-rich only (CoM survey slope, Metro Tunnel stations, etc.)
+
+feature_groups:
+  time:
+    - {name: hour_local,         portable: true}
+    - {name: weekday,            portable: true}
+    - {name: is_weekend,         portable: true}
+    - {name: is_public_holiday,  portable: true}
+    - {name: school_term,        portable: true}
+    - {name: uni_teaching,       portable: true}
+    - {name: uni_exams,          portable: true}
+    - {name: sun_elevation_deg,  portable: true}
+    - {name: covid_period,       portable: true}
+    - {name: post_metro_tunnel,  portable: false}  # Melbourne-specific event
+
+  weather:
+    - {name: wx_temperature_2m,       portable: true}
+    - {name: wx_apparent_temperature, portable: true}
+    - {name: wx_relative_humidity_2m, portable: true}
+    - {name: wx_cloud_cover,          portable: true}
+    - {name: wx_wind_speed_10m,       portable: true}
+    - {name: wx_is_day,               portable: true}
+    - {name: wx_precipitation,        portable: true}
+    - {name: wx_rain,                 portable: true}
+    - {name: wx_shortwave_radiation,  portable: true}
+
+  derived:
+    # shade_portable and shade_rich come from training_frame.add_derived.
+    - {name: shade_portable, portable: true}
+    - {name: shade_rich,     portable: false}
+    # Event columns come from the event log and AFL fixtures.
+    - {name: event_pre,         portable: true}
+    - {name: event_during,      portable: true}
+    - {name: event_post,        portable: true}
+    - {name: event_dist_m,      portable: true}
+    - {name: event_day_dist_m,  portable: true}
+
+  segment:
+    # CoM survey slope: Melbourne-only. DEM-based slope (dem_slope_*) is portable.
+    # recent_station_dist_m: Melbourne Metro Tunnel only.
+    # canopy_cover, clue_jobs_*, businesses_*: CoM data, Melbourne-only.
+    # Everything else (OSM highway tags, POIs, network metrics) is portable.
+    portable_note: >
+      Schema.py's `portable` flag is authoritative for column selection;
+      this group list is documentation only.
+
+# ---------------------------------------------------------------------------
+# Hyperparameter search space
+# ---------------------------------------------------------------------------
+# Used by src/models/flow/tune.py (Optuna TPE sampler, 50 trials per variant).
+# Each trial draws from these distributions; the best params are written back
+# to `best_params` after a tuning run.
+
+search_space:
+  # Log-uniform over [0.03, 0.15] — small values fine-tune slowly but overfit less.
+  learning_rate:   {type: float_log, low: 0.03, high: 0.15}
+  # Rounded choice so trials run in a reasonable time.
+  max_iter:        {type: int_choice, choices: [200, 400]}
+  # Number of leaves per tree; 31 = shallow, 127 = deeper.
+  max_leaf_nodes:  {type: int, low: 31, high: 127}
+  # Minimum rows per leaf; higher → smoother, less overfit.
+  min_samples_leaf: {type: int, low: 50, high: 300}
+  # L2 penalty on leaf weights.
+  l2_regularization: {type: float_log, low: 0.5, high: 5.0}
+
+# Defaults used before any tuning run, matching the bias baseline in configs/bias.yaml.
+default_params:
+  learning_rate: 0.08
+  max_iter: 300
+  max_leaf_nodes: 63
+  min_samples_leaf: 200
+  l2_regularization: 1.0
+  early_stopping: false
+  random_state: 7
+
+# Optuna search settings.
+tune:
+  n_trials: 50
+  inner_folds: 2
+  subsample_rows: 200000  # rows drawn from the training partition per trial
+
+# ---------------------------------------------------------------------------
+# Training settings
+# ---------------------------------------------------------------------------
+training:
+  folds: 5          # GroupKFold, same as training_frame config
+  seed: 7
+  calibration_days: 28  # first N days per sensor reserved for per-site calibration
+
+# Quantile regressors trained alongside the Poisson model for 80% intervals.
+prediction_intervals:
+  low_quantile: 0.1
+  high_quantile: 0.9
+
+# ---------------------------------------------------------------------------
+# Evaluation gates
+# ---------------------------------------------------------------------------
+# A model must beat both to be promoted. Source: docs/PROJECT_CONTEXT.md §13.
+gates:
+  # Learned model's MAE on log1p counts must be this many percent lower than the
+  # Space Syntax baseline (ang_* + met_* columns + time-of-day, same GroupKFold).
+  mae_log_improvement_pct: 15.0
+  # 80% prediction interval coverage target: [low, high].
+  interval_coverage_low: 0.75
+  interval_coverage_high: 0.85
+
+# Calibration curve: k values to try (sensors to calibrate on).
+calibration_curve:
+  k_values: [3, 5, 10, 20]
+  reps: 20
+  seed: 42
+
+# Transfer precincts reference bias.yaml; this config holds only the metro-tunnel split.
+transfer:
+  metro_tunnel_date: "2025-11-30"

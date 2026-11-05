@@ -1,0 +1,42 @@
+name: Model CI
+
+on:
+  push:
+    paths:
+      - "src/models/**"
+      - "src/features/training_frame.py"
+      - "src/features/schema.py"
+      - "configs/model.yaml"
+      - "pyproject.toml"
+      - "tests/models/**"
+      - ".github/workflows/model_ci.yml"
+  pull_request:
+    paths:
+      - "src/models/**"
+      - "src/features/training_frame.py"
+      - "src/features/schema.py"
+      - "configs/model.yaml"
+      - "pyproject.toml"
+      - "tests/models/**"
+      - ".github/workflows/model_ci.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+
+      - name: Lint
+        run: |
+          .venv/bin/ruff check src/models tests/models
+          .venv/bin/ruff format --check src/models tests/models
+
+      - name: Test (smoke only — no real data)
+        run: .venv/bin/python -m pytest tests/models/ -x --tb=short -q

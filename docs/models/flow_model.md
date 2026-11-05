@@ -1,0 +1,121 @@
+# Flow model
+
+The flow model predicts the hourly pedestrian count on a path segment. It is trained on the Melbourne counts and can predict any segment with features, so it covers the whole network, not only the sensors. Code is in `src/models/flow/`, settings in `configs/models.yaml` (`flow`), and every run is logged to MLflow as described in `experiment_tracking.md`.
+
+## Models
+
+| Model | What it uses | Role |
+|---|---|---|
+| `baseline_betweenness` | Shortest-path betweenness at 1600 m | Ladder rung 1 |
+| `baseline_space_syntax` | Every Space Syntax-style metric: metric betweenness, closeness, reach, junctions, angular choice and integration, at 400, 800 and 1600 m | Ladder rung 2, and the bar the gate measures against |
+| `hgb_<variant>` | scikit-learn `HistGradientBoostingRegressor`, Poisson loss | Candidate |
+| `lgbm_<variant>` | LightGBM, Poisson objective | Candidate |
+| `xgb_<variant>` | XGBoost, `count:poisson`, histogram trees | Candidate |
+
+Space Syntax gives movement potential per segment, not hourly counts, and needs calibrating against counts. So both baselines take the same form: the typical log count for each hour of the week, plus a ridge regression of the remainder on the rung's network terms (log1p), both fitted on the training sensors. A held-out sensor is predicted from its network terms alone, the same way the candidates predict it.
+
+Each candidate is trained in two variants, which differ only in features (`src/features/schema.py` marks each one):
+- `rich`: every feature, including the Melbourne-only layers (CLUE jobs and floor space, City business data, canopy, the footpath-steepness survey).
+- `portable`: only features any city has (OSM network and amenities, DEM slope, shade, weather, calendars, events). This is the variant for NYC and Boston.
+
+The baselines use only network features, which both variants share, so they run once.
+
+## Folds
+
+Rows and features come from the training frame (`src/features/training_frame.py`, `docs/features/training_frame.md`): located outdoor sensors, outage hours dropped. Folds come from its `splits.parquet`:
+- sensors within 200 m of each other share a spatial group, and a group is never split between training and testing;
+- the three holdout precincts (UniMelb edge, Carlton, North Melbourne) and their neighbours are in no fold, so no model trains on them before the final evaluation (CLAUDE.md core rule 2).
+
+Each fold's training rows are a 600,000-row sample of the other folds, drawn once per fold, so every candidate and baseline trains on exactly the same rows. Every model then predicts its fold's sensors, which gives out-of-fold predictions for every fold sensor.
+
+## Metrics
+
+Named as in `experiment_tracking.md`. `*_cv` is the mean over the folds.
+
+| Metric | Meaning |
+|---|---|
+| `mae_log_cv` | MAE on log1p counts: the success criterion and the selection metric |
+| `wape_cv`, `wape_fold0..4` | Sum of absolute errors over sum of counts, overall and per fold |
+| `mae_cv`, `rmse_cv` | On raw counts |
+| `wape_cv_cal`, `mae_log_cv_cal` | After scaling each sensor to its first 28 days of counts, scored on its later hours (per-site calibration) |
+| `coverage80_cv` | Share of counts inside the 10 to 90% interval (selected model only) |
+| `wape_holdout` | On the holdout precincts (selected model only) |
+| `worst_slice_ratio` | Worst bias-slice WAPE over overall WAPE (selected model only) |
+| `wape_cv_event_days`, `wape_cv_other_days` | Event days reported apart (selected model only) |
+
+## Hyperparameters
+
+Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by mae_log on two inner folds over the fold sensors, split by spatial group, on 200,000-row samples. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
+
+| Family | Searched |
+|---|---|
+| hgb | `learning_rate` 0.03 to 0.15 (log), `max_iter` {200, 400}, `max_leaf_nodes` 31 to 127, `min_samples_leaf` 50 to 300, `l2_regularization` 0.5 to 5 (log) |
+| lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+| xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+
+The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
+
+## Selection, after the bias check
+
+`src.models.flow.select`, per variant:
+1. Rank the candidates by `mae_log_cv`.
+2. Shortlist those within 3% of the best.
+3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions. The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
+4. The candidate with the smallest worst slice wins, so a slightly more accurate model can't win while failing one group.
+
+Then, for the winner:
+- 10% and 90% quantile models of the same family are trained on the same folds, which gives `coverage80_cv`;
+- the model and its two interval models are fitted on up to 2 million rows from every fold sensor;
+- the holdout precincts are scored for the first time: uncalibrated, and calibrated on one or two of each precinct's sensors (one scale from their first 28 days, applied to the others). The UniMelb edge is split at the Metro Tunnel opening;
+- the calibration curve: one site-wide scale from k = 1, 3, 5, 10, 20 random sensors, applied to the rest, 20 draws each;
+- feature importance: mean |SHAP| (TreeExplainer) on a 2,000-row sample, with permutation importance as the fallback.
+
+The selected run (`stoa.role = selected`) holds the three models, `features.json`, and a `selection/` folder: `ranking.csv`, `slices.csv`, `bias_check.csv`, `holdout_precincts.csv`, `calibration_curve.csv` and `feature_importance.csv`, with charts of the model comparison, the calibration curve and the feature importance.
+
+If a slice is flagged, the mitigations to try are the ones `src/bias/slice_errors.py` already compares (sensor-equal and precinct-to-network weights, per-site calibration), with results in `docs/bias/bias_slicing.md`.
+
+## Gate, registry and rollback
+
+`src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
+- its `mae_log_cv` is at least 15% below Space Syntax's;
+- its `coverage80_cv` is between 0.75 and 0.85;
+- optionally, its worst slice is under `gates.max_worst_slice_ratio` (off by default: reported, not blocking).
+
+If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes.
+
+Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portable`, and versions are tracked with aliases rather than MLflow's deprecated stages:
+- `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced;
+- without `--promote`, the new version gets `challenger`;
+- `--rollback --variant rich` points `champion` back at `previous`.
+
+Each command writes what it did to `data/models/registry.json`.
+
+## Outputs
+
+| Where | What |
+|---|---|
+| MLflow, experiment `stoa-flow` | Every candidate, baseline, tuning and selected run, with code and data versions |
+| `data/models/<variant>/oof.parquet` | Out-of-fold predictions of every model, one column each |
+| `data/models/<variant>/candidates.json` | Each model's run id, parameters, metrics and the fold plan |
+| `data/models/<variant>/selected.json`, `selected/` | The winner, its model URIs, metrics and selection tables |
+| `data/models/registry.json` | The last gate check, registration or rollback |
+
+`data/models/` is git-ignored and not DVC-tracked: the models and their history live in MLflow.
+
+## Commands
+
+```bash
+docker compose up -d mlflow                     # the tracking server (localhost:5001)
+.venv/bin/python -m src.models.flow.train       # candidates and baselines, both variants
+.venv/bin/python -m src.models.flow.select      # bias check, intervals, final fit, holdouts
+.venv/bin/python -m src.models.flow.registry --check     # gates only
+.venv/bin/python -m src.models.flow.registry --promote   # gate, register, champion
+```
+
+Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
+
+In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+
+## Not included yet
+
+Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.

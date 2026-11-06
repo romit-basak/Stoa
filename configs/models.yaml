@@ -8,3 +8,87 @@ tracking:
   # The experiment every flow-model run goes to unless the caller names another, so that all
   # candidates can be compared side by side in one MLflow table.
   experiment: stoa-flow
+
+# The hourly flow model (src/models/flow/, docs/models/flow_model.md).
+flow:
+  # Out-of-fold predictions, the selected models and the registry manifest. Not DVC-tracked
+  # (data/.gitignore); runs and models are also in MLflow.
+  output_dir: data/models
+  variants: [rich, portable]
+  # Folds come from the training frame (splits.parquet: spatial groups, holdout precincts
+  # never in a fold). Training rows per fold are capped as in configs/bias.yaml, and every
+  # candidate trains on the same sample.
+  train_rows_per_fold: 600000
+  seed: 7
+  # The selected model's final fit, on sensors outside the holdout precincts.
+  final_train_rows: 2000000
+  # Each held-out sensor's first days of counts, for the calibrated metrics (wape_cv_cal).
+  calibration_days: 28
+
+  # Candidate architectures, all on the same folds and feature matrix. `params` are the
+  # defaults; `search` is the Optuna space used with --tune.
+  candidates:
+    hgb:
+      params: {max_iter: 300, learning_rate: 0.08, max_leaf_nodes: 63, min_samples_leaf: 200,
+               l2_regularization: 1.0}
+      search:
+        learning_rate: {type: float_log, low: 0.03, high: 0.15}
+        max_iter: {type: choice, choices: [200, 400]}
+        max_leaf_nodes: {type: int, low: 31, high: 127}
+        min_samples_leaf: {type: int, low: 50, high: 300}
+        l2_regularization: {type: float_log, low: 0.5, high: 5.0}
+    lgbm:
+      params: {n_estimators: 300, learning_rate: 0.08, num_leaves: 63, min_child_samples: 200,
+               reg_lambda: 1.0, subsample: 0.8, subsample_freq: 1, colsample_bytree: 0.8}
+      search:
+        learning_rate: {type: float_log, low: 0.03, high: 0.15}
+        n_estimators: {type: choice, choices: [200, 400]}
+        num_leaves: {type: int, low: 31, high: 127}
+        min_child_samples: {type: int, low: 50, high: 300}
+        reg_lambda: {type: float_log, low: 0.5, high: 5.0}
+        colsample_bytree: {type: float, low: 0.5, high: 1.0}
+    xgb:
+      params: {n_estimators: 300, learning_rate: 0.08, max_depth: 8, min_child_weight: 20,
+               reg_lambda: 1.0, subsample: 0.8, colsample_bytree: 0.8}
+      search:
+        learning_rate: {type: float_log, low: 0.03, high: 0.15}
+        n_estimators: {type: choice, choices: [200, 400]}
+        max_depth: {type: int, low: 4, high: 10}
+        min_child_weight: {type: float_log, low: 1.0, high: 100.0}
+        reg_lambda: {type: float_log, low: 0.5, high: 5.0}
+        colsample_bytree: {type: float, low: 0.5, high: 1.0}
+
+  tune:
+    n_trials: 30
+    # Trials are scored on inner folds over the fold sensors (split by spatial group, on a
+    # smaller sample); holdout precincts never enter. The inner folds draw on the same sensors
+    # the *_cv metrics score, so tuned *_cv numbers are a little optimistic.
+    inner_folds: 2
+    train_rows: 200000
+
+  # Selection after the bias check (src/models/flow/select.py): candidates within
+  # `tolerance` of the best log_mae_cv are compared on their worst slice (WAPE of the worst
+  # group over overall WAPE, over the slices in configs/bias.yaml), and the fairest wins.
+  selection:
+    tolerance: 0.03
+    # Slices from configs/bias.yaml left out of the comparison: coverage-only slices, and
+    # the holdout precincts, which no fold scores.
+    skip_dimensions: [has_location, slope_source]
+    intervals: [0.1, 0.9]
+
+  # Deployment gates (docs/PROJECT_CONTEXT.md, "Decided success criteria"). Checked by
+  # src/models/flow/registry.py before a model is registered.
+  gates:
+    # log_mae_cv at least this much lower than baseline_space_syntax on the same data version.
+    log_mae_improvement: 0.15
+    coverage80: [0.75, 0.85]
+    # Variants that must pass for the gate task to succeed; others are registered only if
+    # they pass, and reported either way.
+    required_variants: [rich]
+    # Block when the selected model's worst slice is this many times the overall WAPE
+    # (null: report it, don't block).
+    max_worst_slice_ratio: null
+
+  calibration_curve:
+    k: [1, 3, 5, 10, 20]
+    reps: 20

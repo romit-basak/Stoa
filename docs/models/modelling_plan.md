@@ -35,7 +35,7 @@ Three gradient-boosting families compete, each with Poisson loss, on the same fo
 
 Optuna (TPE sampler) can tune each family; the search spaces are in `configs/models.yaml`. Selection runs in two steps:
 
-1. Rank candidates by `mae_log_cv`, the mean absolute error on log counts across the held-out-sensor folds. This is the team's headline success criterion.
+1. Rank candidates by `log_mae_cv`, the mean absolute error on log counts across the held-out-sensor folds. This is the team's headline success criterion.
 2. For every candidate within a small tolerance of the best, compute WAPE per slice (precinct, time of day, rain, era, volume tier, and the other slices in `configs/bias.yaml`) with Fairlearn's `MetricFrame`. Pick the one whose worst slice is closest to its overall error.
 
 The selected model gets its quantile models and is scored once on the held-out precincts (University of Melbourne edge, Carlton, North Melbourne), uncalibrated and calibrated on one or two of each precinct's sensors, with the UniMelb-edge results split at the Metro Tunnel opening (30 November 2025). Holdout scores are reported and never used to choose. SHAP values for the selected model go into the run as the sensitivity analysis.
@@ -44,14 +44,14 @@ The selected model gets its quantile models and is scored once on the held-out p
 
 A model reaches the registry only if:
 
-- its `mae_log_cv` is at least 15% lower than `baseline_space_syntax` on the same data version (the run's `stoa.dvc.processed` tag), and
+- its `log_mae_cv` is at least 15% lower than `baseline_space_syntax` on the same data version (the run's `stoa.dvc.processed` tag), and
 - its 80% intervals cover 75 to 85% of held-out hours (`coverage80_cv`).
 
 The registry uses MLflow aliases, because MLflow 3 deprecates stages. `champion` is the served version and `previous` the one it replaced; rollback moves `champion` back to `previous`. If the learned model doesn't beat Space Syntax, the weeks 5 to 6 checkpoint in CLAUDE.md applies.
 
 ## Tracking and orchestration
 
-Every run goes through `src.models.tracking.run`, so it carries the git commit, the DVC data version and the training frame's spec. All flow-model runs go to the `stoa-flow` experiment, with run names like `hgb_rich`, `lgbm_portable` and `baseline_space_syntax`, and metrics named `wape_cv`, `mae_cv`, `rmse_cv`, `mae_log_cv`, `coverage80_cv` and `wape_fold0` to `wape_fold4`.
+Every run goes through `src.models.tracking.run`, so it carries the git commit, the DVC data version and the training frame's spec. All flow-model runs go to the `stoa-flow` experiment, with run names like `hgb_rich`, `lgbm_portable` and `baseline_space_syntax`, and metrics named as in `src/models/flow/evaluate.py`: `log_mae_cv`, `wape_cv`, `mae_cv`, `rmse_cv`, `coverage80_cv` and `wape_fold0` to `wape_fold4`.
 
 Training has its own DAG, `stoa_train`, run monthly or by hand: tuning (optional), candidates and baselines, selection, the gate, and registration. The daily `stoa_pipeline` doesn't train. Model outputs go to `data/models/`, which DVC doesn't track, so training never changes a data snapshot.
 

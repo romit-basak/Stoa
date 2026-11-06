@@ -323,3 +323,36 @@ stages:
       - configs/data.yaml
       - configs/features.yaml
     always_changed: true
+
+  # --- Flow model (stoa_train). Outputs go to MLflow and data/models, which DVC doesn't track;
+  # the gate and the registry read MLflow, so they always count as changed. ---
+
+  train_candidates:
+    cmd: python -m src.models.flow.train --variant both
+    deps:
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/sensor_osm_features.parquet
+      - data/processed/training/melbourne/splits.parquet
+      - src/models
+      - src/features/training_frame.py
+      - src/features/schema.py
+      - configs/models.yaml
+
+  select_model:
+    cmd: python -m src.models.flow.select --variant both
+    deps:
+      - src/models
+      - src/bias
+      - configs/models.yaml
+      - configs/bias.yaml
+    always_changed: true
+
+  check_gates:
+    cmd: python -m src.models.flow.registry --check
+    deps: [src/models/flow/registry.py, configs/models.yaml]
+    always_changed: true
+
+  register_model:
+    cmd: python -m src.models.flow.registry --promote
+    deps: [src/models/flow/registry.py, configs/models.yaml]
+    always_changed: true

@@ -154,6 +154,23 @@ def test_oof_predictions_cover_every_row():
     assert se.wape(y, pred) < 0.5
 
 
+def test_a_feature_missing_at_every_training_sensor_is_left_out():
+    # A sparse OSM tag (width_m) can be missing at all of a fold's training sensors;
+    # scikit-learn 1.9 fails to bin a column with no values, so the fold must skip it.
+    n = 600
+    x = RNG.normal(size=(n, 3)).astype("float32")
+    y = np.exp(1 + x[:, 0]).round()
+    groups = np.repeat(np.arange(12), 50)
+    x[:, 2] = np.nan
+    x[groups == 0, 2] = 1.0  # present only at one sensor, which some folds hold out
+    plan = se.fold_plan(groups, n_folds=3, train_rows=10_000, seed=0)
+    pred = se.oof_predict(
+        lambda pos: x[pos], y, plan, lambda pos: None, {"max_iter": 20}
+    )
+    assert not np.isnan(pred).any()
+    assert se.wape(y, pred) < 0.5
+
+
 def test_is_recent_needs_the_same_settings_and_a_young_run(tmp_path):
     meta = tmp_path / "meta.json"
     now = datetime(2026, 10, 22, tzinfo=UTC)

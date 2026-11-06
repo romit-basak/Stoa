@@ -87,7 +87,9 @@ def oof_candidates(
         x_train, x_test = data.frame.matrix(train), data.frame.matrix(test)
         for f in families:
             t = time.perf_counter()
-            model = candidates.make(f, params[f], seed).fit(x_train, data.y[train])
+            model = candidates.fit(
+                candidates.make(f, params[f], seed), x_train, data.y[train]
+            )
             preds[f][test] = candidates.predict(model, x_test)
             seconds[f] += time.perf_counter() - t
             log.info("fold %d %s: %.0f s", k, f, time.perf_counter() - t)

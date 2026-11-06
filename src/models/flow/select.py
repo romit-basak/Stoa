@@ -144,8 +144,10 @@ def oof_intervals(
     for train, test in plan:
         x_train, x_test = data.frame.matrix(train), data.frame.matrix(test)
         for p, q in zip(preds, quantiles):
-            model = candidates.make(family, params, seed, quantile=q).fit(
-                x_train, data.y[train]
+            model = candidates.fit(
+                candidates.make(family, params, seed, quantile=q),
+                x_train,
+                data.y[train],
             )
             p[test] = candidates.predict(model, x_test)
     return preds
@@ -161,11 +163,11 @@ def fit_final(
 ) -> dict[str, Any]:
     x = data.frame.matrix(rows)
     y = data.y[rows]
-    models = {"model": candidates.make(family, params, seed).fit(x, y)}
+    models = {"model": candidates.fit(candidates.make(family, params, seed), x, y)}
     for q in quantiles:
-        models[f"model_q{round(q * 100):02d}"] = candidates.make(
-            family, params, seed, quantile=q
-        ).fit(x, y)
+        models[f"model_q{round(q * 100):02d}"] = candidates.fit(
+            candidates.make(family, params, seed, quantile=q), x, y
+        )
     return models
 
 

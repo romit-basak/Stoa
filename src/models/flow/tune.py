@@ -82,7 +82,9 @@ def tune(
         )
         losses = []
         for x_tr, x_te, tr, te in built:
-            model = candidates.make(family, params, fcfg["seed"]).fit(x_tr, y[tr])
+            model = candidates.fit(
+                candidates.make(family, params, fcfg["seed"]), x_tr, y[tr]
+            )
             losses.append(log_mae(y[te], candidates.predict(model, x_te)))
         loss = float(np.mean(losses))
         with mlflow.start_run(run_name=f"trial_{trial.number}", nested=True):

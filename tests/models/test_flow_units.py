@@ -112,6 +112,21 @@ def test_candidates_fit_and_predict(family, data, fcfg):
     assert (candidates.predict(q90, x) >= 0).all()
 
 
+@pytest.mark.parametrize("family", candidates.FAMILIES)
+def test_a_feature_missing_in_every_training_row_is_ignored(family, data, fcfg):
+    rows = np.flatnonzero(data.fold >= 0)
+    x = data.frame.matrix(rows)
+    x[:, 0] = np.nan
+    params = candidates.capped(family, fcfg["candidates"][family]["params"], 5)
+    model = candidates.fit(candidates.make(family, params, 7), x, data.y[rows])
+    with_values = x.copy()
+    with_values[:, 0] = 123.0
+    assert np.allclose(
+        candidates.predict(model, x), candidates.predict(model, with_values)
+    )
+    assert np.isnan(x[:, 0]).all()
+
+
 def test_unknown_family_is_rejected():
     with pytest.raises(ValueError):
         candidates.make("rf", {}, 7)

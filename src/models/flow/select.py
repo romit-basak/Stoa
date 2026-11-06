@@ -10,7 +10,8 @@ Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flo
    MetricFrame, sensor-bootstrap intervals). The candidate whose worst slice is least worse
    than its overall error wins, so a small accuracy gain can't buy a model that fails one
    group;
-3. fits the winner's 10% and 90% quantile models on the same folds, for coverage80_cv;
+3. fits the winner's 10% and 90% quantile models on the same folds and widens their interval
+   from the out-of-fold misses (`interval_margins`), for coverage80_cv;
 4. fits the winner and its interval models on every fold sensor, and scores the holdout
    precincts (never seen until now), the event days, other days and eras
    (src.models.flow.evaluate.standard_parts), the calibration curve and the feature
@@ -151,6 +152,48 @@ def oof_intervals(
             )
             p[test] = candidates.predict(model, x_test)
     return preds
+
+
+def interval_margins(
+    y: np.ndarray, low: np.ndarray, high: np.ndarray, quantiles: list[float]
+) -> tuple[float, float]:
+    """How far to widen each side of the quantile interval (conformalized quantile regression).
+
+    The 10% and 90% models learn the spread of counts at the sensors they trained on, but at a
+    new location most of the error is in the sensor's overall level, so their interval is too
+    narrow there. On log1p counts (level errors are multiplicative), the lower margin is the
+    quantile of how far counts fall below `low` that leaves `quantiles[0]` of them below it
+    after widening, and likewise above `high`. A margin is negative when that side is too wide.
+    """
+    ly, llo, lhi = np.log1p(y), np.log1p(low), np.log1p(high)
+    lower = float(np.quantile(llo - ly, 1 - quantiles[0]))
+    upper = float(np.quantile(ly - lhi, quantiles[1]))
+    return lower, upper
+
+
+def widen(
+    low: np.ndarray, high: np.ndarray, margins: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
+    lower, upper = margins
+    low = np.maximum(np.expm1(np.log1p(low) - lower), 0.0)
+    return low, np.expm1(np.log1p(high) + upper)
+
+
+def cross_fold_widen(
+    y: np.ndarray,
+    low: np.ndarray,
+    high: np.ndarray,
+    folds: np.ndarray,
+    quantiles: list[float],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Each fold's interval widened by margins from the other folds' rows only, so the
+    coverage of the result is measured on sensors the margins never saw."""
+    new_low, new_high = np.empty(len(y)), np.empty(len(y))
+    for k in np.unique(folds):
+        m = folds == k
+        margins = interval_margins(y[~m], low[~m], high[~m], quantiles)
+        new_low[m], new_high[m] = widen(low[m], high[m], margins)
+    return new_low, new_high
 
 
 def fit_final(
@@ -471,7 +514,21 @@ def select_variant(
         oof_rows["location_id"].to_numpy(), oof_rows["ts_utc"], fcfg["calibration_days"]
     )
     scored = tested[keep]
-    cover = cv_coverage(data.y[scored], low[scored], high[scored], data.fold[scored])
+    y_s, low_s, high_s, folds_s = (
+        data.y[scored],
+        low[scored],
+        high[scored],
+        data.fold[scored],
+    )
+    margins = interval_margins(y_s, low_s, high_s, q)
+    wide_low, wide_high = cross_fold_widen(y_s, low_s, high_s, folds_s, q)
+    cover = {
+        **cv_coverage(y_s, low_s, high_s, folds_s, name="coverage80_raw"),
+        **cv_coverage(y_s, wide_low, wide_high, folds_s),
+        "interval_margin_low": margins[0],
+        "interval_margin_high": margins[1],
+        "interval_width_ratio": float(np.median((1 + wide_high) / (1 + wide_low))),
+    }
 
     rows = flow_data.final_rows(
         data.fold, final_train_rows or fcfg["final_train_rows"], seed
@@ -551,6 +608,8 @@ def select_variant(
         "run_id": run_id,
         "family": winner,
         "model_uris": uris,
+        # Applied to model_q10 and model_q90 at prediction time with `widen`.
+        "interval_margins": {"low": margins[0], "high": margins[1]},
         "metrics": metrics,
         "baseline_space_syntax": summary["baselines"]
         .get("baseline_space_syntax", {})

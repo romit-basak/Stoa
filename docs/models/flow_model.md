@@ -40,7 +40,10 @@ All scoring is in `src/models/flow/evaluate.py`, named as in `experiment_trackin
 | `bias_cv` | Predicted total over counted total, minus one |
 | `sensor_rank_corr_cv` | Spearman correlation of sensors' mean predicted and mean counted volume |
 | `log_mae_cv_cal`, `wape_cv_cal` | After scaling each sensor to its first 28 days of counts (`calibrated_cv_metrics`) |
-| `coverage80_cv`, `coverage80_fold<k>` | Share of counts inside the 10 to 90% interval (`cv_coverage`; selected model only) |
+| `coverage80_cv`, `coverage80_fold<k>` | Share of counts inside the widened 10 to 90% interval (`cv_coverage`; selected model only) |
+| `coverage80_raw_cv` | The same for the quantile models' interval before widening |
+| `interval_margin_low`, `interval_margin_high` | The widening, on log1p counts (also in `selected.json`) |
+| `interval_width_ratio` | Median of (1 + upper) / (1 + lower) for the widened interval |
 | `log_mae_holdout`, `wape_holdout` | On the holdout precincts, once (selected model only) |
 | `log_mae_<part>`, `wape_<part>` | Event days, other days and each era of `configs/bias.yaml`, scored apart (`standard_parts`, `score_parts`; selected model only) |
 | `worst_slice_ratio` | Worst bias-slice WAPE over overall WAPE (selected model only) |
@@ -66,13 +69,19 @@ The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_c
 4. The candidate with the smallest worst slice wins, so a slightly more accurate model can't win while failing one group.
 
 Then, for the winner:
-- 10% and 90% quantile models of the same family are trained on the same folds, which gives `coverage80_cv`;
+- 10% and 90% quantile models of the same family are trained on the same folds, and their interval is widened from its out-of-fold misses (conformalized quantile regression, below), which gives `coverage80_cv`;
 - the model and its two interval models are fitted on up to 2 million rows from every fold sensor;
 - the holdout precincts are scored for the first time: uncalibrated, and calibrated on one or two of each precinct's sensors (one scale from their first 28 days, applied to the others). The UniMelb edge is split at the Metro Tunnel opening;
-- the calibration curve: one site-wide scale from k = 1, 3, 5, 10, 20 random sensors, applied to the rest, 20 draws each;
+- the calibration curve: one site-wide scale from k = 1, 3, 5, 10, 20 random sensors, applied to the rest, 20 draws each. In Melbourne this mostly shows that one scale can't fix errors that differ by sensor: the model trained there, so there is no city-wide offset to remove. It's meant for a new city such as NYC, where there is one;
 - feature importance: mean |SHAP| (TreeExplainer) on a 2,000-row sample, with permutation importance as the fallback.
 
 The selected run (`stoa.role = selected`) holds the three models, `features.json`, and a `selection/` folder: `ranking.csv`, `slices.csv`, `bias_check.csv`, `holdout_precincts.csv`, `parts.csv`, `calibration_curve.csv` and `feature_importance.csv`, with charts of the model comparison, the calibration curve and the feature importance.
+
+### Prediction intervals
+
+The quantile models learn the spread of counts at the sensors they trained on. At a new location most of the error is in the sensor's overall level, which can be off by a factor of three either way, so their raw interval covers far less than 80% of out-of-fold counts. `select.interval_margins` measures, on log1p counts, how far out-of-fold counts fall below the 10% bound and above the 90% bound. It picks each side's margin so that 10% of counts stay outside that side. Prediction widens the interval by those margins (`select.widen`) using the values in `selected.json`. `coverage80_cv` widens each fold with margins from the other folds only, so the margins never saw the sensors they are scored on.
+
+The widened interval describes a location with no local counts. After calibrating on a site's own counts, most of the level error is gone and the interval is conservative.
 
 If a slice is flagged, the mitigations to try are the ones `src/bias/slice_errors.py` already compares (sensor-equal and precinct-to-network weights, per-site calibration), with results in `docs/bias/bias_slicing.md`.
 

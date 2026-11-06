@@ -169,6 +169,36 @@ def test_worst_slice_ignores_thin_groups():
     assert select.worst_slice(errors, 5) == (1.8, "time_of_day=night")
 
 
+def level_errors(n_sensors=60, hours=200, seed=0):
+    """Counts whose sensor level the model misses, with an interval that ignores that error."""
+    rng = np.random.default_rng(seed)
+    sensor = np.repeat(np.arange(n_sensors), hours)
+    level = np.exp(rng.normal(0, 0.8, n_sensors))[sensor]
+    pred = np.full(len(sensor), 100.0)
+    y = rng.poisson(pred * level).astype(float)
+    return y, 0.9 * pred, 1.1 * pred, sensor % 5
+
+
+def test_widened_intervals_cover_new_sensors():
+    y, low, high, folds = level_errors()
+    q = [0.1, 0.9]
+    assert ((y >= low) & (y <= high)).mean() < 0.3
+    wide_low, wide_high = select.cross_fold_widen(y, low, high, folds, q)
+    cover = ((y >= wide_low) & (y <= wide_high)).mean()
+    assert 0.7 < cover < 0.9
+    assert (wide_low >= 0).all() and (wide_high >= high).all()
+    lower, upper = select.interval_margins(y, low, high, q)
+    assert lower > 0 and upper > 0
+
+
+def test_an_interval_that_is_too_wide_is_narrowed():
+    y, low, high, _ = level_errors()
+    lower, upper = select.interval_margins(y, low / 50, high * 50, [0.1, 0.9])
+    assert lower < 0 and upper < 0
+    wide_low, wide_high = select.widen(low / 50, high * 50, (lower, upper))
+    assert 0.75 < ((y >= wide_low) & (y <= wide_high)).mean() < 0.85
+
+
 def test_holdout_scores(data, fcfg):
     rows = np.flatnonzero(data.fold >= 0)
     params = candidates.capped("hgb", fcfg["candidates"]["hgb"]["params"], 20)

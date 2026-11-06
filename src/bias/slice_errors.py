@@ -158,13 +158,20 @@ def oof_predict(
     for k, (train, test) in enumerate(plan):
         t = time.perf_counter()
         model = HistGradientBoostingRegressor(loss="poisson", **model_params)
-        model.fit(build_x(train), y[train], sample_weight=weights(train))
+        x_train = build_x(train)
+        # A column with no values in the training rows can't be split on, and scikit-learn
+        # 1.9 fails on it while binning ("window shape cannot be larger than input array
+        # shape"). Sparse OSM tags such as width_m can be missing at every training sensor,
+        # depending on the extract, so those columns are left out of this fold's model.
+        keep = ~np.isnan(x_train).all(axis=0)
+        model.fit(x_train[:, keep], y[train], sample_weight=weights(train))
         for chunk in np.array_split(test, max(1, len(test) // 500_000)):
-            pred[chunk] = model.predict(build_x(chunk))
+            pred[chunk] = model.predict(build_x(chunk)[:, keep])
         log.info(
-            "fold %d: trained on %d rows, predicted %d in %.0f s",
+            "fold %d: trained on %d rows (%d empty columns left out), predicted %d in %.0f s",
             k,
             len(train),
+            int((~keep).sum()),
             len(test),
             time.perf_counter() - t,
         )

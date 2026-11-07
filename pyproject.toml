@@ -29,3 +29,18 @@ dev = ["matplotlib>=3.8", "networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # matplotl
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint]
+# PEP 8 checks on top of ruff's defaults: pycodestyle errors and warnings (E, W) and naming (N).
+extend-select = ["E", "W", "N"]
+# Exception names describe the case (Conflict, MissingCredentials) rather than end in "Error".
+ignore = ["N818"]
+
+[tool.ruff.lint.per-file-ignores]
+# Notebooks are exploration, not the pipeline (README, "Notebooks are not the pipeline").
+"notebooks/*.ipynb" = ["E501", "E731"]
+
+[tool.ruff.lint.pycodestyle]
+# The formatter wraps code at its default 88; comments and docstrings may run to 100 (PEP 8
+# allows a team to agree on longer lines).
+max-line-length = 100

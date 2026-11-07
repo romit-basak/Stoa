@@ -10,13 +10,14 @@ input data of every stage in dvc.yaml into dvc.lock (`dvc commit`), then uploads
 
 It does not commit the pointer files or dvc.lock. Git history is what links a data version to
 the code that made it, so a person commits them (`git add data/*.dvc dvc.lock && git commit`);
-the log lists which ones changed. Until then, teammates' `dvc pull` still fetches the previous version.
+the log lists which ones changed. Until then, teammates' `dvc pull` still fetches the previous
+version.
 
 Credentials are found the way the Google client libraries find them (google.auth.default):
 the service account key that GOOGLE_APPLICATION_CREDENTIALS points at (in Docker, a file in
-.secrets/; see README, "Run the pipeline"), else your own `gcloud auth application-default
-login`, else the service account of the Google Cloud VM it runs on. A configured key file
-that doesn't exist is ignored, so a VM without one still uses its own account.
+.secrets/; see README, "Data versioning with DVC"), else your own `gcloud auth
+application-default login`, else the service account of the Google Cloud VM it runs on. A
+configured key file that doesn't exist is ignored, so a VM without one still uses its own account.
 
 With no credentials at all (e.g. a fresh clone by someone outside the team), it logs a warning
 and exits with SKIP_EXIT_CODE, which Airflow shows as skipped, so the rest of the run still
@@ -70,7 +71,7 @@ def check_credentials() -> None:
             "no credentials for the DVC bucket: no service account key"
             + (f" at {key}" if key else "")
             + ", no gcloud login and no Google Cloud VM account. Create a key for the "
-            "stoa-airflow-dvc service account (README, 'Run the pipeline') or run "
+            "stoa-airflow-dvc service account (README, 'Data versioning with DVC') or run "
             "`gcloud auth application-default login`."
         ) from err
 

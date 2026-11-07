@@ -5,8 +5,9 @@ The `validate` task checks the hourly counts table (`data/processed/features/mel
 Great Expectations is pinned below 2.0 (`great-expectations>=1.9,<2` in `pyproject.toml`), since 2.0 changes its API.
 
 ```bash
-.venv/bin/python -m src.pipeline.validate                 # run every check (~40 s on 6.2M rows)
-.venv/bin/python -m src.pipeline.validate --write-schema  # regenerate the schema from the table
+.venv/bin/python -m src.pipeline.validate                 # run every check (41–47 s on 7.4M rows in Docker)
+.venv/bin/python -m src.pipeline.validate --schema-diff   # how the table differs from the committed schema
+.venv/bin/python -m src.features.schema --write           # regenerate the schema from src/features/schema.py
 ```
 
 ## Errors and warnings
@@ -20,16 +21,16 @@ Outliers and stuck sensors are only warned about in the **new hours**: those aft
 
 ## The checks
 
-On the run of 22 October 2026: 67 checks, 0 errors, 3 warnings.
+On the run of 27 October 2026 (the committed data version; the DAG's steps run in order on the host): 72 checks, 0 errors, 1 warning (sensor 37 reported 88% of the last week's daytime hours). The fifth per-minute check, on sensors that never publish part of the hour, was added for that run. The run of 26 October had 71 checks, 0 errors and 2 warnings; the first four per-minute checks were added after the run of 22 October (67 checks, 0 errors, 3 warnings). With the drift check against the training reference added, the run of 25 October on the merged pipeline had 73 checks, 0 errors and 1 warning (sensor 37 at 87% of last week's daytime hours).
 
 | Kind | Severity | What it checks |
 |---|---|---|
 | **Schema** | error | The columns are exactly those in `configs/schemas/counts_hourly.yaml`, with the same pandas types. Catches a dropped, renamed, added or retyped column. |
 | **Keys** | error | (`location_id`, `ts_utc`) is unique: one row per sensor-hour. |
 | **Never missing** | error | 16 columns (`never_missing` in the config) have no empty values: keys, count, time and calendar flags. |
-| **Missing only where documented** | error | Columns that may be empty only in the cases `docs/features/counts_hourly.md` describes. For example `segment_id` and the slope columns must be present when `has_location` is true (only the 18 sensors with no location lack them), the university calendar from 2015 on, and the directional counts for live rows. Each rule in `required_when` is `[column, operator, value]`, built into a Great Expectations `Column(...)` condition (text conditions are deprecated and removed in GX 2.0). |
+| **Missing only where documented** | error | Columns that may be empty only in the cases `docs/features/counts_hourly.md` describes. For example `segment_id` and the slope columns must be present when `has_location` is true (only sensors with no location may lack them; since the 18 retired sensors were placed from the 2022 sensor table, none do), the university calendar from 2015 on, and the directional counts for live rows. Each rule in `required_when` is `[column, operator, value]`, built into a Great Expectations `Column(...)` condition (text conditions are deprecated and removed in GX 2.0). |
 | **Ranges** | error | 19 columns stay in a physical range: counts 0 to 30,000 (the record hour is about 16,000), hours 0–23, humidity and cloud 0–100%, slope 0–40%, and so on. |
-| **Allowed values** | error | `source` is `archive` or `live`; `place_source` is `footpath_steepness` or `ga_dem_5m`. |
+| **Allowed values** | error | `source` is `archive`, `live` or `wayback`; `place_source` is `footpath_steepness` or `ga_dem_5m`. |
 | **Weather present** | warning | Each `wx_*` column is present for at least 99% of rows. The weather archive lags about a week, so the newest rows have none until a later run fills them. |
 | **Outliers** | warning | New hours above 4x their own sensor's 99.9th percentile (from its whole history). Most big events stay below that; past hits were real events (below). |
 | **Stuck sensors** | warning | A run of the same count (10 or more) for 6+ hours at one sensor, reaching into the new hours. Small counts repeat naturally overnight (1 an hour), so they're ignored. |
@@ -38,6 +39,14 @@ On the run of 22 October 2026: 67 checks, 0 errors, 3 warnings.
 | **Freshness** | warning | The newest hour is at most 5 days old. |
 | **Drift: rows** | error | The table didn't lose more than 1% of its rows since the last good run. Held rows are kept and new hours added, so the row count only grows. |
 | **Drift: sensors, missing values, mean** | warning | No fewer sensors than last time; no column's missing share up by more than 5 points; mean hourly count within 20% of last time. |
+| **Drift: against the training reference** | warning | Each feature's distribution in the rows a model may use, against the reference the training frame stored (`docs/features/training_frame.md`): a population stability index above 0.25 warns. By default the reference is the latest frame, so this catches a change in how a feature is built; pointed at a deployed model's frame (`drift.training_reference`), it measures drift since that model was trained. |
+| **Per-minute archive: days** | warning | Every Melbourne day since the archive began has a file in `data/raw/melbourne_portal/minute_feed/`. With no archive at all (a clone without bucket access), one passing check says so. |
+| **Per-minute archive: late polls** | warning | Each finished day's last minute is 23:00 or later. The feed keeps a day only until a reset at about 02:00 the next morning, so an earlier end means no poll landed between midnight and the reset. |
+| **Per-minute archive: duplicates** | warning | At most 50 times, a single poll has two rows for one sensor and minute (4 by 27 October). A minute whose value changed between polls is the portal revising it (37 by 27 October, about a dozen a day): the archive keeps both values, the profiles use the latest, and the check reports revisions without warning on them. |
+| **Per-minute archive: missing blocks** | warning | At most 8 sensors have a 5-minute block of the hour with no row in the whole archive. Eight per-minute sensors (14, 31, 42, 50, 52, 56, 180 and 187) never publish minutes :00–:04, which the check lists by name; it warns if more sensors start doing it. Sensors with fewer than 300 rows aren't judged, since a quiet sensor can miss a block by chance. |
+| **Per-minute archive: hourly sums** | warning | For full hours both tables cover, each sensor-hour's minutes (the latest poll's value of each) add up to its hourly count within 5% (or 2 people), for at least 95% of sensor-hours. A match also shows the absent minutes were zeros. Left out: the sensors with missing blocks, the archive's first hour if it began part-way through, and the hourly table's newest hour, which the portal publishes unfinished. On 27 October, 0.1% of 4,280 sensor-hours differed. |
+
+The per-minute checks are all warnings: the archive is extra evidence for within-hour profiles, not the training table. Their settings are under `minute_feed` in `configs/validation.yaml` (the 300-row rule is `gap_min_rows` under `minute_profiles` in `configs/features.yaml`, shared with the profiles); the code is `src/pipeline/minute_checks.py`.
 
 Each rule was checked against the real table before it was set: on clean data none of the error checks fail, and every rule that failed on a test copy with planted errors (negative counts, duplicate sensor-hours, a dropped column, a retyped column, an unknown `source`, a located sensor with no segment, 3% of rows removed) was reported as an error.
 
@@ -45,11 +54,15 @@ The full DAG on a fresh clone (table rebuilt from public sources, 6,176,935 rows
 - Sensors 37, 164 and 167 reported 87–88% of the last week's daytime hours.
 - The newest hour was 6.3 days old (the local copy was a week old; a scheduled run pulls the latest counts first).
 
+On 26 October the hourly-sums check warned that 28.9% of 253 sensor-hours didn't add up. Every one of them is the archive's first hour, 00:00 on 25 October: the archive began at 00:55 that night, so it holds only that hour's last 5 minutes (minute sums a median 116 below the hourly count). The two full hours after it matched for every sensor. Only three hours overlap so far, because the hourly table trails the per-minute feed, so this one partial hour weighs heavily; its share falls as hours arrive. Since 25 October both the check and `minute_profiles` leave out the archive's first hour when the archive began mid-hour, so this warning doesn't recur; a gap later in the archive still warns.
+
+That explained the 26 October warning but not all of the problem. With three days of overlap on 27 October, the check as it stood still warned: 6.1% of 4,742 sensor-hours differed. Without the partial first hour, 4.5% still did, nearly all of them at the eight sensors that never publish minutes :00–:04, which the night hours of the first run were too quiet to show: five missing minutes at 1 a.m. is a person or two, inside the tolerance. Two more problems showed up at the same time: 57 sensors report 5-minute blocks rather than minutes, and the duplicates check counted the portal's revisions, so it would have warned on every run from about 28 October (41 rows against a limit of 50 on the 27th). The data card has the details (`docs/data_cards/melbourne_minute_feed.md`, "What was found on 27 October 2026"). Since then the hourly-sums check leaves out those eight sensors and the partial first hour, the new missing-blocks check names the eight sensors, and the duplicates check counts only true duplicates.
+
 The outlier check also finds 9 older hours, at sensors 8, 10, 71 and 75. They are real crowds, not glitches: sensor 8 at 7 a.m. on four July Sundays (2019, 2022, 2025, 2026) is Run Melbourne, sensor 10 at midnight on 1 January 2025 is New Year's Eve, and sensor 71 is Christmas morning. That is why only new hours warn.
 
 ## Schema and statistics over time
 
-- **Schema:** `configs/schemas/counts_hourly.yaml`, generated from the table with `--write-schema` and committed. When the table's columns change on purpose (a new feature), regenerate it and commit it with that change; the diff shows what changed.
+- **Schema:** `configs/schemas/counts_hourly.yaml`, generated from `src/features/schema.py`, which declares every column's type, role (key, label, feature, aux or meta) and whether it is portable. When the table's columns change on purpose (a new feature), declare them in `schema.py`, regenerate the YAML and commit both; `tests/features/test_schema.py` fails if they disagree. `--schema-diff` lists what a rebuilt table has that the schema doesn't.
 - **Statistics:** every run profiles each column (type, missing share; min, max, mean, standard deviation and median for numbers; true share for flags; distinct values and the most common ones for text) and the table (rows, sensors, first and last hour, mean count).
 - **Over time:** each good run appends its summary to a history file, and the next run's drift checks compare against the last line. Failed runs don't join the history, so a bad table never becomes the baseline. The reports are written under `data/processed/`, so DVC versions them with the data they describe.
 
@@ -65,4 +78,4 @@ Great Expectations makes one pass over the 6.2M rows per check. Running the suit
 
 ## Changing a check
 
-Edit `configs/validation.yaml` and run the module by hand to see the effect. A new column in the table needs `--write-schema`, plus a range or `required_when` rule if it has one. Tests with small made-up tables are in `tests/pipeline/test_validate.py`.
+Edit `configs/validation.yaml` and run the module by hand to see the effect. A new column in the table needs an entry in `src/features/schema.py` and a regenerated schema, plus a range or `required_when` rule if it has one. Tests with small made-up tables are in `tests/pipeline/test_validate.py`.

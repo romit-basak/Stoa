@@ -28,7 +28,7 @@
 
 | | |
 |---|---|
-| **Access** | `python -m src.ingest.afl_attendance` → `data/raw/events/afltables_YYYY.html` (raw season pages) + `afl_attendance.csv` (parsed) |
+| **Access** | `python -m src.ingest.afl_attendance` → `data/raw/events/afltables_YYYY.html` (raw season pages) + `afl_attendance.csv` (parsed). It fetches the current season and any season not held (`--all` fetches every season); the `pull_events` task runs it daily |
 | **Source** | `https://afltables.com/afl/seas/{year}.html`. Pulled 2026-10-04, 2 s between requests. |
 | **License** | **None published**, and no `robots.txt` (404). Crowd figures are facts. Credit AFL Tables; don't redistribute the pages. Footywire disallows these pages in robots.txt, so don't use it. Kaggle `stoney71/aflstats` (labelled ODbL, 2012–2025) is a scrape of AFL Tables/Footywire, so its label doesn't clear upstream rights. Use it only as a cross-check. |
 | **Fields** | `date`, `local_time`, `melbourne_time`, `attendance`, `venue`, `season` |

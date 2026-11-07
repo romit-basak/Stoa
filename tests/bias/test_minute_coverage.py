@@ -55,10 +55,10 @@ def test_pooled_profiles_sum_quiet_hours_until_they_are_usable():
             "hour_local": [2, 2, 2],
         }
     )
-    grid = np.zeros((3, 60))
+    grid = np.zeros((3, 12))
     grid[:, 0] = 10
     p = pooled_profiles(summary, grid, min_people=30)
-    cell = p[p["minute"] == 0].iloc[0]
+    cell = p[p["block_start"] == 0].iloc[0]
     assert cell["people"] == 30 and cell["n_sensors"] == 3 and bool(cell["usable"])
     assert cell["share"] == pytest.approx(1.0)
     assert p["share"].sum() == pytest.approx(1.0)

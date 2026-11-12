@@ -78,6 +78,7 @@ def fcfg() -> dict:
         "hgb": {"min_samples_leaf": 5},
         "lgbm": {"min_child_samples": 5},
         "xgb": {"min_child_weight": 1.0},
+        "rf": {"min_samples_leaf": 5, "n_estimators": 20},
     }
     for family, extra in small.items():
         cfg["candidates"][family]["params"].update(extra)

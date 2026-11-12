@@ -1,0 +1,7 @@
+# Shut the ops VM down when idle (ops/vm/idle-stop.sh; run by stoa-idle-stop.timer).
+[Unit]
+Description=Stop the Stoa ops VM when nothing needs it
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /srv/stoa/ops/vm/idle-stop.sh

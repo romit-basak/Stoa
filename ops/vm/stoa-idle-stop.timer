@@ -1,0 +1,10 @@
+# Check every 5 minutes whether the ops VM is idle (installed by ops/vm/setup.sh).
+[Unit]
+Description=Check every 5 minutes whether the Stoa ops VM is idle
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

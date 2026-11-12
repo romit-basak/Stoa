@@ -56,10 +56,21 @@ stages:
       { test -f data/raw/melbourne_portal/blocks-for-census-of-land-use-and-employment-clue.geojson ||
       python -m src.ingest.melbourne_portal --only blocks-for-census-of-land-use-and-employment-clue; } &&
       { test -f data/raw/dem/melbourne_ga_lidar_5m.tif ||
-      python -m src.ingest.dem --site melbourne; }
+      python -m src.ingest.dem --site melbourne; } &&
+      { test -f data/raw/melbourne_portal/employment-by-block-by-clue-industry.parquet ||
+      python -m src.ingest.melbourne_portal --only employment-by-block-by-clue-industry; } &&
+      { test -f data/raw/melbourne_portal/business-establishments-with-address-and-industry-classification.parquet ||
+      python -m src.ingest.melbourne_portal --only business-establishments-with-address-and-industry-classification; } &&
+      { test -f data/raw/melbourne_portal/tree-canopies-2021-urban-forest.geojson ||
+      python -m src.ingest.melbourne_portal --only tree-canopies-2021-urban-forest; } &&
+      { test -f data/raw/melbourne_portal/2023-building-footprints.geojson ||
+      python -m src.ingest.melbourne_portal --only 2023-building-footprints; } &&
+      { test -f data/raw/worldcover/melbourne_worldcover_2021.tif ||
+      python -m src.ingest.worldcover --site melbourne; }
     deps:
       - src/ingest/melbourne_portal.py
       - src/ingest/dem.py
+      - src/ingest/worldcover.py
       - configs/data.yaml
 
   pull_events:

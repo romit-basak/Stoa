@@ -11,9 +11,12 @@ dependencies = [
     # Data validation. <2: GX 2.0 changes the API; >=1.9 has the Condition objects we use.
     "great-expectations>=1.9,<2",
     "holidays==0.105",  # pinned: holiday rules change between releases
+    "lightgbm>=4.5",  # flow-model candidate (MIT)
+    "matplotlib>=3.8",  # bias figures and the flow model's comparison charts (PSF/BSD-style)
     # Experiment tracking client (Apache-2.0); same version as the server in ops/mlflow.
     "mlflow-skinny==3.17.2",
     "numba>=0.60",
+    "optuna>=3.6",  # hyperparameter search for the flow-model candidates (MIT)
     "osmium>=4.0",
     "pandas>=2.2",
     "pyarrow>=15",
@@ -21,14 +24,16 @@ dependencies = [
     "pyyaml>=6",
     "rasterio>=1.4",
     "requests>=2.31",
-    "scikit-learn>=1.5",  # baseline model for the per-slice bias errors (BSD-3)
+    "scikit-learn>=1.5",  # flow-model candidates and the bias baseline (BSD-3)
     "scipy>=1.13",
+    "shap>=0.46",  # feature importance for the selected flow model (MIT)
     "shapely>=2.0",
     "skops>=0.16,<0.17",  # safe format MLflow saves scikit-learn models in (MIT)
+    "xgboost>=2.1",  # flow-model candidate (Apache-2.0)
 ]
 
 [project.optional-dependencies]
-dev = ["matplotlib>=3.8", "networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # matplotlib: bias figures (notebooks/04); networkx: reference values in tests
+dev = ["networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # networkx: reference values in tests
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

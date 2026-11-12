@@ -39,8 +39,15 @@ start() {
     g compute instances start "$VM" --zone "$ZONE" --quiet
   fi
   # sshd comes up a little after the instance reports RUNNING.
+  local err
   for _ in $(seq 30); do
-    vm_ssh --command true -- -o ConnectTimeout=5 >/dev/null 2>&1 && return 0
+    err=$(vm_ssh --command true -- -o ConnectTimeout=5 2>&1 >/dev/null) && return 0
+    # A permissions error won't fix itself by waiting.
+    if grep -q "not authorized" <<<"$err"; then
+      echo "IAP refused the connection: you need roles/iap.tunnelResourceAccessor" \
+        "(docs/pipeline/cloud_vm.md, setup step 3)." >&2
+      return 1
+    fi
     sleep 5
   done
   echo "VM is running but SSH isn't answering yet; try again in a minute." >&2

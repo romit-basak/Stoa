@@ -45,12 +45,17 @@ Once `stoa_pipeline` is unpaused on the VM, it is the one machine that runs it. 
 
 1. Create the network pieces and the VM: `ops/vm/vm.sh create`.
 2. Copy `.env` and the bucket key from your laptop, install Docker, clone the repo, pull the committed data and start the stack: `ops/vm/vm.sh setup` (takes about 15 minutes; safe to re-run, for example after changing `.env`). DAGs stay paused.
-3. A project owner lets Compute Engine start the VM on its schedule (Editors can't change IAM), then anyone runs `ops/vm/vm.sh schedule`:
+3. A project owner grants two roles, since Editors can't change IAM. The Editor role doesn't include IAP tunnelling, so each teammate needs `roles/iap.tunnelResourceAccessor` (without it, SSH fails with `4033: 'not authorized'`). And Compute Engine's service agent needs `roles/compute.instanceAdmin.v1` to start the VM on its schedule. Then anyone runs `ops/vm/vm.sh schedule`.
 
    ```bash
+   for m in user:puneet.puri999@gmail.com user:arshmeharkaur05@gmail.com \
+            user:shubham.hadawle@gmail.com user:bpaduru@gmail.com user:basak.r@northeastern.edu; do
+     gcloud projects add-iam-policy-binding stoa-511822 --member "$m" \
+       --role roles/iap.tunnelResourceAccessor --condition None
+   done
    gcloud projects add-iam-policy-binding stoa-511822 \
      --member serviceAccount:service-993920967496@compute-system.iam.gserviceaccount.com \
-     --role roles/compute.instanceAdmin.v1
+     --role roles/compute.instanceAdmin.v1 --condition None
    ```
 
 4. A project owner sets a budget alert on the project's billing account (Billing, Budgets & alerts), for example at $40 per month.

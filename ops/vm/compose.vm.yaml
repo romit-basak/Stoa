@@ -10,3 +10,9 @@ services:
   airflow-apiserver:
     ports: !override
       - "127.0.0.1:8080:8080"
+  # Tasks run in the scheduler (LocalExecutor). DVC's usage-analytics daemon forks after
+  # google-cloud-storage has started gRPC threads; on the VM that crashed `dvc pull` with exit 1
+  # after every file had been fetched (12 Nov). Analytics off avoids the fork.
+  airflow-scheduler:
+    environment:
+      DVC_NO_ANALYTICS: "1"

@@ -42,7 +42,7 @@ install -o stoa -g 0 -m 600 "$DIR/.env.new" "$DIR/.env" && rm "$DIR/.env.new"
 cd "$DIR"
 docker compose build
 # The committed data version, so the first run is incremental like on a laptop.
-docker compose run --rm --no-deps airflow-scheduler bash -c 'cd /opt/stoa && dvc pull'
+docker compose run --rm --no-deps -e DVC_NO_ANALYTICS=1 airflow-scheduler bash -c 'cd /opt/stoa && dvc pull'
 
 install -m 644 ops/vm/stoa-compose.service ops/vm/stoa-idle-stop.service \
   ops/vm/stoa-idle-stop.timer /etc/systemd/system/

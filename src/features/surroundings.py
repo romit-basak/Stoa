@@ -190,6 +190,23 @@ def weighted_reach(
     return out
 
 
+def clue_jobs(blocks_path, jobs_path) -> gpd.GeoDataFrame | None:
+    """Each CLUE block's jobs in the latest census year, at a point inside the block.
+
+    None unless both files are held: the blocks also serve the bias slices, so they can be
+    present without the jobs table."""
+    if not (blocks_path and blocks_path.exists() and jobs_path and jobs_path.exists()):
+        return None
+    blocks = gpd.read_file(blocks_path)
+    jobs = pd.read_parquet(
+        jobs_path, columns=["census_year", "block_id", "total_jobs_in_block"]
+    )
+    jobs = jobs[jobs["census_year"] == jobs["census_year"].max()]
+    b = blocks.merge(jobs, on="block_id")
+    b["geometry"] = b.geometry.representative_point()
+    return b
+
+
 def surroundings(
     edges, nodes, site_name: str, data_cfg: dict[str, Any], fcfg: dict[str, Any], csr
 ) -> pd.DataFrame:
@@ -214,15 +231,8 @@ def surroundings(
     out["canopy_cover"] = polygon_cover(edges, canopy, cfg["canopy_buffer_m"])
 
     radii_jobs, radii_biz = cfg["jobs_radii_m"], cfg["business_radii_m"]
-    if path("clue_blocks") and path("clue_blocks").exists():
-        blocks = gpd.read_file(path("clue_blocks"))
-        jobs = pd.read_parquet(
-            path("clue_jobs"),
-            columns=["census_year", "block_id", "total_jobs_in_block"],
-        )
-        jobs = jobs[jobs["census_year"] == jobs["census_year"].max()]
-        b = blocks.merge(jobs, on="block_id")
-        b["geometry"] = b.geometry.representative_point()
+    b = clue_jobs(path("clue_blocks"), path("clue_jobs"))
+    if b is not None:
         jobs_w = b["total_jobs_in_block"].fillna(0)
         reach = weighted_reach(edges, nodes, b, jobs_w, radii_jobs, csr, cfg["snap_m"])
         for r in radii_jobs:

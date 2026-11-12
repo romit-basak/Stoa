@@ -97,7 +97,10 @@ def stoa_pipeline():
     def pull_static_layers():
         # Layers that don't change day to day, so each is fetched only when it isn't held yet
         # (a fresh clone without `dvc pull`): the footpath-steepness survey and the GA 5 m DEM
-        # (slope) and the CLUE areas (precincts), for bias slicing.
+        # (slope), the CLUE areas (precincts, for bias slicing) and the layers the segment
+        # features and shade read: CLUE jobs, businesses, tree canopy, the City's building
+        # footprints and WorldCover. Without them a fresh clone would build different features
+        # from the versioned data, or fail.
         # Each step is `{ test -f FILE || { fetch; }; }`, and the steps are joined with &&.
         # The braces matter: || and && have equal precedence, so `test || cd && python` would
         # run python even when the file is held (from the wrong folder, so it fails), and a
@@ -117,6 +120,25 @@ def stoa_pipeline():
             (
                 f"{raw}/dem/melbourne_ga_lidar_5m.tif",
                 f"{STOA} src.ingest.dem --site melbourne",
+            ),
+            *(
+                (
+                    f"{portal}/{name}.{ext}",
+                    f"{STOA} src.ingest.melbourne_portal --only {name}",
+                )
+                for name, ext in [
+                    ("employment-by-block-by-clue-industry", "parquet"),
+                    (
+                        "business-establishments-with-address-and-industry-classification",
+                        "parquet",
+                    ),
+                    ("tree-canopies-2021-urban-forest", "geojson"),
+                    ("2023-building-footprints", "geojson"),
+                ]
+            ),
+            (
+                f"{raw}/worldcover/melbourne_worldcover_2021.tif",
+                f"{STOA} src.ingest.worldcover --site melbourne",
             ),
         ]
         return " && ".join(

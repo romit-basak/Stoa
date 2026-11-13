@@ -47,7 +47,7 @@ Public data ──> ingest ──> validate ──> features ──> models ─�
 | Flow model | `src/models/flow/` | Predict hourly pedestrian volume per segment | Space Syntax metrics + calibration |
 | Path segmentation | `src/models/segmentation/` | Detect informal paths in aerial imagery, add to graph | OSM paths only |
 | Agents | `src/agents/` | LLM intake (natural language -> event spec and knowledge adjustments); planning assistant is Tier 2 | Form-based input; static flow maps |
-| Simulation | `src/simulation/` | Route-sampling walkers (first), then microsimulation for limited areas on an open-source simulator | Walkers only |
+| Simulation | `src/simulation/` | Route-sampling walkers (first), then microsimulation for limited areas on JuPedSim (decided; LGPL-3.0, own container). Guide: `docs/simulation/getting_started.md` | Walkers only |
 | Viewshed | `src/viewshed/` | 3D ray-casting visibility per segment and along routes | Precomputed visibility feature only |
 | API | `src/api/` | Prediction and scenario endpoints | — |
 | App | `app/` | Map, scenario builder, store-siting view with storefront exposure score, results; cached replay mode for demos | Recorded replay |
@@ -138,7 +138,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
 - Tests in `tests/`, mirroring `src/`. New features need tests; model changes need an eval run.
 - Config in YAML under `configs/`; no hard-coded paths, credentials, or API keys. Secrets via environment variables / Secret Manager.
 - Small, focused PRs. Each PR states which module and interface it touches.
-- Code dependencies must have permissive licences (MIT, BSD, Apache), because the API image may be distributed. cityseer (AGPL-3.0) was ruled out for network metrics for this reason; `src/features/network_metrics.py` implements them with numba and scipy.
+- Code dependencies must have permissive licences (MIT, BSD, Apache), because the API image may be distributed. LGPL is also allowed for a library we install as is and don't modify: the team accepted JuPedSim (LGPL-3.0) on that basis, and it runs in its own simulation container, not the API image. GPL and AGPL are not allowed. cityseer (AGPL-3.0) was ruled out for network metrics for this reason; `src/features/network_metrics.py` implements them with numba and scipy.
 - **Documentation is Markdown or LaTeX, tracked in git.** Binary documents (`.pdf`, `.docx`, `.pptx`, `.xlsx`) are never tracked: PDFs are build outputs of the LaTeX sources, and any reference copies stay local. New write-ups go in `.md`; formatted deliverables go in `.tex` under `docs/`.
 - Scoping document: `docs/scoping/project_scoping.tex`. Build: `cd docs/scoping && latexmk -pdf -outdir=build project_scoping.tex && cp build/project_scoping.pdf .`
 - Commands (fill in as they exist):
@@ -169,7 +169,6 @@ Checkpoint around weeks 5-6: if the learned model does not beat the Space Syntax
 
 ## Open decisions
 
-- Open-source microsimulator (JuPedSim, Vadere, or other), after checking licences
 - Graph and feature-table formats (the OSM graph uses GeoParquet keyed on `segment_id`; confirm or change)
 - Weather data source (proposed: ERA5 via Open-Meteo, already pulled for all sites)
 - Ice handling for Boston: labeled hand-set rule, or omit

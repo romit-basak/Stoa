@@ -83,14 +83,14 @@ The quantile models learn the spread of counts at the sensors they trained on. A
 
 The widened interval describes a location with no local counts. After calibrating on a site's own counts, most of the level error is gone and the interval is conservative.
 
-If a slice is flagged, the mitigations to try are the ones `src/bias/slice_errors.py` already compares (sensor-equal and precinct-to-network weights, per-site calibration), with results in `docs/bias/bias_slicing.md`.
+After selection, `src.models.flow.mitigate` retrains the selected model with sensor-equal and volume-tier weights and calibrates it, all scored on the same slices. Results, the trade-offs and the gate's bias limit are in [model_bias.md](../bias/model_bias.md).
 
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
 - its `log_mae_cv` is at least 15% below Space Syntax's;
 - its `coverage80_cv` is between 0.75 and 0.85;
-- optionally, its worst slice is under `gates.max_worst_slice_ratio` (off by default: reported, not blocking).
+- its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
 If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes.
 

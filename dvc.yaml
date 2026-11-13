@@ -358,6 +358,15 @@ stages:
       - configs/bias.yaml
     always_changed: true
 
+  mitigate_bias:
+    cmd: python -m src.models.flow.mitigate --variant both
+    deps:
+      - src/models
+      - src/bias
+      - configs/models.yaml
+      - configs/bias.yaml
+    always_changed: true
+
   check_gates:
     cmd: python -m src.models.flow.registry --check
     deps: [src/models/flow/registry.py, configs/models.yaml]

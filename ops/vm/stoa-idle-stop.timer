@@ -5,6 +5,8 @@ Description=Check every 5 minutes whether the Stoa ops VM is idle
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=5min
+# systemd's default 1-minute accuracy let each check slip ~30 s later than the last.
+AccuracySec=10s
 
 [Install]
 WantedBy=timers.target

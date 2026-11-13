@@ -29,6 +29,8 @@ elif [ "$runs" != unknown ] && [ "$runs" -gt 0 ]; then
 fi
 
 if [ -n "$busy" ]; then
+  # Log only when this ends an idle streak, so the journal shows why the VM stayed up.
+  [ "$(cat "$COUNT_FILE" 2>/dev/null || echo 0)" != 0 ] && log "busy ($busy): idle count reset"
   echo 0 > "$COUNT_FILE"
   exit 0
 fi

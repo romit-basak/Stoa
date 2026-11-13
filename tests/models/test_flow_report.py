@@ -61,3 +61,25 @@ def test_render_has_every_section_and_start_and_end():
     assert "| training rows | 4 | 1 | -75.0% |" in text
     assert "Never seen, holdout: 2 sensors (1, 3)" in text
     assert "`learning_rate`: 0.1" in text and "not tuned" in text
+
+
+def test_a_forest_and_its_boosted_interval_models_are_reported_by_their_own_type(data):
+    from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+
+    rows = np.flatnonzero(data.fold >= 0)
+    x, y = data.frame.matrix(rows), data.y[rows]
+    forest = RandomForestRegressor(n_estimators=8, min_samples_leaf=5, random_state=7)
+    forest.fit(np.nan_to_num(x), y)
+    curve = report.cost_curve(
+        "rf", forest, {"rows": (np.nan_to_num(x), y)}, float(y.mean())
+    )
+    assert (
+        curve["trees"].iloc[-1] == 8 and curve["rows"].iloc[-1] < curve["rows"].iloc[0]
+    )
+    assert report.learned("rf", forest)["leaves"] > 8
+    # A family's interval model can be another type: rf's are HistGradientBoosting.
+    q10 = HistGradientBoostingRegressor(loss="quantile", quantile=0.1, max_iter=5).fit(
+        x, y
+    )
+    assert report.kind("rf", q10) == "hgb"
+    assert report.n_trees("rf", q10) == 5

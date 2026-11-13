@@ -102,7 +102,9 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes.
+If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. The models of 12 November 2026 miss the 15% (11.7% rich, 10.3% portable); what we tried to close the gap, and the recommendation to the team, are in [accuracy_target.md](accuracy_target.md).
+
+Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
 Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portable`, and versions are tracked with aliases rather than MLflow's deprecated stages:
 - `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced;
@@ -134,6 +136,8 @@ docker compose up -d mlflow                     # the tracking server (localhost
 ```
 
 Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
+
+`train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
 
 In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
 

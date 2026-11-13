@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 
 from src.models.flow import baselines, candidates, select
-from src.models.flow.data import final_rows, fold_plan
+from src.models.flow.data import final_rows, fold_plan, summary_plan, trainable
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
 
@@ -43,6 +43,37 @@ def test_fewer_folds_keeps_the_first_ones(data):
 def test_final_rows_exclude_holdouts(data):
     rows = final_rows(data.fold, 10**6, seed=7)
     assert (data.fold[rows] >= 0).all()
+
+
+def test_a_training_start_limits_training_rows_but_not_test_rows(data):
+    start = str(
+        (data.ts.min() + pd.Timedelta(days=5)).tz_convert("Australia/Melbourne").date()
+    )
+    allowed = trainable(data, start)
+    assert 0 < allowed.sum() < len(allowed)
+    full = fold_plan(data.fold, 10**6, 7)
+    later = fold_plan(data.fold, 10**6, 7, allowed=allowed)
+    cutoff = pd.Timestamp(start).tz_localize("Australia/Melbourne")
+    for (tr_all, te_all), (tr, te) in zip(full, later):
+        assert np.array_equal(te, te_all)
+        assert (data.ts.iloc[tr] >= cutoff).all() and len(tr) < len(tr_all)
+    rows = final_rows(data.fold, 10**6, 7, allowed)
+    assert allowed[rows].all() and (data.fold[rows] >= 0).all()
+
+
+def test_no_training_start_keeps_the_original_plan(data):
+    assert trainable(data, None) is None
+    a = fold_plan(data.fold, 500, 7)
+    summary = {"train_rows": 500, "seed": 7, "n_folds": None, "train_start": None}
+    b = summary_plan(data, summary)
+    assert all(np.array_equal(x[0], y[0]) for x, y in zip(a, b))
+
+
+def test_plan_tag_names_the_start_only_when_set():
+    from src.models.flow.train import plan_tag
+
+    assert plan_tag(5, 600000, 7) == "folds=5;train_rows=600000;seed=7"
+    assert plan_tag(5, 600000, 7, "2014-01-01").endswith(";train_start=2014-01-01")
 
 
 # --- fold scores --------------------------------------------------------------------------

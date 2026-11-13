@@ -69,9 +69,12 @@ def fold_scores(
     return out
 
 
-def plan_tag(n_folds: int, train_rows: int, seed: int) -> str:
+def plan_tag(
+    n_folds: int, train_rows: int, seed: int, train_start: str | None = None
+) -> str:
     """Identifies a fold plan, so the gate only compares runs scored on the same rows."""
-    return f"folds={n_folds};train_rows={train_rows};seed={seed}"
+    tag = f"folds={n_folds};train_rows={train_rows};seed={seed}"
+    return f"{tag};train_start={train_start}" if train_start else tag
 
 
 def oof_candidates(
@@ -320,6 +323,7 @@ def train_variant(
         "n_folds": len(plan),
         "train_rows": int(fcfg["train_rows_per_fold"]),
         "seed": int(fcfg["seed"]),
+        "train_start": fcfg.get("train_start"),
         "families": families,
         "tuned": tuned,
         "models": models,
@@ -339,8 +343,12 @@ def run(
     max_trees: int | None = None,
     tune: bool = False,
     n_trials: int | None = None,
+    params_from: dict[str, dict[str, dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """Train every variant; returns each variant's candidates.json content."""
+    """Train every variant; returns each variant's candidates.json content.
+
+    `params_from` ({variant: {family: params}}, from `load_params`) replaces the configured
+    defaults, for example to retrain on other data with an earlier run's tuned values."""
     seed, train_rows = fcfg["seed"], fcfg["train_rows_per_fold"]
     baseline_preds: dict[str, np.ndarray] | None = None
     baseline_runs: dict[str, dict[str, Any]] = {}
@@ -349,10 +357,17 @@ def run(
     for variant in variants:
         t = time.perf_counter()
         data = load_data(variant)
-        plan = flow_data.fold_plan(data.fold, train_rows, seed, n_folds)
-        plan_id = plan_tag(len(plan), train_rows, seed)
+        start = fcfg.get("train_start")
+        allowed = flow_data.trainable(data, start)
+        plan = flow_data.fold_plan(data.fold, train_rows, seed, n_folds, allowed)
+        plan_id = plan_tag(len(plan), train_rows, seed, start)
         params = {
-            f: candidates.capped(f, fcfg["candidates"][f]["params"], max_trees)
+            f: candidates.capped(
+                f,
+                (params_from or {}).get(variant, {}).get(f)
+                or fcfg["candidates"][f]["params"],
+                max_trees,
+            )
             for f in families
         }
         if tune:
@@ -426,11 +441,23 @@ def main() -> None:
     ap.add_argument("--max-trees", type=int, help="cap trees per model (quick runs)")
     ap.add_argument("--train-rows", type=int, help="training rows per fold")
     ap.add_argument("--output-dir")
+    ap.add_argument(
+        "--train-start",
+        help="train only on hours from this date (YYYY-MM-DD, Melbourne time); every "
+        "fold's rows are still predicted and scored",
+    )
+    ap.add_argument(
+        "--params-from",
+        help="output dir of an earlier train run: reuse each family's parameters from "
+        "its candidates.json instead of the configured defaults",
+    )
     args = ap.parse_args()
 
     fcfg = flow_data.flow_config()
     if args.train_rows:
         fcfg["train_rows_per_fold"] = args.train_rows
+    if args.train_start:
+        fcfg["train_start"] = args.train_start
     out = flow_data.output_dir(fcfg, args.output_dir)
     variants = fcfg["variants"] if args.variant == "both" else [args.variant]
     families = args.families or list(fcfg["candidates"])
@@ -443,7 +470,21 @@ def main() -> None:
         max_trees=args.max_trees,
         tune=args.tune,
         n_trials=args.n_trials,
+        params_from=load_params(args.params_from, variants)
+        if args.params_from
+        else None,
     )
+
+
+def load_params(
+    root: str | Path, variants: list[str]
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json."""
+    out = {}
+    for v in variants:
+        summary = json.loads((Path(root) / v / "candidates.json").read_text())
+        out[v] = {f: m["params"] for f, m in summary["models"].items()}
+    return out
 
 
 if __name__ == "__main__":

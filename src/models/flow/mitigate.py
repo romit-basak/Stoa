@@ -135,9 +135,7 @@ def mitigate_variant(
     family = json.loads((out / "selected.json").read_text())["family"]
     params = summary["models"][family]["params"]
     seed, days = fcfg["seed"], fcfg["calibration_days"]
-    plan = flow_data.fold_plan(
-        data.fold, summary["train_rows"], summary["seed"], summary["n_folds"]
-    )
+    plan = flow_data.summary_plan(data, summary)
     oof = pd.read_parquet(out / "oof.parquet", columns=["row", family])
     tested = oof["row"].to_numpy()
 
@@ -187,7 +185,12 @@ def mitigate_variant(
             "stoa.family": family,
             "stoa.variant": data.variant,
             "stoa.mitigation": name,
-            "stoa.plan": plan_tag(len(plan), summary["train_rows"], summary["seed"]),
+            "stoa.plan": plan_tag(
+                len(plan),
+                summary["train_rows"],
+                summary["seed"],
+                summary.get("train_start"),
+            ),
         }
         run_params = {**params, "family": family, "variant": data.variant, **spec}
         with tracking.run(

@@ -17,6 +17,10 @@ It listens on 5001 on your machine (macOS uses 5000 for AirPlay) and on `mlflow:
 .venv/bin/python -m src.models.tracking --smoke     # logs and reloads a tiny model (experiment smoke-test)
 ```
 
+The server uses about 0.6 GB, so it can stay up while the pipeline runs. MLflow 3 also starts a job runner for its GenAI scorers, about seven more processes at 220 MB each, which can push the pipeline's validate task out of memory in an 8 GB Docker VM. Stoa doesn't use those scorers, so `docker-compose.yaml` turns the runner off (`MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"`).
+
+Runs go to the `stoa-flow` experiment (`tracking.experiment` in `configs/models.yaml`). Set `MLFLOW_EXPERIMENT_NAME` to keep a side study apart, as the training-period comparison does with `stoa-flow-periods`. `registry --check` reads the same variable, so the gate never compares a side study with the main runs.
+
 ## Log a training run
 
 Wrap the training in `tracking.run` and log metrics and the model inside it:

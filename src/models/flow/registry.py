@@ -189,9 +189,10 @@ def main() -> None:
     if args.rollback:
         manifest["rollback"] = [rollback(client, v) for v in variants]
     else:
-        exp = client.get_experiment_by_name(cfg["tracking"]["experiment"])
+        name = tracking.experiment_name(cfg)
+        exp = client.get_experiment_by_name(name)
         if exp is None:
-            raise SystemExit(f"no MLflow experiment {cfg['tracking']['experiment']!r}")
+            raise SystemExit(f"no MLflow experiment {name!r}")
         gates = [gate(client, exp.experiment_id, v, fcfg["gates"]) for v in variants]
         for g in gates:
             status = "passed" if g.passed else "FAILED: " + "; ".join(g.reasons)

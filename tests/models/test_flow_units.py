@@ -286,3 +286,32 @@ def test_gate_can_block_on_bias():
     selected = {"log_mae_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
     ok, reasons, _ = evaluate_gate(selected, {"log_mae_cv": 0.5}, gates)
     assert not ok and "worst slice" in reasons[0]
+
+
+def test_leaf_sizes_scale_with_the_sample():
+    p = {"min_child_samples": 5000, "num_leaves": 63}
+    assert candidates.leaf_scaled("lgbm", p, 1 / 3)["min_child_samples"] == 1667
+    assert candidates.leaf_scaled("lgbm", p, 1 / 3)["num_leaves"] == 63
+    assert (
+        candidates.leaf_scaled("hgb", {"min_samples_leaf": 1}, 0.1)["min_samples_leaf"]
+        == 1
+    )
+    assert (
+        candidates.leaf_scaled("xgb", {"min_child_weight": 10.0}, 2.5)[
+            "min_child_weight"
+        ]
+        == 25.0
+    )
+    assert candidates.leaf_scaled("lgbm", p, 1) == p
+
+
+def test_int_log_search_stays_in_range():
+    import optuna
+
+    from src.models.flow.tune import suggest
+
+    study = optuna.create_study(sampler=optuna.samplers.RandomSampler(seed=0))
+    space = {"min_child_samples": {"type": "int_log", "low": 50, "high": 20000}}
+    for _ in range(20):
+        v = suggest(study.ask(), space)["min_child_samples"]
+        assert isinstance(v, int) and 50 <= v <= 20000

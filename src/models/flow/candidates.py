@@ -18,6 +18,26 @@ FAMILIES = ("hgb", "lgbm", "xgb")
 # The size parameter each family's --max-trees cap applies to.
 TREES_PARAM = {"hgb": "max_iter", "lgbm": "n_estimators", "xgb": "n_estimators"}
 
+# Each family's minimum leaf size. Configured and tuned values are per train_rows_per_fold rows
+# (the location folds' training sample), so that a leaf has to span several sensors whatever
+# the sample size; `leaf_scaled` converts them for fits on other sample sizes.
+LEAF_PARAM = {
+    "hgb": "min_samples_leaf",
+    "lgbm": "min_child_samples",
+    "xgb": "min_child_weight",
+}
+
+
+def leaf_scaled(family: str, params: dict[str, Any], factor: float) -> dict[str, Any]:
+    """params with the minimum leaf size multiplied by `factor` (fit rows / fold rows)."""
+    name = LEAF_PARAM.get(family)
+    if name is None or name not in params or factor == 1:
+        return dict(params)
+    value = params[name] * factor
+    if family == "xgb":
+        return {**params, name: max(1e-3, float(value))}
+    return {**params, name: max(1, round(value))}
+
 
 def make(
     family: str, params: dict[str, Any], seed: int, quantile: float | None = None

@@ -205,7 +205,12 @@ def fit_final(
     quantiles: list[float],
     rows: np.ndarray,
     seed: int,
+    fold_rows: int | None = None,
 ) -> dict[str, Any]:
+    """The model and its interval models on `rows`. The minimum leaf size is per `fold_rows`
+    training rows (the folds' sample), so it is scaled up for the larger final sample."""
+    if fold_rows:
+        params = candidates.leaf_scaled(family, params, len(rows) / fold_rows)
     x = data.frame.matrix(rows)
     y = data.y[rows]
     models = {"model": candidates.fit(candidates.make(family, params, seed), x, y)}
@@ -596,7 +601,7 @@ def select_variant(
         seed,
         flow_data.trainable(data, summary.get("train_start")),
     )
-    models = fit_final(data, winner, params, q, rows, seed)
+    models = fit_final(data, winner, params, q, rows, seed, summary["train_rows"])
     precincts, holdout = holdout_scores(data, models["model"], fcfg["calibration_days"])
     pred = oof[winner].to_numpy(dtype=float)
     parts, part_metrics = part_scores(data, oof, pred, fcfg["calibration_days"])

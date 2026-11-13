@@ -54,9 +54,11 @@ Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 
 
 | Family | Searched |
 |---|---|
-| hgb | `learning_rate` 0.03 to 0.15 (log), `max_iter` {200, 400}, `max_leaf_nodes` 31 to 127, `min_samples_leaf` 50 to 300, `l2_regularization` 0.5 to 5 (log) |
-| lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
-| xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+| hgb | `learning_rate` 0.03 to 0.15 (log), `max_iter` {200, 400}, `max_leaf_nodes` 31 to 127, `min_samples_leaf` 50 to 20,000 (log), `l2_regularization` 0.5 to 5 (log) |
+| lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 20,000 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+| xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 1,000 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+
+Minimum leaf sizes are counted per 600,000 training rows, the size of each fold's sample, and scaled for fits on other sample sizes: down for the 200,000-row inner folds, up for the 2-million-row final fit (`candidates.leaf_scaled`). Each fold sample has about 6,000 rows per sensor. With a minimum of 50 to 300 rows, the first search's range, a leaf can hold one sensor's rows, and the trees can learn each sensor's level from its own mix of location features, which doesn't carry over to new sensors. On 13 November, LightGBM with the tuned values but 5,000 to 10,000 rows per leaf had log MAE 0.844 to 0.846 against 0.864, and better WAPE and sensor ranking, so the search now goes up to 20,000.
 
 The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
 

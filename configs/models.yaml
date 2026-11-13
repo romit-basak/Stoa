@@ -32,6 +32,10 @@ flow:
 
   # Candidate architectures, all on the same folds and feature matrix. `params` are the
   # defaults; `search` is the Optuna space used with --tune.
+  # Minimum leaf sizes (min_samples_leaf, min_child_samples, min_child_weight) are per
+  # train_rows_per_fold rows and scaled for other sample sizes (candidates.leaf_scaled). Each
+  # fold sample has about 6,000 rows per sensor, so leaves of thousands of rows have to span
+  # several sensors, which helps at sensors the model never saw (docs/models/flow_model.md).
   candidates:
     hgb:
       params: {max_iter: 300, learning_rate: 0.08, max_leaf_nodes: 63, min_samples_leaf: 200,
@@ -40,7 +44,7 @@ flow:
         learning_rate: {type: float_log, low: 0.03, high: 0.15}
         max_iter: {type: choice, choices: [200, 400]}
         max_leaf_nodes: {type: int, low: 31, high: 127}
-        min_samples_leaf: {type: int, low: 50, high: 300}
+        min_samples_leaf: {type: int_log, low: 50, high: 20000}
         l2_regularization: {type: float_log, low: 0.5, high: 5.0}
     lgbm:
       params: {n_estimators: 300, learning_rate: 0.08, num_leaves: 63, min_child_samples: 200,
@@ -49,7 +53,7 @@ flow:
         learning_rate: {type: float_log, low: 0.03, high: 0.15}
         n_estimators: {type: choice, choices: [200, 400]}
         num_leaves: {type: int, low: 31, high: 127}
-        min_child_samples: {type: int, low: 50, high: 300}
+        min_child_samples: {type: int_log, low: 50, high: 20000}
         reg_lambda: {type: float_log, low: 0.5, high: 5.0}
         colsample_bytree: {type: float, low: 0.5, high: 1.0}
     xgb:
@@ -59,7 +63,7 @@ flow:
         learning_rate: {type: float_log, low: 0.03, high: 0.15}
         n_estimators: {type: choice, choices: [200, 400]}
         max_depth: {type: int, low: 4, high: 10}
-        min_child_weight: {type: float_log, low: 1.0, high: 100.0}
+        min_child_weight: {type: float_log, low: 1.0, high: 1000.0}
         reg_lambda: {type: float_log, low: 0.5, high: 5.0}
         colsample_bytree: {type: float, low: 0.5, high: 1.0}
 

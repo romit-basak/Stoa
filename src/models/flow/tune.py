@@ -35,6 +35,8 @@ def suggest(trial: Any, space: dict[str, Any]) -> dict[str, Any]:
             params[name] = trial.suggest_float(name, spec["low"], spec["high"])
         elif kind == "int":
             params[name] = trial.suggest_int(name, spec["low"], spec["high"])
+        elif kind == "int_log":
+            params[name] = trial.suggest_int(name, spec["low"], spec["high"], log=True)
         elif kind == "choice":
             params[name] = trial.suggest_categorical(name, spec["choices"])
         else:
@@ -93,8 +95,12 @@ def tune(
         )
         losses = []
         for x_tr, x_te, tr, te in built:
+            # Leaf sizes are per fold sample; the inner folds train on fewer rows.
+            fit_params = candidates.leaf_scaled(
+                family, params, len(tr) / fcfg["train_rows_per_fold"]
+            )
             model = candidates.fit(
-                candidates.make(family, params, fcfg["seed"]), x_tr, y[tr]
+                candidates.make(family, fit_params, fcfg["seed"]), x_tr, y[tr]
             )
             losses.append(log_mae(y[te], candidates.predict(model, x_te)))
         loss = float(np.mean(losses))

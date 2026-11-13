@@ -11,6 +11,7 @@ import pytest
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 
 from src.models.flow import baselines, candidates, select
+from src.models.flow import train as flow_train
 from src.models.flow.data import final_rows, fold_plan
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
@@ -272,3 +273,9 @@ def test_gate_can_block_on_bias():
     selected = {"log_mae_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
     ok, reasons, _ = evaluate_gate(selected, {"log_mae_cv": 0.5}, gates)
     assert not ok and "worst slice" in reasons[0]
+
+
+def test_rf_is_opt_in(fcfg):
+    defaults = flow_train.default_families(fcfg)
+    assert "rf" not in defaults
+    assert {"hgb", "lgbm", "xgb"} <= set(defaults)

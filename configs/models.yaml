@@ -24,6 +24,11 @@ flow:
   final_train_rows: 2000000
   # Each held-out sensor's first days of counts, for the calibrated metrics (wape_cv_cal).
   calibration_days: 28
+  # Train only on hours from this date (YYYY-MM-DD, Melbourne time); null trains on every hour
+  # since the counts began in 2009. Only training rows are limited: each fold's rows are all
+  # still predicted and scored, so runs from different starts are compared on the same hours.
+  # `train --train-start` overrides it. Comparison of start years: docs/models/training_periods.md.
+  train_start: null
 
   # Candidate architectures, all on the same folds and feature matrix. `params` are the
   # defaults; `search` is the Optuna space used with --tune.

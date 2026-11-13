@@ -18,6 +18,7 @@ import numpy as np
 from sklearn.model_selection import GroupKFold
 
 from src.models.flow import candidates
+from src.models.flow import data as flow_data
 from src.models.flow.data import Data
 from src.models.flow.evaluate import log_mae
 
@@ -42,15 +43,19 @@ def suggest(trial: Any, space: dict[str, Any]) -> dict[str, Any]:
 
 
 def inner_plan(
-    data: Data, n_folds: int, train_rows: int, seed: int
+    data: Data, n_folds: int, train_rows: int, seed: int, start: str | None = None
 ) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Inner folds over the fold sensors, split by spatial group, each side sampled."""
+    """Inner folds over the fold sensors, split by spatial group, each side sampled. With a
+    training `start`, only the training side is limited to hours from then."""
     rng = np.random.default_rng(seed)
     rows = np.flatnonzero(data.fold >= 0)
+    allowed = flow_data.trainable(data, start)
     plan = []
     folds = GroupKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     for train, test in folds.split(rows, groups=data.group[rows]):
         train, test = rows[train], rows[test]
+        if allowed is not None:
+            train = train[allowed[train]]
         if len(train) > train_rows:
             train = np.sort(rng.choice(train, train_rows, replace=False))
         if len(test) > train_rows:
@@ -72,7 +77,13 @@ def tune(
 
     tcfg = fcfg["tune"]
     spec = fcfg["candidates"][family]
-    plan = inner_plan(data, tcfg["inner_folds"], tcfg["train_rows"], fcfg["seed"])
+    plan = inner_plan(
+        data,
+        tcfg["inner_folds"],
+        tcfg["train_rows"],
+        fcfg["seed"],
+        fcfg.get("train_start"),
+    )
     built = [(data.frame.matrix(tr), data.frame.matrix(te), tr, te) for tr, te in plan]
     y = data.y
 

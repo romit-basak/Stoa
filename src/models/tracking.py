@@ -17,7 +17,8 @@ The run then records, without the caller doing anything:
   tags (CLAUDE.md, "MLOps lifecycle": every run records its DVC data version).
 
 Server: the `mlflow` service in docker-compose.yaml (http://localhost:5001). Set
-MLFLOW_TRACKING_URI to log somewhere else.
+MLFLOW_TRACKING_URI to log somewhere else, and MLFLOW_EXPERIMENT_NAME to log to another
+experiment than `tracking.experiment` (the gate then reads that experiment too).
 
 Usage: python -m src.models.tracking --smoke    # log a tiny model to check the setup
 """
@@ -56,6 +57,13 @@ def tracking_uri(cfg: Mapping[str, Any] | None = None) -> str:
     """MLFLOW_TRACKING_URI if set, else the configured server."""
     cfg = cfg or load_models_config()
     return os.environ.get("MLFLOW_TRACKING_URI") or cfg["tracking"]["uri"]
+
+
+def experiment_name(cfg: Mapping[str, Any] | None = None) -> str:
+    """MLFLOW_EXPERIMENT_NAME if set (to keep side studies out of the main table), else the
+    configured experiment."""
+    cfg = cfg or load_models_config()
+    return os.environ.get("MLFLOW_EXPERIMENT_NAME") or cfg["tracking"]["experiment"]
 
 
 def check_server(uri: str, timeout_s: float = 3.0) -> None:
@@ -137,7 +145,7 @@ def run(
     uri = tracking_uri(cfg)
     check_server(uri)
     mlflow.set_tracking_uri(uri)
-    mlflow.set_experiment(experiment or cfg["tracking"]["experiment"])
+    mlflow.set_experiment(experiment or experiment_name(cfg))
     site = site or training_site()
     spec = frame_spec_path(site)
     with mlflow.start_run(run_name=run_name) as active:

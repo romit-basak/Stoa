@@ -562,9 +562,7 @@ def select_variant(
 
     params = summary["models"][winner]["params"]
     # The same plan as train: its settings are in candidates.json.
-    plan = flow_data.fold_plan(
-        data.fold, summary["train_rows"], summary["seed"], summary["n_folds"]
-    )
+    plan = flow_data.summary_plan(data, summary)
     if not np.array_equal(data.sensors[oof["row"].to_numpy()], oof["location_id"]):
         raise ValueError("oof.parquet doesn't match the training frame; rerun train")
     q = scfg["intervals"]
@@ -593,7 +591,10 @@ def select_variant(
     }
 
     rows = flow_data.final_rows(
-        data.fold, final_train_rows or fcfg["final_train_rows"], seed
+        data.fold,
+        final_train_rows or fcfg["final_train_rows"],
+        seed,
+        flow_data.trainable(data, summary.get("train_start")),
     )
     models = fit_final(data, winner, params, q, rows, seed)
     precincts, holdout = holdout_scores(data, models["model"], fcfg["calibration_days"])

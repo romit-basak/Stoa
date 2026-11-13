@@ -57,6 +57,17 @@ flow:
         min_child_weight: {type: float_log, low: 1.0, high: 100.0}
         reg_lambda: {type: float_log, low: 0.5, high: 5.0}
         colsample_bytree: {type: float, low: 0.5, high: 1.0}
+    rf:
+      # Opt-in: trained only when named (--families ... rf); adds 2 to 4 minutes per fold.
+      default: false
+      params: {n_estimators: 200, max_depth: 16, min_samples_leaf: 50, max_features: 0.3,
+               max_samples: 0.5}
+      search:
+        n_estimators: {type: choice, choices: [100, 200]}
+        max_depth: {type: int, low: 10, high: 24}
+        min_samples_leaf: {type: int, low: 20, high: 200}
+        max_features: {type: float, low: 0.2, high: 0.6}
+        max_samples: {type: float, low: 0.3, high: 0.8}
 
   tune:
     n_trials: 30

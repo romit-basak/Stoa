@@ -11,6 +11,7 @@ The flow model predicts the hourly pedestrian count on a path segment. It is tra
 | `hgb_<variant>` | scikit-learn `HistGradientBoostingRegressor`, Poisson loss | Candidate |
 | `lgbm_<variant>` | LightGBM, Poisson objective | Candidate |
 | `xgb_<variant>` | XGBoost, `count:poisson`, histogram trees | Candidate |
+| `rf_<variant>` | Random forest, Poisson splitting; intervals from HistGradientBoosting quantile models | Candidate (opt-in) |
 
 Space Syntax gives movement potential per segment, not hourly counts, and needs calibrating against counts. So both baselines take the same form: the typical log count for each hour of the week, plus a ridge regression of the remainder on the rung's network terms (log1p), both fitted on the training sensors. The network terms are constant per sensor, so the ridge is fitted on one row per sensor, with its penalty chosen by leave-one-out over the sensors. A held-out sensor is predicted from its network terms alone, the same way the candidates predict it.
 
@@ -57,6 +58,9 @@ Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 
 | hgb | `learning_rate` 0.03 to 0.15 (log), `max_iter` {200, 400}, `max_leaf_nodes` 31 to 127, `min_samples_leaf` 50 to 300, `l2_regularization` 0.5 to 5 (log) |
 | lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 | xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
+| rf | `n_estimators` {100, 200}, `max_depth` 10 to 24, `min_samples_leaf` 20 to 200, `max_features` 0.2 to 0.6, `max_samples` 0.3 to 0.8 |
+
+`rf` is opt-in: it has `default: false` in `configs/models.yaml`, so `train.py` trains it only when named, for example `--families hgb lgbm xgb rf`. It adds about 2 to 4 minutes per fold, and on data version c19f3fdf it scored outside the selection tolerance in both variants. scikit-learn's random forest has no quantile loss, so `rf`'s interval models are HistGradientBoosting quantile models with its `max_depth` and `min_samples_leaf`. Its interval therefore doesn't come from the forest, and could even miss the forest's own prediction. That would need revisiting if `rf` ever came within the selection tolerance.
 
 The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
 
@@ -129,4 +133,4 @@ In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (
 
 ## Not included yet
 
-Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.
+Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.

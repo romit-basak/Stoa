@@ -66,6 +66,10 @@ services:
       MLFLOW_ADMIN_DSN: postgresql://airflow:airflow@postgres/airflow
       MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://airflow:airflow@postgres/mlflow
       MLFLOW_ARTIFACTS_DESTINATION: ${STOA_MLFLOW_ARTIFACTS:-/mlflow/artifacts}
+      # MLflow 3's job runner (GenAI scorers and evaluations, which Stoa doesn't use) starts
+      # about seven worker processes of 220 MB each; without it the server needs about 0.7 GB
+      # instead of 1.8 GB, so it can stay up beside the pipeline's validate task.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
       # Used only when STOA_MLFLOW_ARTIFACTS is a gs:// path.
       GOOGLE_APPLICATION_CREDENTIALS: /secrets/stoa-airflow-dvc.json
     volumes:

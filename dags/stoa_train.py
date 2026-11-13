@@ -75,6 +75,12 @@ def stoa_train():
         return f"{STOA} src.models.flow.select --variant both"
 
     @task.bash
+    def mitigate_bias():
+        # Retrains the selected model with reweighted rows and calibrates it, scored on the
+        # same slices (src/models/flow/mitigate.py; about 20 minutes for both variants).
+        return f"{STOA} src.models.flow.mitigate --variant both"
+
+    @task.bash
     def check_gates():
         return f"{STOA} src.models.flow.registry --check"
 
@@ -82,7 +88,13 @@ def stoa_train():
     def register_model():
         return f"{STOA} src.models.flow.registry --promote"
 
-    train_candidates() >> select_model() >> check_gates() >> register_model()
+    (
+        train_candidates()
+        >> select_model()
+        >> mitigate_bias()
+        >> check_gates()
+        >> register_model()
+    )
 
 
 stoa_train()

@@ -57,19 +57,23 @@ def make(
     raise ValueError(f"unknown family {family!r}: one of {FAMILIES}")
 
 
-def fit(model: Any, x: np.ndarray, y: np.ndarray) -> Any:
+def fit(
+    model: Any, x: np.ndarray, y: np.ndarray, sample_weight: np.ndarray | None = None
+) -> Any:
     """Fit `model`, with any feature that has no values in these rows set to a constant.
 
     scikit-learn 1.9 crashes HistGradientBoosting on an all-NaN column (it fails while
     binning), and sparse OSM tags such as width_m can be missing at every sensor in a fold.
     The trees never split on a constant column, so the feature is ignored, as older versions
-    did, and predicting needs no change.
+    did, and predicting needs no change. `sample_weight` weights the rows (bias mitigation).
     """
     empty = np.isnan(x).all(axis=0) if len(x) else np.zeros(x.shape[1], dtype=bool)
     if empty.any():
         x = x.copy()
         x[:, empty] = 0.0
-    return model.fit(x, y)
+    if sample_weight is None:
+        return model.fit(x, y)
+    return model.fit(x, y, sample_weight=sample_weight)
 
 
 def capped(

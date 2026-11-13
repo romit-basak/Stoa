@@ -25,7 +25,13 @@ def test_runs_monthly_without_catching_up(dag):
 
 
 def test_stages_run_in_order(dag):
-    order = ["train_candidates", "select_model", "check_gates", "register_model"]
+    order = [
+        "train_candidates",
+        "select_model",
+        "mitigate_bias",
+        "check_gates",
+        "register_model",
+    ]
     assert set(dag.task_ids) == set(order)
     for a, b in itertools.pairwise(order):
         assert dag.get_task(a).downstream_task_ids == {b}

@@ -11,6 +11,7 @@ import pytest
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 
 from src.models.flow import baselines, candidates, notify, registry, select
+from src.models.flow import train as flow_train
 from src.models.flow.data import final_rows, fold_plan, summary_plan, trainable
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
@@ -372,3 +373,9 @@ def test_send_goes_through_alerts(monkeypatch):
     )
     assert notify.send("subj", "<p>x</p>")
     assert sent == ["subj"]
+
+
+def test_rf_is_opt_in(fcfg):
+    defaults = flow_train.default_families(fcfg)
+    assert "rf" not in defaults
+    assert {"hgb", "lgbm", "xgb"} <= set(defaults)

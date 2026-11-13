@@ -428,6 +428,11 @@ def run(
     return summaries
 
 
+def default_families(fcfg: dict[str, Any]) -> list[str]:
+    """Families trained when --families isn't given: all but those set default: false."""
+    return [f for f, spec in fcfg["candidates"].items() if spec.get("default", True)]
+
+
 def main() -> None:
     setup_logging()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -460,7 +465,7 @@ def main() -> None:
         fcfg["train_start"] = args.train_start
     out = flow_data.output_dir(fcfg, args.output_dir)
     variants = fcfg["variants"] if args.variant == "both" else [args.variant]
-    families = args.families or list(fcfg["candidates"])
+    families = args.families or default_families(fcfg)
     run(
         variants,
         families,

@@ -31,7 +31,8 @@ To log training runs from a laptop to the shared MLflow, keep a tunnel open and 
 ## When it runs and what it costs
 
 - An instance schedule (`stoa-ops-daily-start`) starts the VM at 23:40 UTC (6:40 PM EST, 7:40 PM EDT), 20 minutes before `stoa_pipeline`'s 00:00 UTC run. `stoa_osm_watch` runs at 00:00 UTC on Sundays, so it is covered too.
-- `ops/vm/idle-stop.sh` checks every 5 minutes and shuts the VM down after 3 idle checks in a row. Busy means: up under 30 minutes, a DAG run queued or running, or any SSH connection (which includes a tunnel). If Airflow's database doesn't answer, it waits up to 2 hours of uptime before stopping anyway.
+- `ops/vm/idle-stop.sh` checks every 5 minutes and shuts the VM down after 3 idle checks in a row. Busy means: up under 30 minutes, a DAG run queued or running, or any SSH connection (which includes a tunnel). If Airflow's database doesn't answer, it waits up to 2 hours of uptime before stopping anyway. When a check resets the idle count, it logs why: `sudo journalctl -t stoa-idle` on the VM.
+- Through IAP, the VM's end of an SSH connection stays open after the laptop disconnects, so sshd sends keepalives (`/etc/ssh/sshd_config.d/stoa-keepalive.conf`, from `setup.sh`) and drops a dead client within about 4 minutes. Without them, one closed tunnel kept the VM up indefinitely. Every `vm.sh` command uses SSH (even `status`), so each one delays the stop by that much.
 - A normal day is about 45 minutes up (a weekly run about an hour). At about $0.13 per hour for `e2-standard-4` plus about $5 per month for the disk, that is roughly $10 per month, billed to the project's billing account.
 - `stoa_minute_feed` stays paused on the VM: the Explorer cluster polls the feed (`ops/hpc/`), and a VM that slept between polls couldn't cover the 02:00 Melbourne reset.
 

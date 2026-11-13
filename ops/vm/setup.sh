@@ -44,6 +44,11 @@ docker compose build
 # The committed data version, so the first run is incremental like on a laptop.
 docker compose run --rm --no-deps -e DVC_NO_ANALYTICS=1 airflow-scheduler bash -c 'cd /opt/stoa && dvc pull'
 
+# Through IAP, a closed laptop connection can leave sshd's session open indefinitely, which
+# idle-stop.sh counts as someone connected. Keepalives drop a dead client after about 90 s.
+printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' > /etc/ssh/sshd_config.d/stoa-keepalive.conf
+systemctl reload ssh
+
 install -m 644 ops/vm/stoa-compose.service ops/vm/stoa-idle-stop.service \
   ops/vm/stoa-idle-stop.timer /etc/systemd/system/
 systemctl daemon-reload

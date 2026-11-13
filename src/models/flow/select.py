@@ -17,7 +17,8 @@ Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flo
    (src.models.flow.evaluate.standard_parts), the calibration curve and the feature
    importance;
 5. logs it as `<family>_<variant>` with stoa.role = selected: the three models, the ranking,
-   the slice table and the comparison charts.
+   the slice table, the comparison charts and the training report (src/models/flow/report.py,
+   also at <output_dir>/<variant>/reports/selected_<family>_<variant>.md).
 
 Writes <output_dir>/<variant>/selected.json for src.models.flow.registry.
 """
@@ -39,6 +40,7 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging
 from src.models import tracking
 from src.models.flow import candidates
 from src.models.flow import data as flow_data
+from src.models.flow import report as flow_report
 from src.models.flow.data import Data, calibration_window
 from src.models.flow.evaluate import (
     cv_coverage,
@@ -468,6 +470,66 @@ def importance_chart(table: pd.DataFrame, method: str, path: Path) -> None:
 # --------------------------------------------------------------------------------------------
 
 
+def selected_report(
+    data: Data,
+    family: str,
+    params: dict[str, Any],
+    quantiles: list[float],
+    models: dict[str, Any],
+    rows: np.ndarray,
+    tuning: str,
+    metrics: dict[str, float],
+    seed: int,
+) -> str:
+    """The training report of the final model and its interval models."""
+    from datetime import UTC, datetime
+
+    held = np.flatnonzero((data.holdout != "") & (data.holdout != "neighbour"))
+    tr = flow_report.sample(rows, seed=seed)
+    sets = {"training rows": (data.frame.matrix(tr), data.y[tr])}
+    if len(held):
+        he = flow_report.sample(held, seed=seed)
+        sets["holdout precincts"] = (data.frame.matrix(he), data.y[he])
+    y_train = data.y[rows]
+    curves = {
+        "Mean model (Poisson deviance)": flow_report.cost_curve(
+            family, models["model"], sets, float(np.mean(y_train))
+        )
+    }
+    for q in quantiles:
+        name = f"model_q{round(q * 100):02d}"
+        curves[f"{q:.0%} interval model (pinball loss)"] = flow_report.cost_curve(
+            family, models[name], sets, float(np.quantile(y_train, q)), quantile=q
+        )
+    learned = {
+        f"{name}: {k.replace('_', ' ')}": v
+        for name, m in models.items()
+        for k, v in flow_report.learned(family, m).items()
+    }
+    facts = flow_report.data_facts(
+        data,
+        rows,
+        {"holdout precincts and their neighbours": data.sensors[data.fold < 0]},
+        note="Trained on every fold sensor; the holdout precincts are scored here for the "
+        "first time.",
+    )
+    return flow_report.render(
+        f"selected: {family}_{data.variant}",
+        f"The selected flow model for the {data.variant} variant: `{family}` with a Poisson "
+        f"objective, and `{family}` quantile models at {', '.join(f'{q:g}' for q in quantiles)} "
+        "for the interval (widened by `interval_margins` in `selected.json`).",
+        facts,
+        "Poisson deviance for the mean model; pinball loss for the interval models",
+        "the mean loss over the rows (sampled, 20,000 per set)",
+        curves,
+        learned,
+        params,
+        tuning,
+        metrics,
+        datetime.now(UTC).isoformat(timespec="seconds"),
+    )
+
+
 def log_model(model: Any, family: str, name: str, x_example: np.ndarray) -> str:
     if family == "lgbm":
         import mlflow.lightgbm
@@ -565,6 +627,13 @@ def select_variant(
     }
     art = out / "selected"
     art.mkdir(parents=True, exist_ok=True)
+    tuning = flow_report.tuning_text(
+        summary.get("tuned", False), fcfg["candidates"][winner].get("search")
+    )
+    text = selected_report(data, winner, params, q, models, rows, tuning, metrics, seed)
+    (art / "model_report.md").write_text(text)
+    (out / "reports").mkdir(parents=True, exist_ok=True)
+    (out / "reports" / f"selected_{winner}_{data.variant}.md").write_text(text)
     rank.to_csv(art / "ranking.csv", index=False)
     slices.to_csv(art / "slices.csv", index=False)
     worst.to_csv(art / "bias_check.csv", index=False)
@@ -597,6 +666,7 @@ def select_variant(
     ) as active:
         mlflow.log_metrics(metrics)
         mlflow.log_artifacts(str(art), artifact_path="selection")
+        mlflow.log_text(text, "model_report.md")
         mlflow.log_dict(data.frame.columns, "features.json")
         example = x_sample[:5]
         uris = {name: log_model(m, winner, name, example) for name, m in models.items()}

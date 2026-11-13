@@ -83,6 +83,16 @@ The quantile models learn the spread of counts at the sensors they trained on. A
 
 The widened interval describes a location with no local counts. After calibrating on a site's own counts, most of the level error is gone and the interval is conservative.
 
+### Training reports
+
+Every model trained gets a Markdown report (`src/models/flow/report.py`), written to `data/models/<variant>/reports/<model>.md` (the baselines' to `data/models/baselines/reports/`) and logged to its MLflow run as `model_report.md`. Each run of `train` and `select` rewrites them. A report lists:
+- the data: the period of the training rows, how many rows and sensors, and which sensors the model never saw (each fold's, and the holdout precincts);
+- the loss function (per row: Poisson deviance for the mean models, pinball loss for the interval models, squared error on log counts for the baselines) and the cost function (its mean over a set of rows), with the cost before the first tree and after the last, on training rows and on rows the model never saw. Boosted models also add an L2 penalty on leaf values during training, which the reported costs leave out so they compare across families;
+- the learned parameters: trees, leaves, splits and features used (for the baselines, the hour-of-week profile and the ridge coefficients);
+- the hyperparameters, and whether they were tuned and over what search space.
+
+The reports aren't tracked in git, because writing tracked files during a run would mark the run's later models as trained on uncommitted code. Copy them into `docs/` for a submission.
+
 After selection, `src.models.flow.mitigate` retrains the selected model with sensor-equal and volume-tier weights and calibrates it, all scored on the same slices. Results, the trade-offs and the gate's bias limit are in [model_bias.md](../bias/model_bias.md).
 
 ## Gate, registry and rollback

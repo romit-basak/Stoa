@@ -28,6 +28,8 @@ Stop your local stack first or use other ports: the tunnel needs local ports 808
 
 To log training runs from a laptop to the shared MLflow, keep a tunnel open and leave `MLFLOW_TRACKING_URI` at its default (`http://localhost:5001`, `configs/models.yaml`). Large training jobs are better run on the VM itself (`stoa_train` DAG, or `vm.sh ssh`), so the 7.4-million-row frame doesn't have to come down to a laptop. If a job needs more memory, `ops/vm/vm.sh resize e2-highmem-4` (32 GB) and back to `e2-standard-4` afterwards.
 
+The `e2-standard-4` is slow for training: its vCPUs are shared cores. On the first VM run (13 November), `bias_errors` took about 15 minutes per mitigation (5 folds of 600,000 rows at about 168 s each), about 3 times a laptop, though memory peaked at only 9 of 16 GB. That is fine for the weekly retrain. Before a heavy `stoa_train` or tuning run, resize to a compute-optimised machine, for example `ops/vm/vm.sh resize c3-standard-8` (8 dedicated vCPUs, 32 GB, about $0.40 per hour), and back to `e2-standard-4` afterwards; the machine type persists across stops.
+
 ## When it runs and what it costs
 
 - An instance schedule (`stoa-ops-daily-start`) starts the VM at 23:40 UTC (6:40 PM EST, 7:40 PM EDT), 20 minutes before `stoa_pipeline`'s 00:00 UTC run. `stoa_osm_watch` runs at 00:00 UTC on Sundays, so it is covered too.

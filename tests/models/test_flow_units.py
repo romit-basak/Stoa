@@ -10,11 +10,34 @@ import pandas as pd
 import pytest
 
 from src.models.flow import baselines, candidates, select
-from src.models.flow.data import final_rows, fold_plan, summary_plan, trainable
+from src.models.flow.data import (
+    final_rows,
+    fold_plan,
+    neighbours_of_folds,
+    summary_plan,
+    trainable,
+)
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
 
 # --- folds ----------------------------------------------------------------------------------
+
+
+def test_close_sensors_in_other_folds_are_found():
+    xy = pd.DataFrame({"x": [0.0, 150, 1000, 1100], "y": 0.0}, index=[1, 2, 3, 4])
+    fold = pd.Series([0, 1, 1, 0], index=xy.index)
+    near = neighbours_of_folds(xy, fold, 200)
+    assert list(near[0]) == [2, 3]  # 2 is 150 m from sensor 1, 3 is 100 m from sensor 4
+    assert list(near[1]) == [1, 4]
+
+
+def test_fold_plan_leaves_test_sensors_neighbours_out_of_training():
+    sensors = np.repeat([1, 2, 3, 4, 5, 6], 10)
+    fold = np.repeat([0, 0, 1, 1, 2, 2], 10)
+    near = {0: np.array([3]), 1: np.array([], dtype=int), 2: np.array([1, 4])}
+    plan = fold_plan(fold, 10_000, 7, sensors=sensors, near=near)
+    trained = [set(sensors[train].tolist()) for train, _ in plan]
+    assert trained == [{4, 5, 6}, {1, 2, 5, 6}, {2, 3}]
 
 
 def test_fold_plan_never_uses_holdouts(data):

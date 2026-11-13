@@ -70,11 +70,17 @@ def fold_scores(
 
 
 def plan_tag(
-    n_folds: int, train_rows: int, seed: int, train_start: str | None = None
+    n_folds: int,
+    train_rows: int,
+    seed: int,
+    train_start: str | None = None,
+    buffer_m: float = 0.0,
 ) -> str:
     """Identifies a fold plan, so the gate only compares runs scored on the same rows."""
     tag = f"folds={n_folds};train_rows={train_rows};seed={seed}"
-    return f"{tag};train_start={train_start}" if train_start else tag
+    if train_start:
+        tag += f";train_start={train_start}"
+    return f"{tag};buffer_m={buffer_m:g}" if buffer_m else tag
 
 
 def oof_candidates(
@@ -324,6 +330,7 @@ def train_variant(
         "train_rows": int(fcfg["train_rows_per_fold"]),
         "seed": int(fcfg["seed"]),
         "train_start": fcfg.get("train_start"),
+        "buffer_m": float(data.buffer_m),
         "families": families,
         "tuned": tuned,
         "models": models,
@@ -359,8 +366,10 @@ def run(
         data = load_data(variant)
         start = fcfg.get("train_start")
         allowed = flow_data.trainable(data, start)
-        plan = flow_data.fold_plan(data.fold, train_rows, seed, n_folds, allowed)
-        plan_id = plan_tag(len(plan), train_rows, seed, start)
+        plan = flow_data.fold_plan(
+            data.fold, train_rows, seed, n_folds, allowed, data.sensors, data.near
+        )
+        plan_id = plan_tag(len(plan), train_rows, seed, start, data.buffer_m)
         params = {
             f: candidates.capped(
                 f,

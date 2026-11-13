@@ -89,7 +89,7 @@ What-if scenarios edit the graph, recompute the network metrics nearby, re-predi
 
 For limited outdoor approach areas only, the walkers' entry points, times and routes feed an existing open-source pedestrian simulator, not one we write. The candidates in the scoping document are JuPedSim and Vadere. Both ship several built-in movement models (social-force and speed-based models among them), and we'd pick one and calibrate it rather than build our own. Setup on one area is scheduled for week 7 (9 to 15 November).
 
-Before choosing, check each simulator's licence against the rule that code dependencies be permissive (MIT, BSD, Apache), since the API image may be distributed. If the best simulator has a copyleft licence, one option is to run it as a separate service outside the distributed image; that is a team decision.
+The team chose JuPedSim in November 2026. Its licence is LGPL-3.0, which the dependency rule in CLAUDE.md now allows for a library used unmodified, and it runs in its own container outside the API image. How to set it up is in [getting_started.md](../simulation/getting_started.md).
 
 Movement from one time step to the next comes from the simulator's rules: each person follows a route at a speed that falls as density rises. Time-series data checks those rules rather than driving them:
 
@@ -113,6 +113,5 @@ The per-minute archive starts in late October 2026, so few events are covered ye
 
 ## Open decisions
 
-- Which simulator (JuPedSim, Vadere or another), after the licence check, and how to run it if its licence is copyleft.
 - Whether to add the hand-weighted ladder rung later.
 - The tolerance used in step 2 of model selection.

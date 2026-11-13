@@ -83,11 +83,15 @@ def oof(
     osm: pd.DataFrame,
     y: np.ndarray,
     plan: list[tuple[np.ndarray, np.ndarray]],
+    fitted: list[NetworkBaseline] | None = None,
 ) -> np.ndarray:
-    """Out-of-fold predictions of one rung (NaN on rows in no test fold)."""
+    """Out-of-fold predictions of one rung (NaN on rows in no test fold). Each fold's fitted
+    model is appended to `fitted`, if given, for the training report."""
     cols = network_columns(rung, osm)
     pred = np.full(len(hourly), np.nan, dtype="float32")
     for train, test in plan:
         model = NetworkBaseline(cols).fit(hourly, osm, train, y)
         pred[test] = model.predict(hourly, osm, test)
+        if fitted is not None:
+            fitted.append(model)
     return pred

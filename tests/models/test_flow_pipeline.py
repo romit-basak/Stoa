@@ -78,6 +78,24 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
     for name in ("ranking.csv", "model_comparison.png", "calibration_curve.png"):
         assert (out / "rich" / "selected" / name).exists()
 
+    # A training report for every model trained, and one for the selected model.
+    reports = out / "rich" / "reports"
+    assert {f"{f}_rich.md" for f in FAMILIES} <= {p.name for p in reports.iterdir()}
+    assert (reports / f"selected_{sel['family']}_rich.md").exists()
+    assert {p.name for p in (out / "baselines" / "reports").iterdir()} == {
+        "baseline_betweenness.md",
+        "baseline_space_syntax.md",
+    }
+    text = (reports / "lgbm_rich.md").read_text()
+    for heading in (
+        "## Data",
+        "## Loss and cost",
+        "## Learned parameters",
+        "## Hyperparameters",
+    ):
+        assert heading in text
+    assert "Never seen, holdout precincts" in text and "Poisson deviance" in text
+
     client = MlflowClient(mlflow_store)
     exp = client.get_experiment_by_name(
         tracking.load_models_config()["tracking"]["experiment"]
@@ -88,6 +106,9 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
     assert "baseline_space_syntax" in names
     roles = [r.data.tags["stoa.role"] for r in runs]
     assert roles.count("selected") == 2 and roles.count("baseline") == 2
+    for r in runs:
+        files = {a.path for a in client.list_artifacts(r.info.run_id)}
+        assert "model_report.md" in files, r.info.run_name
 
     model = mlflow.pyfunc.load_model(sel["model_uris"]["model"])
     x = np.zeros((2, len(make_data().frame.columns)), dtype="float32")

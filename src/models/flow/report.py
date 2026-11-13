@@ -63,7 +63,24 @@ def sample(rows: np.ndarray, n: int = SAMPLE_ROWS, seed: int = 0) -> np.ndarray:
 # --------------------------------------------------------------------------------------------
 
 
+KINDS = {
+    "HistGradientBoostingRegressor": "hgb",
+    "LGBMRegressor": "lgbm",
+    "XGBRegressor": "xgb",
+    "RandomForestRegressor": "rf",
+}
+
+
+def kind(family: str, model: Any) -> str:
+    """The model's own type, which can differ from its family: rf's interval models are
+    HistGradientBoosting."""
+    return KINDS.get(type(model).__name__, family)
+
+
 def n_trees(family: str, model: Any) -> int:
+    family = kind(family, model)
+    if family == "rf":
+        return len(model.estimators_)
     if family == "hgb":
         return int(model.n_iter_)
     if family == "lgbm":
@@ -76,8 +93,13 @@ def n_trees(family: str, model: Any) -> int:
 def staged(
     family: str, model: Any, x: np.ndarray, at: Sequence[int]
 ) -> dict[int, np.ndarray]:
-    """Predictions using only the first k trees, for each k in `at`."""
+    """Predictions using only the first k trees, for each k in `at` (for a forest, the mean of
+    its first k trees)."""
     want = set(at)
+    family = kind(family, model)
+    if family == "rf":
+        total = np.cumsum([t.predict(x) for t in model.estimators_], axis=0)
+        return {k: total[k - 1] / k for k in sorted(want)}
     if family == "hgb":
         return {
             k: p for k, p in enumerate(model.staged_predict(x), start=1) if k in want
@@ -120,6 +142,7 @@ def cost_curve(
 
 def learned(family: str, model: Any) -> dict[str, Any]:
     """Counts of what the fitted trees hold: trees, leaves (one learned value each) and splits."""
+    family = kind(family, model)
     out: dict[str, Any] = {
         "trees": n_trees(family, model),
         "features_in": int(model.n_features_in_),
@@ -137,6 +160,10 @@ def learned(family: str, model: Any) -> dict[str, Any]:
             trees = model.booster_.dump_model()["tree_info"]
             leaves = sum(int(t["num_leaves"]) for t in trees)
             used = set(np.flatnonzero(model.booster_.feature_importance("split")))
+        elif family == "rf":
+            trees = [t.tree_ for t in model.estimators_]
+            leaves = sum(int(t.n_leaves) for t in trees)
+            used = {int(f) for t in trees for f in t.feature if f >= 0}
         else:
             df = model.get_booster().trees_to_dataframe()
             leaves = int((df["Feature"] == "Leaf").sum())

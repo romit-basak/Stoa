@@ -209,6 +209,7 @@ FAMILY_NAMES = {
     "hgb": "scikit-learn HistGradientBoostingRegressor",
     "lgbm": "LightGBM",
     "xgb": "XGBoost (histogram trees)",
+    "rf": "scikit-learn RandomForestRegressor",
 }
 
 

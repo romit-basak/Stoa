@@ -23,8 +23,10 @@ The baselines use only network features, which both variants share, so they run 
 ## Folds
 
 Rows and features come from the training frame (`src/features/training_frame.py`, `docs/features/training_frame.md`): located outdoor sensors, outage hours dropped. Folds come from its `splits.parquet`:
-- sensors within 200 m of each other share a spatial group, and a group is never split between training and testing;
+- sensors are grouped so that every member of a group is within 200 m of every other (complete linkage), and a group is never split between training and testing;
 - the three holdout precincts (UniMelb edge, Carlton, North Melbourne) and their neighbours are in no fold, so no model trains on them before the final evaluation (CLAUDE.md core rule 2).
+
+A sensor just outside a group can still be close to one of its members and land in another fold (64 of the 191 pairs closer than 200 m did). So each fold's training rows leave out every other fold's sensor within 200 m of one of its test sensors (`data.neighbours_of_folds`), which drops 9 to 19 of 76 to 86 training sensors per fold. The buffer is recorded as `buffer_m` in `candidates.json` and in the `stoa.plan` tag, so the gate never compares buffered and unbuffered runs.
 
 Each fold's training rows are a 600,000-row sample of the other folds, drawn once per fold, so every candidate and baseline trains on exactly the same rows. Every model then predicts its fold's sensors, which gives out-of-fold predictions for every fold sensor.
 
@@ -58,7 +60,7 @@ Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 
 | lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 | xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 
-The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
+The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. The inner folds also don't apply the 200 m neighbour buffer yet. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
 
 ## Selection, after the bias check
 

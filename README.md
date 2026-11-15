@@ -277,7 +277,7 @@ Our data has no people in it. The counts are anonymous totals per sensor and hou
 We slice the hourly table 20 ways, including precinct, how busy the sensor is, nearby amenities, slope, time of day, holidays, rain, temperature, era (before, during and after COVID) and AFL match days. The slices are defined in `configs/bias.yaml`.
 
 1. **How much data each group has** (`bias_slices`). Each group's share is compared with a fair reference: hours in the study period for time and weather, walkable network for precincts, and footpath length for slope. Place is the most uneven: the city centre has five times its share of sensors, while Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less.
-2. **Where a model does worse** (`bias_errors`). The real flow model comes later, so a gradient-boosting baseline stands in for it. It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
+2. **Where a model does worse** (`bias_errors`). A gradient-boosting baseline stands in for the flow model here, so the data stage doesn't depend on it; the flow model's own check is in [Bias in the model](#bias-in-the-model). It's trained in 5 folds with whole sensors held out (since 15 November, whole spatial groups, which raises the overall WAPE to 0.60 and clears Kensington; the rest of the picture holds). We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
 3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about 30% (WAPE 0.53 to 0.38) and fixed the quiet, low-amenity, Southbank and Kensington sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights. The rerun on 5 November, with eleven more days of counts, gave 0.53 before calibration and 0.37 after.
 4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the run of 13 November (18 days of minutes) that raised coverage from 71% to 92% of sensor-hours (quiet sensors from 60% to 97%, night from 33% to 92%). Carlton and Parkville stay the least covered (63% and 65%), because three of their sensors never publish the first 5 minutes of each hour.
 
@@ -357,7 +357,7 @@ In Airflow, trigger `stoa_train` after `stoa_pipeline` has built the training fr
 .venv/bin/python -m src.models.flow.registry --check     # then --promote, or --rollback --variant rich
 ```
 
-On an Apple M4 laptop (10 cores, 16 GB), for both variants: `train` takes about 21 minutes (73 with `--tune`), `select` 16 to 19, `mitigate` about 18, and the gate a few seconds. A `stoa_train` run takes about an hour, or close to two with tuning.
+On an Apple M4 laptop (10 cores, 16 GB), for both variants: `train` takes about 21 minutes (73 with `--tune`), `select` 16 to 19, `mitigate` 16 to 18, and the gate a few seconds. A `stoa_train` run takes about an hour, or close to two with tuning.
 
 ### Loading the data
 
@@ -395,7 +395,7 @@ Run on 15 November 2026 on data version `961075e6`, with the parameters from the
 | 9 | lgbm | 0.877 | 14.3% | xgb | 0.882 | 13.8% |
 | Mean | | 0.872 | 14.8% | | 0.885 | 13.5% |
 
-All three families beat both baselines in every run. The selected rich model at seed 7, in more detail:
+All three families beat both baselines in every run. The two models selected at seed 7, in more detail:
 
 | Metric | Rich | Portable |
 |---|---|---|
@@ -430,7 +430,7 @@ The charts, tables and a training report (data, loss and cost, learned parameter
 
 `train --tune` (or `tune` in the DAG) runs an Optuna search (TPE sampler, a form of Bayesian optimisation) of 30 trials per family and variant before training. Trials are scored by log MAE on four inner folds of the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. The holdout precincts never enter. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent run logs the best values and Optuna's estimate of each parameter's importance. Without `--tune`, `train` takes the parameters of an earlier run with `--params-from`, which is what the monthly `stoa_train` run does.
 
-The search space (`flow.families.<family>.search` in `configs/models.yaml`):
+The search space (`flow.candidates.<family>.search` in `configs/models.yaml`):
 
 | Family | Searched |
 |---|---|
@@ -499,7 +499,7 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 ### Registry, promotion and rollback
 
 `registry.py` uses the MLflow model registry, with one registered model per variant (`stoa-flow-rich`, `stoa-flow-portable`):
-- **What's registered** is the selected run's bundle (`src/models/flow/bundle.py`): the mean model, the two quantile models and the interval margins as one MLflow model. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` for each segment-hour, the Predictions interface in CLAUDE.md.
+- **What's registered** is the selected run's bundle (`src/models/flow/bundle.py`): the mean model, the two quantile models and the interval margins as one MLflow model. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` for each segment-hour, the count and bounds of the Predictions interface in CLAUDE.md.
 - **Gate.** `--check` compares the latest selected run of each variant with the Space Syntax run on the same data version and fold plan. The rich variant must pass; the portable one is registered only if it passes.
 - **Promotion.** `--promote` registers a model that passed the gate and moves the `champion` alias to it. The exception is a model whose gain over Space Syntax is more than 1 point below the current champion's (`gates.champion_tolerance`). That one is registered as `challenger`, the champion keeps serving, and the task fails, which emails the team. Gains are compared rather than raw errors because they stay comparable across data versions.
 - **Rollback.** `--rollback --variant rich` moves `champion` back to the version it replaced. Each champion records its predecessor, so rollback can be repeated one version at a time. With `--variant both`, nothing changes unless both variants can roll back.

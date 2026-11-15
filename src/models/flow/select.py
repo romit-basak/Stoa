@@ -6,10 +6,10 @@ Usage: python -m src.models.flow.select [--variant rich|portable|both] [--output
 Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flow.train, then:
 1. ranks the candidates by log_mae_cv (the success criterion);
 2. for those within `selection.tolerance` of the best, measures WAPE per slice of their
-   out-of-fold predictions with the bias slices of configs/bias.yaml (src/bias: Fairlearn
-   MetricFrame, sensor-bootstrap intervals). The candidate whose worst slice is least worse
-   than its overall error wins, so a small accuracy gain can't buy a model that fails one
-   group;
+   out-of-fold predictions (after each sensor's calibration window) with the bias slices of
+   configs/bias.yaml (src/bias: Fairlearn MetricFrame, sensor-bootstrap intervals). The
+   candidate whose worst slice is least worse than its overall error wins, so a small
+   accuracy gain can't buy a model that fails one group;
 3. fits the winner's 10% and 90% quantile models on the same folds and widens their interval
    from the out-of-fold misses (`interval_margins`), for coverage80_cv;
 4. fits the winner and its interval models on every fold sensor, and scores the holdout
@@ -85,6 +85,13 @@ def slice_rows(oof: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict[str, An
     keys = oof[["location_id", "ts_utc"]]
     aligned = keys.merge(rows, on=["location_id", "ts_utc"], how="left", validate="1:1")
     return aligned, sl["dims"], bias_cfg
+
+
+def scored_rows(oof: pd.DataFrame, calibration_days: float) -> pd.DataFrame:
+    """Out-of-fold rows after each sensor's calibration window, the hours every other score
+    uses (and mitigate's bias check), so the gated worst slice is measured on them too."""
+    keep = scored_mask(oof["location_id"].to_numpy(), oof["ts_utc"], calibration_days)
+    return oof[keep].reset_index(drop=True)
 
 
 def worst_slice(errors: pd.DataFrame, min_sensors: int) -> tuple[float, str]:
@@ -556,7 +563,9 @@ def select_variant(
     scfg, seed = fcfg["selection"], fcfg["seed"]
     rank = ranking(summary)
     short = shortlist(rank, scfg["tolerance"])
-    slices, worst = bias_fn(oof, short, scfg["skip_dimensions"])
+    slices, worst = bias_fn(
+        scored_rows(oof, fcfg["calibration_days"]), short, scfg["skip_dimensions"]
+    )
     winner = choose(rank, worst)
     log.info("%s: shortlisted %s, selected %s", data.variant, short, winner)
 

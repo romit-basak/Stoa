@@ -243,6 +243,19 @@ def test_selection_trades_a_little_accuracy_for_the_fairer_model():
     assert select.choose(rank, worst) == "hgb"
 
 
+def test_bias_check_rows_skip_each_sensors_calibration_window():
+    ts = pd.Series(pd.date_range("2025-01-01", periods=40 * 24, freq="h", tz="UTC"))
+    oof = pd.DataFrame({"location_id": 1, "ts_utc": ts, "y": 1.0})
+    later = pd.DataFrame(
+        {"location_id": 2, "ts_utc": ts + pd.Timedelta(days=5), "y": 1.0}
+    )
+    rows = select.scored_rows(pd.concat([oof, later]), 28)
+    first = rows.groupby("location_id")["ts_utc"].min()
+    assert first[1] == ts[0] + pd.Timedelta(days=28)
+    assert first[2] == ts[0] + pd.Timedelta(days=33)
+    assert len(rows) == 2 * 12 * 24
+
+
 def test_worst_slice_ignores_thin_groups():
     errors = pd.DataFrame(
         {

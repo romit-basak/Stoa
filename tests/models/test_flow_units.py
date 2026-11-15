@@ -76,6 +76,15 @@ def test_plan_tag_names_the_start_only_when_set():
     assert plan_tag(5, 600000, 7, "2014-01-01").endswith(";train_start=2014-01-01")
 
 
+def test_a_new_model_beats_the_champion_unless_clearly_worse():
+    from src.models.flow.registry import beats_champion
+
+    assert beats_champion(0.12, 0.125, 0.01)
+    assert not beats_champion(0.10, 0.125, 0.01)
+    assert beats_champion(0.10, None, 0.01)  # champion from before gains were recorded
+    assert beats_champion(None, 0.125, 0.01)
+
+
 # --- fold scores --------------------------------------------------------------------------
 
 

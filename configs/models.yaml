@@ -103,6 +103,9 @@ flow:
     # Variants that must pass for the gate task to succeed; others are registered only if
     # they pass, and reported either way.
     required_variants: [rich]
+    # --promote keeps the champion when the new model's gain over Space Syntax is more than
+    # this below the champion's (registry.beats_champion).
+    champion_tolerance: 0.01
     # Block when the selected model's worst slice is this many times the overall WAPE
     # (null: report it, don't block). The selected models of 12 November 2026 were at 1.90
     # (rich) and 1.94 (portable), both on quiet sensors; the XGBoost candidate was at 2.24.

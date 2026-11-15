@@ -53,7 +53,7 @@ All scoring is in `src/models/flow/evaluate.py`, named as in `experiment_trackin
 
 ## Hyperparameters
 
-Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by log MAE on two inner folds over the fold sensors, split by spatial group, on 200,000-row samples. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
+Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by log MAE on four inner folds over the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. With two inner folds the search chose models that underfit ([accuracy_target.md](accuracy_target.md)). Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
 
 | Family | Searched |
 |---|---|
@@ -107,7 +107,7 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. The models of 12 November 2026 miss the 15% (11.7% rich, 10.3% portable); what we tried to close the gap, and the recommendation to the team, are in [accuracy_target.md](accuracy_target.md).
+If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. On buffered folds the rich model is 14.3% to 15.5% below Space Syntax across three seeds, so it passes or misses the 15% depending on the seed; the runs, what we tried to close the gap, and the recommendation to the team are in [accuracy_target.md](accuracy_target.md).
 
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 

@@ -11,6 +11,7 @@ import pytest
 
 from src.models.flow import baselines, candidates, select
 from src.models.flow.data import (
+    close_sensors,
     final_rows,
     fold_plan,
     neighbours_of_folds,
@@ -38,6 +39,25 @@ def test_fold_plan_leaves_test_sensors_neighbours_out_of_training():
     plan = fold_plan(fold, 10_000, 7, sensors=sensors, near=near)
     trained = [set(sensors[train].tolist()) for train, _ in plan]
     assert trained == [{4, 5, 6}, {1, 2, 5, 6}, {2, 3}]
+
+
+def test_close_sensors_lists_each_sensors_neighbours():
+    xy = pd.DataFrame({"x": [0.0, 150, 1000, 1100], "y": 0.0}, index=[1, 2, 3, 4])
+    close = close_sensors(xy, 200)
+    assert {k: list(v) for k, v in close.items()} == {1: [2], 2: [1], 3: [4], 4: [3]}
+
+
+def test_tuning_folds_leave_test_sensors_neighbours_out_of_training(data):
+    from src.models.flow.tune import inner_plan
+
+    # Pair each odd sensor with the next one; the pairs are close but in different groups.
+    data.close = {s: np.array([s + 1 if s % 2 else s - 1]) for s in range(1, 13)}
+    for train, test in inner_plan(data, 2, 10_000, 7):
+        tested = set(data.sensors[test].tolist())
+        trained = set(data.sensors[train].tolist())
+        near = {int(n) for s in tested for n in data.close[s]} - tested
+        assert trained and not trained & near
+        assert not trained & tested
 
 
 def test_fold_plan_never_uses_holdouts(data):

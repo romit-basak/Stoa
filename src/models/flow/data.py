@@ -58,6 +58,8 @@ class Data:
     # Fold -> the other folds' sensors within buffer_m of one of its sensors (fold_plan).
     near: dict[int, np.ndarray] = field(default_factory=dict)
     buffer_m: float = 0.0
+    # Sensor -> the other sensors within buffer_m of it (tune.inner_plan's buffer).
+    close: dict[int, np.ndarray] = field(default_factory=dict)
 
     @property
     def y(self) -> np.ndarray:
@@ -92,6 +94,24 @@ def neighbours_of_folds(
     return out
 
 
+def close_sensors(xy: pd.DataFrame, radius_m: float) -> dict[int, np.ndarray]:
+    """For each sensor, the other sensors closer than radius_m. `xy` (x, y in metres) is
+    indexed by location_id."""
+    ids = xy.index.to_numpy()
+    d = squareform(pdist(xy[["x", "y"]].to_numpy()))
+    np.fill_diagonal(d, np.inf)
+    return {int(s): ids[d[i] < radius_m] for i, s in enumerate(ids)}
+
+
+def neighbours_outside(
+    close: dict[int, np.ndarray], test_sensors: np.ndarray
+) -> np.ndarray:
+    """Sensors within the buffer of any test sensor that aren't test sensors themselves."""
+    near = [close.get(int(s), []) for s in np.unique(test_sensors)]
+    found = np.unique(np.concatenate(near)) if near else np.array([], dtype=int)
+    return np.setdiff1d(found, test_sensors)
+
+
 def load(variant: str, site: str | None = None) -> Data:
     site = site or load_features_config()["counts_hourly"]["site"]
     frame = tf.load(site, variant, extra_columns=["hour_of_week"])
@@ -115,9 +135,18 @@ def load(variant: str, site: str | None = None) -> Data:
     fcfg = load_features_config()
     buffer_m = fcfg["training_frame"]["group_radius_m"]
     xy = tf.sensor_xy(frame.sensors, load_config(), fcfg["sites"][site]["crs"])
-    near = neighbours_of_folds(xy.set_index("location_id"), splits["fold"], buffer_m)
+    xy = xy.set_index("location_id")
+    near = neighbours_of_folds(xy, splits["fold"], buffer_m)
     return Data(
-        frame, fold.to_numpy(dtype=int), group, holdout, site, variant, near, buffer_m
+        frame,
+        fold.to_numpy(dtype=int),
+        group,
+        holdout,
+        site,
+        variant,
+        near,
+        buffer_m,
+        close_sensors(xy, buffer_m),
     )
 
 

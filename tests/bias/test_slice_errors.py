@@ -210,3 +210,25 @@ def test_the_bias_model_is_seeded_so_reruns_repeat():
     from src.bias.slices import load_bias_config
 
     assert "random_state" in load_bias_config()["errors"]["model"]
+
+
+def test_twin_sensors_share_a_fold_through_their_spatial_group(tmp_path):
+    splits = tmp_path / "training" / "melbourne"
+    splits.mkdir(parents=True)
+    pd.DataFrame(
+        {"location_id": [41, 60, 32], "group": [5, 5, 6], "fold": [1, 1, 2]}
+    ).to_parquet(splits / "splits.parquet")
+    fcfg = {"processed_dir": str(tmp_path)}
+    rows = np.array([41, 41, 60, 32, 99])
+    groups = se.spatial_groups(rows, "melbourne", fcfg)
+    assert groups[:4].tolist() == [5, 5, 5, 6]
+    assert groups[4] not in {5, 6}  # unlisted sensor: its own group
+    plan = se.fold_plan(groups, 2, 1000, 7)
+    for _, test in plan:
+        held = set(rows[test].tolist())
+        assert {41, 60} <= held or not {41, 60} & held
+
+
+def test_spatial_groups_need_the_splits(tmp_path):
+    with pytest.raises(FileNotFoundError, match="training_frame"):
+        se.spatial_groups(np.array([1]), "melbourne", {"processed_dir": str(tmp_path)})

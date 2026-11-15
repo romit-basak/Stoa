@@ -173,6 +173,7 @@ stages:
       - data/raw/calendars/melbourne_public_holidays.csv
       - data/raw/weather
       - data/interim/osm/melbourne/graph/edges.parquet
+      - data/processed/training/melbourne/splits.parquet
       - src/bias
       - configs/bias.yaml
       - configs/features.yaml

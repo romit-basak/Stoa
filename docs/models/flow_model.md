@@ -47,6 +47,7 @@ All scoring is in `src/models/flow/evaluate.py`, named as in `experiment_trackin
 | `interval_margin_low`, `interval_margin_high` | The widening, on log1p counts (also in `selected.json`) |
 | `interval_width_ratio` | Median of (1 + upper) / (1 + lower) for the widened interval |
 | `log_mae_holdout`, `wape_holdout` | On the holdout precincts, once (selected model only) |
+| `coverage80_holdout`, `coverage80_raw_holdout` | The final interval models' coverage on the holdout precincts, after and before widening (selected model only) |
 | `log_mae_<part>`, `wape_<part>` | Event days, other days and each era of `configs/bias.yaml`, scored apart (`standard_parts`, `score_parts`; selected model only) |
 | `worst_slice_ratio` | Worst bias-slice WAPE over overall WAPE (selected model only) |
 
@@ -60,14 +61,14 @@ Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 
 | lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 | xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 
-The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. The inner folds also don't apply the 200 m neighbour buffer yet. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
+The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. The inner folds apply the same 200 m neighbour buffer as the outer folds: an inner fold's training side leaves out every sensor within 200 m of one of its test sensors (`data.close_sensors`, `tune.inner_plan`). Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
 
 ## Selection, after the bias check
 
 `src.models.flow.select`, per variant:
 1. Rank the candidates by `log_mae_cv`.
 2. Shortlist those within 3% of the best.
-3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions. The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
+3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions, on the hours after each sensor's calibration window (as every other score and `mitigate` do). The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
 4. The candidate with the smallest worst slice wins, so a slightly more accurate model can't win while failing one group.
 
 Then, for the winner:
@@ -82,6 +83,8 @@ The selected run (`stoa.role = selected`) holds the three models, `features.json
 ### Prediction intervals
 
 The quantile models learn the spread of counts at the sensors they trained on. At a new location most of the error is in the sensor's overall level, which can be off by a factor of three either way, so their raw interval covers far less than 80% of out-of-fold counts. `select.interval_margins` measures, on log1p counts, how far out-of-fold counts fall below the 10% bound and above the 90% bound. It picks each side's margin so that 10% of counts stay outside that side. Prediction widens the interval by those margins (`select.widen`) using the values in `selected.json`. `coverage80_cv` widens each fold with margins from the other folds only, so the margins never saw the sensors they are scored on.
+
+`coverage80_cv` measures the per-fold quantile models, trained on 600,000-row samples, but prediction uses the final ones, trained on 2 million rows and widened by the same margins. `coverage80_holdout` checks those final, widened intervals on the holdout precincts (`select.holdout_coverage`; `coverage80_raw_holdout` before widening). It is reported, not gated.
 
 The widened interval describes a location with no local counts. After calibrating on a site's own counts, most of the level error is gone and the interval is conservative.
 

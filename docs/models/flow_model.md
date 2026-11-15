@@ -140,6 +140,7 @@ Each command writes what it did to `data/models/registry.json`.
 docker compose up -d mlflow                     # the tracking server (localhost:5001)
 .venv/bin/python -m src.models.flow.train       # candidates and baselines, both variants
 .venv/bin/python -m src.models.flow.select      # bias check, intervals, final fit, holdouts
+.venv/bin/python -m src.models.flow.mitigate    # reweighting and calibration, scored on the slices
 .venv/bin/python -m src.models.flow.registry --check     # gates only
 .venv/bin/python -m src.models.flow.registry --promote   # gate, register, champion
 ```
@@ -148,7 +149,7 @@ Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --f
 
 `train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
 
-In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+In Airflow, the `stoa_train` DAG runs the same steps (train, select, mitigate, check, promote) monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
 
 ## Not included yet
 

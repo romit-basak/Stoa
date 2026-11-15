@@ -386,6 +386,7 @@ def render(
                 "coverage80_cv",
                 "log_mae_holdout",
                 "wape_holdout",
+                "coverage80_holdout",
             )
             if k in metrics
         ]

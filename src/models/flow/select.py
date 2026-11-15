@@ -43,6 +43,7 @@ from src.models.flow import data as flow_data
 from src.models.flow import report as flow_report
 from src.models.flow.data import Data, calibration_window
 from src.models.flow.evaluate import (
+    coverage,
     cv_coverage,
     log_mae,
     score,
@@ -277,6 +278,38 @@ def holdout_scores(
     return pd.DataFrame(out), {
         "log_mae_holdout": s["log_mae"],
         "wape_holdout": s["wape"],
+    }
+
+
+def holdout_coverage(
+    data: Data,
+    models: dict[str, Any],
+    quantiles: list[float],
+    margins: tuple[float, float],
+    calibration_days: float,
+) -> dict[str, float]:
+    """Coverage of the final interval models on the holdout precincts, before and after the
+    margins, on the rows `holdout_scores` scores.
+
+    coverage80_cv measures the per-fold quantile models (600,000-row samples), but prediction
+    uses the final ones (final_train_rows) widened by the same margins, so this checks the
+    intervals actually registered on sensors none of them saw. Reported, not gated.
+    """
+    named = (data.holdout != "") & (data.holdout != "neighbour")
+    idx = np.flatnonzero(named)
+    if not len(idx):
+        return {}
+    keep = scored_mask(data.sensors[idx], data.ts.iloc[idx], calibration_days)
+    idx = idx[keep]
+    x = data.frame.matrix(idx)
+    lo_name, hi_name = (f"model_q{round(q * 100):02d}" for q in quantiles)
+    low = candidates.predict(models[lo_name], x)
+    high = candidates.predict(models[hi_name], x)
+    y = data.y[idx].astype(float)
+    wide_low, wide_high = widen(low, high, margins)
+    return {
+        "coverage80_raw_holdout": coverage(y, low, high),
+        "coverage80_holdout": coverage(y, wide_low, wide_high),
     }
 
 
@@ -607,6 +640,7 @@ def select_variant(
     )
     models = fit_final(data, winner, params, q, rows, seed)
     precincts, holdout = holdout_scores(data, models["model"], fcfg["calibration_days"])
+    holdout |= holdout_coverage(data, models, q, margins, fcfg["calibration_days"])
     pred = oof[winner].to_numpy(dtype=float)
     parts, part_metrics = part_scores(data, oof, pred, fcfg["calibration_days"])
     ccfg = fcfg["calibration_curve"]

@@ -41,6 +41,7 @@ from src.models import tracking
 from src.models.flow import candidates
 from src.models.flow import data as flow_data
 from src.models.flow import report as flow_report
+from src.models.flow.bundle import FlowBundle, widen
 from src.models.flow.data import Data, calibration_window
 from src.models.flow.evaluate import (
     cv_coverage,
@@ -171,14 +172,6 @@ def interval_margins(
     lower = float(np.quantile(llo - ly, 1 - quantiles[0]))
     upper = float(np.quantile(ly - lhi, quantiles[1]))
     return lower, upper
-
-
-def widen(
-    low: np.ndarray, high: np.ndarray, margins: tuple[float, float]
-) -> tuple[np.ndarray, np.ndarray]:
-    lower, upper = margins
-    low = np.maximum(np.expm1(np.log1p(low) - lower), 0.0)
-    return low, np.expm1(np.log1p(high) + upper)
 
 
 def cross_fold_widen(
@@ -544,6 +537,27 @@ def log_model(model: Any, family: str, name: str, x_example: np.ndarray) -> str:
     return info.model_uri
 
 
+def log_bundle(
+    models: dict[str, Any],
+    quantiles: list[float],
+    margins: tuple[float, float],
+    columns: list[str],
+    x_example: np.ndarray,
+) -> str:
+    """Log the mean and interval models with their margins as one pyfunc model, `bundle`."""
+    lo_name, hi_name = (f"model_q{round(q * 100):02d}" for q in quantiles)
+    bundle = FlowBundle(
+        models["model"], models[lo_name], models[hi_name], margins, columns
+    )
+    info = mlflow.pyfunc.log_model(
+        name="bundle",
+        python_model=bundle,
+        code_paths=[str(REPO_ROOT / "src")],
+        input_example=pd.DataFrame(x_example, columns=list(columns)),
+    )
+    return info.model_uri
+
+
 def select_variant(
     data: Data,
     fcfg: dict[str, Any],
@@ -672,6 +686,8 @@ def select_variant(
         example = x_sample[:5]
         uris = {name: log_model(m, winner, name, example) for name, m in models.items()}
         mlflow.set_tag("stoa.model_uri", uris["model"])
+        bundle_uri = log_bundle(models, q, margins, data.frame.columns, example)
+        mlflow.set_tag("stoa.bundle_uri", bundle_uri)
         run_id = active.info.run_id
 
     result = {
@@ -679,6 +695,9 @@ def select_variant(
         "run_id": run_id,
         "family": winner,
         "model_uris": uris,
+        # The three models and the margins as one pyfunc model (src/models/flow/bundle.py):
+        # predicted, lower and upper. This is what the registry registers.
+        "bundle_uri": bundle_uri,
         # Applied to model_q10 and model_q90 at prediction time with `widen`.
         "interval_margins": {"low": margins[0], "high": margins[1]},
         "metrics": metrics,

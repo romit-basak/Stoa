@@ -77,6 +77,10 @@ anomalies:
   # counts repeat naturally overnight (1 an hour), so only counts of at least stuck_min_count.
   stuck_run_hours: 6
   stuck_min_count: 10
+  # Two sensors with identical counts (each at least stuck_min_count) for this many hours,
+  # and in this share of the hours both report, are likely one series under two ids (warning).
+  duplicate_min_hours: 720
+  duplicate_min_share: 0.9
   # Share of suspected outage hours (suspect_outage_zero) above which to warn.
   max_outage_share: 0.01
   # Per-sensor completeness over the most recent days of live data (warning). The live portal

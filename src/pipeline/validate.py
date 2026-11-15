@@ -374,6 +374,44 @@ def stuck_sensors(
     )
 
 
+def duplicate_series(
+    df: pd.DataFrame, min_hours: int, min_share: float, min_count: int
+) -> Check:
+    """Sensor pairs whose counts are identical for at least min_hours hours, and in at least
+    min_share of the hours both report.
+
+    Busy hours collide by chance now and then (two sensors both counting 312), so only counts of
+    at least min_count are compared, and a pair needs both thresholds. A pair that passes is
+    usually one sensor's series copied under another id (sensors 15 and 66 in 2020-21; see
+    counts_hourly.drop_rows in configs/features.yaml).
+    """
+    d = df.loc[
+        df["pedestriancount"] >= min_count, ["location_id", "ts_utc", "pedestriancount"]
+    ]
+    pairs = d.merge(d, on=["ts_utc", "pedestriancount"])
+    pairs = pairs[pairs["location_id_x"] < pairs["location_id_y"]]
+    same = pairs.groupby(["location_id_x", "location_id_y"]).size()
+    found = []
+    for (a, b), n in same[same >= min_hours].items():
+        both = d.loc[d["location_id"] == a, "ts_utc"].isin(
+            d.loc[d["location_id"] == b, "ts_utc"]
+        )
+        share = n / max(int(both.sum()), 1)
+        if share >= min_share:
+            found.append({"sensors": [int(a), int(b)], "hours": int(n), "share": share})
+    return Check(
+        f"anomaly: sensor pairs with identical counts for {min_hours}+ hours",
+        WARNING,
+        not found,
+        "; ".join(
+            f"{f['sensors'][0]} and {f['sensors'][1]}: {f['hours']} hours "
+            f"({f['share']:.0%} of shared hours)"
+            for f in found
+        ),
+        {"pairs": [f["sensors"] for f in found]},
+    )
+
+
 def outage_share(df: pd.DataFrame, max_share: float) -> Check:
     share = float(df["suspect_outage_zero"].mean())
     return Check(
@@ -461,6 +499,12 @@ def anomaly_checks(
     return [
         outliers(df, a["outlier_factor"], since),
         stuck_sensors(df, a["stuck_run_hours"], a["stuck_min_count"], since),
+        duplicate_series(
+            df,
+            a["duplicate_min_hours"],
+            a["duplicate_min_share"],
+            a["stuck_min_count"],
+        ),
         outage_share(df, a["max_outage_share"]),
         recent_completeness(
             df,

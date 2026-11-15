@@ -207,6 +207,19 @@ def test_stuck_run_before_the_new_hours_is_counted_but_does_not_warn(cfg):
     assert next(c for c in checks if c.name == STUCK).observed["earlier_runs"] == 1
 
 
+DUPLICATE = "anomaly: sensor pairs with identical counts for 720+ hours"
+
+
+def test_one_series_under_two_ids_warns(cfg):
+    df = make_table(days=40)
+    assert failures(run(df, cfg)[0]) == {}
+    one = df["location_id"] == 1
+    two = df["location_id"] == 2
+    df.loc[two, "pedestriancount"] = df.loc[one, "pedestriancount"].to_numpy()
+    detail = failures(run(df, cfg)[0], v.WARNING)[DUPLICATE]
+    assert detail.startswith("1 and 2: 960 hours (100%")
+
+
 def test_new_outlier_warns(cfg):
     # 60 days: with only a few hundred hours, the 99.9th percentile sits between the top two
     # values, so a lone outlier raises its own threshold. Real sensors have thousands.

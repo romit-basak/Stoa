@@ -593,7 +593,9 @@ def select_variant(
 ) -> dict[str, Any]:
     summary = json.loads((out / "candidates.json").read_text())
     oof = pd.read_parquet(out / "oof.parquet")
-    scfg, seed = fcfg["selection"], fcfg["seed"]
+    # The train run's seed (train --seed can override the configured one), so the interval
+    # models and the final fit use the same seed as the candidates they come from.
+    scfg, seed = fcfg["selection"], summary.get("seed", fcfg["seed"])
     rank = ranking(summary)
     short = shortlist(rank, scfg["tolerance"])
     slices, worst = bias_fn(

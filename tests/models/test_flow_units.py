@@ -99,6 +99,18 @@ def test_plan_tag_names_the_start_only_when_set():
     assert plan_tag(5, 600000, 7, "2014-01-01").endswith(";train_start=2014-01-01")
 
 
+def test_command_line_seed_overrides_the_configured_one():
+    import argparse
+
+    from src.models.flow.train import apply_args
+
+    base = {"seed": 7, "train_rows_per_fold": 600000, "train_start": None}
+    args = argparse.Namespace(train_rows=None, train_start=None, seed=8)
+    assert apply_args(dict(base), args)["seed"] == 8
+    args.seed = None
+    assert apply_args(dict(base), args) == base
+
+
 # --- fold scores --------------------------------------------------------------------------
 
 

@@ -449,6 +449,12 @@ def main() -> None:
     ap.add_argument("--folds", type=int, help="use only the first N folds (quick runs)")
     ap.add_argument("--max-trees", type=int, help="cap trees per model (quick runs)")
     ap.add_argument("--train-rows", type=int, help="training rows per fold")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        help="seed for the training samples and the models (default: flow.seed); the "
+        "folds themselves are fixed by splits.parquet",
+    )
     ap.add_argument("--output-dir")
     ap.add_argument(
         "--train-start",
@@ -462,11 +468,7 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    fcfg = flow_data.flow_config()
-    if args.train_rows:
-        fcfg["train_rows_per_fold"] = args.train_rows
-    if args.train_start:
-        fcfg["train_start"] = args.train_start
+    fcfg = apply_args(flow_data.flow_config(), args)
     out = flow_data.output_dir(fcfg, args.output_dir)
     variants = fcfg["variants"] if args.variant == "both" else [args.variant]
     families = args.families or list(fcfg["candidates"])
@@ -483,6 +485,17 @@ def main() -> None:
         if args.params_from
         else None,
     )
+
+
+def apply_args(fcfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    """The flow config with the command line's overrides applied."""
+    if args.train_rows:
+        fcfg["train_rows_per_fold"] = args.train_rows
+    if args.train_start:
+        fcfg["train_start"] = args.train_start
+    if args.seed is not None:
+        fcfg["seed"] = args.seed
+    return fcfg
 
 
 def load_params(

@@ -1,0 +1,24 @@
+# Simulation settings (src/simulation/, docs/simulation/getting_started.md).
+
+# Per-minute counts, one parquet file per day (from 25 October 2026).
+minute_feed_dir: data/raw/melbourne_portal/minute_feed
+events_config: configs/events.yaml
+# Simulation outputs. Not DVC-tracked; check `git status` ignores this folder.
+output_dir: data/simulation
+
+areas:
+  # First area: crowds leaving concerts at Rod Laver Arena towards the city.
+  melbourne_park:
+    sensors: [161, 136, 123, 124, 75]
+    # Peak delays at the other sensors are measured from this sensor's peak.
+    lead_sensor: 161
+    event_venue: rod_laver_arena
+    event_kinds: [concert]
+    # Other events at these venues on the same night are flagged: their crowds mix.
+    nearby_venues: [rod_laver_arena, john_cain_arena, margaret_court_arena]
+    # The egress window, in hours after the advertised start (no end times published).
+    window_from_hours: 2.5
+    window_to_hours: 5.0
+    block_minutes: 5
+    # Sensors in minute_profiles_meta.json that never publish minutes :00 to :04.
+    exclude_sensors: []

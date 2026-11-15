@@ -67,8 +67,11 @@ flow:
     n_trials: 30
     # Trials are scored on inner folds over the fold sensors (split by spatial group, on a
     # smaller sample); holdout precincts never enter. The inner folds draw on the same sensors
-    # the *_cv metrics score, so tuned *_cv numbers are a little optimistic.
-    inner_folds: 2
+    # the *_cv metrics score, so tuned *_cv numbers are a little optimistic. With 2 inner
+    # folds each trial trained on about half the fold sensors (minus the buffer), and the
+    # search picked models that underfit the outer folds; 4 matched the outer-fold score
+    # (docs/models/accuracy_target.md).
+    inner_folds: 4
     train_rows: 200000
 
   # Selection after the bias check (src/models/flow/select.py): candidates within

@@ -134,7 +134,7 @@ def test_command_line_seed_overrides_the_configured_one():
 # --- fold scores --------------------------------------------------------------------------
 
 
-def test_fold_scores_use_her_names_and_the_calibrated_hours(data):
+def test_fold_scores_use_the_evaluate_metric_names_and_the_calibrated_hours(data):
     from src.models.flow.train import fold_scores
 
     plan = fold_plan(data.fold, 10_000, 7)

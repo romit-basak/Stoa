@@ -3,7 +3,13 @@
 # Per-minute counts, one parquet file per day (from 25 October 2026).
 minute_feed_dir: data/raw/melbourne_portal/minute_feed
 events_config: configs/events.yaml
-# Simulation outputs. Not DVC-tracked; check `git status` ignores this folder.
+# Inputs for the walkers.
+routing_edges: data/interim/osm/melbourne/graph/routing_edges.parquet
+sensor_segment_map: data/processed/features/melbourne/sensor_segment_map.parquet
+venue_dist: data/processed/features/melbourne/osm_segment_venue_dist.parquet
+counts_hourly: data/processed/features/melbourne/counts_hourly.parquet
+minute_profiles: data/processed/features/melbourne/minute_profiles.parquet
+# Simulation outputs. Not DVC-tracked (data/.gitignore).
 output_dir: data/simulation
 
 areas:
@@ -22,3 +28,28 @@ areas:
     block_minutes: 5
     # Sensors in minute_profiles_meta.json that never publish minutes :00 to :04.
     exclude_sensors: []
+
+    walkers:
+      # Hours of the night whose observed hourly counts the walkers are fitted to.
+      hours: [22, 23]
+      # 136 is left out of the fit and is the test.
+      fit_sensors: [161, 123, 124, 75]
+      # Graph nodes on segments this close to the venue are the walkers' origins.
+      origin_radius_m: 60
+      # The graph is cut to the sensors' extent plus this margin.
+      area_margin_m: 1500
+      # Noisy shortest paths per destination, and the noise on each segment's cost.
+      route_draws: 20
+      route_noise: 0.6
+      # How strongly the prior favours each destination's shorter routes.
+      length_beta: 3.0
+      # How strongly the fit is pulled towards the prior, against the sensor counts.
+      prior_weight: 0.01
+      speed_mps: 1.3
+      seed: 7
+      # Where the crowd heads, with the prior's share for each (check on a map).
+      destinations:
+        flinders_street_station: {lat: -37.8183, lon: 144.9671, weight: 4}
+        richmond_station: {lat: -37.8244, lon: 144.9903, weight: 3}
+        jolimont_station: {lat: -37.8166, lon: 144.9844, weight: 2}
+        parliament_station: {lat: -37.8113, lon: 144.9730, weight: 1}

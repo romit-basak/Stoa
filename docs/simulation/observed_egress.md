@@ -39,7 +39,41 @@ On the archive to 11 November (8 of the 14 concerts listed):
 - 25 October and 28 October had another event at Melbourne Park the same night.
 - None of the five sensors are among the eight that skip minutes :00 to :04.
 
+## Walkers on 27 October
+
+`src/simulation/walkers.py` follows steps 1 and 2 of getting_started.md. Walkers leave
+from the graph nodes within 60 m of Rod Laver Arena, towards Flinders Street, Richmond,
+Jolimont and Parliament stations, on 20 noisy shortest paths per destination. Walkers per
+route are fitted with non-negative least squares to the hourly counts at 22:00 and 23:00
+at sensors 161, 123, 124 and 75; 136 is left out as the test. Each walker's time at its
+first sensor is drawn from sensor 161's event-exit minute profile, and later sensors
+follow at 1.3 m/s. Settings are under `walkers:` in `configs/simulation.yaml`.
+
+```bash
+.venv/bin/python -m src.simulation.walkers --area melbourne_park --night 2026-10-27
+```
+
+| Sensor | In the fit | Observed | Simulated | Observed peak | Simulated peak | Correlation |
+|---|---|---|---|---|---|---|
+| 161 | Yes | 1,477 | 1,468 | 23:00 (452) | 23:00 (335) | 0.87 |
+| 75 | Yes | 38 | 19 | 23:10 (9) | 23:10 (4) | 0.46 |
+| 123 | Yes | 66 | 0 | 23:00 (28) | none | |
+| 124 | Yes | 0 | 19 | none | 23:00 (4) | |
+| 136 | No (test) | 335 | 0 | 23:00 (91) | none | |
+
+- At 161 the walkers match the total and the peak block. The simulated peak is flatter,
+  as getting_started.md expects from average profiles.
+- No sampled route passes 136, 123 or most of the riverside paths: shortest paths on
+  distance alone don't follow the river path the crowd uses after 161, so the test sensor
+  can't be checked yet.
+- Walkers on routes that pass no fitted sensor stay at the prior, so the total crowd
+  (about 2,200 in the 23:00 hour) is rough.
+- The minute profile is pooled from the same archive, including this night, so the
+  timing at 161 is not an independent test.
+
 ## Next
 
-Walkers fitted to these nights, then JuPedSim on the same area, both compared with these
-series at sensors 161 and 136.
+1. A route cost with path type, slope, shade and crossings, so routes follow the river
+   path, then check sensor 136.
+2. Run the other concert nights, fitting on some and testing on others.
+3. The same area in JuPedSim (microsim.py), with the walkers as input.

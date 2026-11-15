@@ -5,13 +5,16 @@ after a good stoa_pipeline run. Runs and models go to the MLflow service in dock
 (MLFLOW_TRACKING_URI). See docs/models/flow_model.md.
 
 - train_candidates: every candidate architecture and the baseline ladder on the location
-  folds (with tune = true, an Optuna search per family first);
+  folds (with tune = true, an Optuna search per family first; otherwise with the parameters
+  the last run used, from data/models);
 - select_model: the bias check on the shortlist, the interval models, the final fit, and the
   holdout precincts;
 - check_gates: fails the run when the rich model doesn't beat Space Syntax by 15% or its 80%
   intervals miss 75-85% coverage, so nothing below the bar is registered;
 - register_model: registers both variants and moves `champion` to them (the version it
-  replaces becomes `previous`, for `src.models.flow.registry --rollback`).
+  replaces becomes `previous`, for `src.models.flow.registry --rollback`), unless a new
+  model's gain over Space Syntax is clearly below the champion's: then it stays `challenger`
+  and the task fails, which sends the alert.
 """
 
 import os
@@ -67,8 +70,12 @@ on_failure_alert = (
 def stoa_train():
     @task.bash
     def train_candidates(params=None):
-        tune = " --tune" if params and params.get("tune") else ""
-        return f"{STOA} src.models.flow.train --variant both{tune}"
+        # Without a search, reuse the parameters the last run used (its candidates.json in
+        # data/models), so tuned values carry over to the monthly retrain instead of the
+        # defaults. A variant with no earlier run falls back to the defaults.
+        if params and params.get("tune"):
+            return f"{STOA} src.models.flow.train --variant both --tune"
+        return f"{STOA} src.models.flow.train --variant both --params-from data/models"
 
     @task.bash
     def select_model():

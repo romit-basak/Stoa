@@ -116,6 +116,15 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
     x = np.zeros((2, len(make_data().frame.columns)), dtype="float32")
     assert model.predict(x).shape == (2,)
 
+    # The bundle: mean and widened interval, from a DataFrame of the feature columns.
+    bundle = mlflow.pyfunc.load_model(sel["bundle_uri"])
+    cols = make_data().frame.columns
+    frame = pd.DataFrame(make_data().frame.matrix(np.arange(5)), columns=cols)
+    out = bundle.predict(frame[cols[::-1]])  # column order doesn't matter
+    assert list(out.columns) == ["predicted", "lower", "upper"] and len(out) == 5
+    assert (out["lower"] <= out["predicted"]).all()
+    assert (out["predicted"] <= out["upper"]).all()
+
 
 def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     run_all(fcfg, tmp_path / "models", families=["hgb"])
@@ -137,3 +146,50 @@ def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     assert back["champion"] == first["version"]
     assert registry.alias_version(client, name, "champion") == first["version"]
     assert registry.alias_version(client, name, "previous") is None
+    bundle_uri = client.get_run(g.run_id).data.tags["stoa.bundle_uri"]
+    assert client.get_model_version(name, first["version"]).source == bundle_uri
+
+
+def test_registry_keeps_a_better_champion_and_rolls_back_step_by_step(
+    tmp_path, fcfg, mlflow_store
+):
+    from dataclasses import replace
+
+    import pytest
+
+    run_all(fcfg, tmp_path / "models", families=["hgb"])
+    mlflow.set_tracking_uri(mlflow_store)
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(
+        tracking.load_models_config()["tracking"]["experiment"]
+    )
+    g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
+    name = registry.model_name("rich")
+    v1 = registry.register(client, replace(g, improvement=0.15), promote=True)
+    v2 = registry.register(client, replace(g, improvement=0.16), promote=True)
+    v3 = registry.register(
+        client, replace(g, improvement=0.155), promote=True, tolerance=0.01
+    )
+    assert v3["alias"] == "champion"  # 0.5 points worse, within the tolerance
+
+    # Two points worse than the champion: registered, but the champion stays.
+    worse = registry.register(
+        client, replace(g, improvement=0.135), promote=True, tolerance=0.01
+    )
+    assert worse["held_back"] and worse["alias"] == "challenger"
+    assert registry.alias_version(client, name, "champion") == v3["version"]
+    assert registry.alias_version(client, name, "challenger") == worse["version"]
+
+    # Rollback walks back one version at a time: v3 -> v2 -> v1, then refuses.
+    registry.rollback(client, "rich")
+    assert registry.alias_version(client, name, "champion") == v2["version"]
+    assert registry.alias_version(client, name, "previous") == v1["version"]
+    registry.rollback(client, "rich")
+    assert registry.alias_version(client, name, "champion") == v1["version"]
+    assert registry.alias_version(client, name, "previous") is None
+
+    # Rolling back both variants changes neither when one has nothing to roll back to.
+    registry.register(client, replace(g, improvement=0.2), promote=True)
+    with pytest.raises(SystemExit, match="nothing rolled back"):
+        registry.rollback_all(client, ["rich", "portable"])
+    assert registry.alias_version(client, name, "previous") == v1["version"]

@@ -112,9 +112,13 @@ If `rich` fails, the command exits 1 and nothing is registered. `portable` is re
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
 Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portable`, and versions are tracked with aliases rather than MLflow's deprecated stages:
-- `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced;
+- `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced, but only if the new version is no worse than the current champion (below);
 - without `--promote`, the new version gets `challenger`;
-- `--rollback --variant rich` points `champion` back at `previous`.
+- `--rollback --variant rich` points `champion` back at `previous`, and `previous` at the version before that. Each champion records the version it replaced (tag `stoa.previous_champion`), so rollback can be repeated one version at a time. `--rollback` with both variants changes neither unless both have a `previous`.
+
+**Compared with the champion.** Passing the gate isn't enough to replace the served model. `--promote` compares the new version's gain over Space Syntax (`1 - log_mae_cv / Space Syntax's`, stored on every version as `stoa.improvement`) with the champion's. If it's more than `gates.champion_tolerance` (0.01) lower, the new version is registered as `challenger`, `champion` stays where it is, and the command exits 1, so `stoa_train` fails and sends its alert. The comparison uses gains rather than raw log MAE because a monthly retrain is scored on newer data, and a run on another fold plan on other rows. A champion registered before gains were recorded counts as beaten.
+
+**What is registered.** The selected run's `bundle` (`src/models/flow/bundle.py`, tag `stoa.bundle_uri`): one MLflow pyfunc model holding the mean model, the 10% and 90% quantile models and the interval margins. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` per row, the Predictions interface in CLAUDE.md. The bounds are stretched to include `predicted` where the mean falls outside them. Runs from before the bundle register their mean model (`stoa.model_uri`).
 
 Each command writes what it did to `data/models/registry.json`.
 

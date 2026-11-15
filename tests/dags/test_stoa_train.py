@@ -40,3 +40,10 @@ def test_stages_run_in_order(dag):
 def test_daily_pipeline_does_not_train():
     bag = DagBag(dag_folder=str(DAGS_DIR))
     assert not any("flow" in t for t in bag.get_dag("stoa_pipeline").task_ids)
+
+
+def test_retrain_reuses_the_last_runs_parameters_unless_tuning(dag):
+    make = dag.get_task("train_candidates").python_callable
+    assert make(params={"tune": False}).endswith("--params-from data/models")
+    tuned = make(params={"tune": True})
+    assert tuned.endswith("--tune") and "--params-from" not in tuned

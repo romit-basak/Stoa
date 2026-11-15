@@ -354,3 +354,12 @@ def test_gate_can_block_on_bias():
     selected = {"log_mae_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
     ok, reasons, _ = evaluate_gate(selected, {"log_mae_cv": 0.5}, gates)
     assert not ok and "worst slice" in reasons[0]
+
+
+def test_a_new_model_beats_the_champion_unless_clearly_worse():
+    from src.models.flow.registry import beats_champion
+
+    assert beats_champion(0.12, 0.125, 0.01)
+    assert not beats_champion(0.10, 0.125, 0.01)
+    assert beats_champion(0.10, None, 0.01)  # champion from before gains were recorded
+    assert beats_champion(None, 0.125, 0.01)

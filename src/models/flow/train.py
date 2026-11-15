@@ -501,10 +501,18 @@ def apply_args(fcfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
 def load_params(
     root: str | Path, variants: list[str]
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json."""
+    """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json.
+
+    A variant with no earlier run is left out, so it trains with the configured defaults
+    (the first run of the monthly DAG, which passes --params-from every time).
+    """
     out = {}
     for v in variants:
-        summary = json.loads((Path(root) / v / "candidates.json").read_text())
+        path = Path(root) / v / "candidates.json"
+        if not path.is_file():
+            log.warning("%s not found; %s uses the configured parameters", path, v)
+            continue
+        summary = json.loads(path.read_text())
         out[v] = {f: m["params"] for f, m in summary["models"].items()}
     return out
 

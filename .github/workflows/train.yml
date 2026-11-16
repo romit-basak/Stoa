@@ -20,6 +20,7 @@ on:
     branches: [main]
     paths:
       - "src/models/**"
+      - "!src/models/flow/figures.py" # only copies results into the docs
       - "src/features/training_frame.py"
       - "src/features/schema.py"
       - "configs/models.yaml"

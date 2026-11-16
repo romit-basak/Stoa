@@ -129,3 +129,14 @@ def test_blocks_and_comparison_with_the_observed_series():
     assert result.loc[161, "used_in_fit"]
     assert not result.loc[136, "used_in_fit"]
     assert result.loc[161, "obs_peak_block"] == start
+
+
+def test_the_route_table_keeps_walkers_and_segments_in_order():
+    routes = [
+        walkers.Route("d", ["oa", "aj", "jd"], [50.0, 150.0, 250.0], 300.0),
+        walkers.Route("e", ["ob"], [50.0], 100.0),
+    ]
+    table = walkers.route_table(routes, np.array([12.5, 0.0]))
+    assert list(table["destination"]) == ["d", "e"]
+    assert list(table["walkers"]) == [12.5, 0.0]
+    assert list(table["segments"][0]) == ["oa", "aj", "jd"]

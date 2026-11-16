@@ -208,6 +208,19 @@ def to_blocks(
     return counts.rename(columns={"size": "total"})
 
 
+def route_table(routes: list[Route], walkers_per_route: np.ndarray) -> pd.DataFrame:
+    """One row per route: destination, length, walkers and its segments in order."""
+    return pd.DataFrame(
+        {
+            "route": range(len(routes)),
+            "destination": [r.destination for r in routes],
+            "length_m": [r.length_m for r in routes],
+            "walkers": np.asarray(walkers_per_route, dtype=float),
+            "segments": [list(r.segments) for r in routes],
+        }
+    )
+
+
 def compare(
     simulated: pd.DataFrame, observed_series: pd.DataFrame, fitted: list[int]
 ) -> pd.DataFrame:
@@ -342,6 +355,7 @@ def run(
     day = pd.Timestamp(night, tz=TZ)
     day_type = "weekend" if day.day_of_week >= 5 else "weekday"
     parts, direction_share = [], {}
+    walkers_per_route = np.zeros(len(routes))
     for hour in cfg["hours"]:
         start = day + pd.Timedelta(hours=hour)
         now = hourly[hourly["ts_local"] == start].set_index("location_id")
@@ -350,6 +364,7 @@ def run(
         crowd = float(targets.max(initial=0.0))
         prior = route_prior(routes, weights, crowd, cfg["length_beta"])
         trips = fit_trips(passes[fit_rows], targets, prior, cfg["prior_weight"])
+        walkers_per_route += trips
         profile = profiles[
             (profiles["day_type"] == day_type) & (profiles["hour_local"] == hour % 24)
         ]
@@ -397,6 +412,8 @@ def run(
     result = compare(simulated, series, fitted)
     simulated.to_parquet(out / f"walkers_{night}.parquet", index=False)
     result.to_csv(out / f"walkers_compare_{night}.csv", index=False)
+    table = route_table(routes, walkers_per_route)
+    table.to_parquet(out / f"walkers_routes_{night}.parquet", index=False)
     return result
 
 

@@ -418,15 +418,15 @@ What this shows:
 - **Unfamiliar precincts.** The rich model holds up on the holdout precincts (0.881 against 0.865 on the folds). The portable model drops to 1.067, so features only Melbourne has carry part of that transfer.
 - The intervals hit 78% coverage on the folds. On the holdout precincts they're too narrow: 64% for rich and 60% for portable (`coverage80_holdout`), which is the cost of moving to a new area.
 
-![Candidates, baselines and the bias check behind the selection](docs/models/figures/model_comparison.png)
+![Candidates, baselines and the bias check behind the selection](docs/models/figures/model_comparison_rich.png)
 
 *Left: log MAE of every candidate and baseline (seed 7, rich). Right: the bias check on the shortlist. XGBoost was a hair more accurate (0.864 against 0.865), but LightGBM's worst slice was closer to its overall error (1.70 against 1.77), so LightGBM was selected.*
 
-![Calibration curve](docs/models/figures/calibration_curve.png)
+![Calibration curve](docs/models/figures/calibration_curve_rich.png)
 
 *One site-wide scale fitted on k sensors' first four weeks, applied to every other sensor (median and interquartile range over 20 draws). In Melbourne it doesn't lower the error. It's meant for a new city such as NYC, where the model will have an offset to correct.*
 
-The charts, tables and a training report (data, loss and cost, learned parameters, hyperparameters) are logged with each selected run in MLflow and written to `data/models/<variant>/selected/`.
+The charts, tables and a training report (data, loss and cost, learned parameters, hyperparameters) are logged with each selected run in MLflow and written to `data/models/<variant>/selected/`. `python -m src.models.flow.figures` copies the latest selected run's charts, and the tuning and mitigation charts of the same training, into `docs/models/figures/` with a `summary.json` of the run ids and metrics behind them; the charts here came from the seed-7 run above.
 
 ### Hyperparameter tuning
 
@@ -462,13 +462,13 @@ Model versions live in the MLflow model registry ([below](#registry-promotion-an
 
 **Features.** `select` computes the mean absolute SHAP value of each feature (TreeExplainer on 2,000 sampled rows, on the model's log scale), and falls back to permutation importance for a model SHAP can't explain. For the selected rich model:
 
-![Feature importance (mean |SHAP|)](docs/models/figures/feature_importance.png)
+![Feature importance (mean |SHAP|)](docs/models/figures/feature_importance_rich.png)
 
 The hour of day dominates (0.87), then the COVID period (0.17), harmonic closeness at 800 m (0.13), sun elevation, weekday and daylight. Next come the street and place features: junction density at 800 m, the distance to a train station, elevation, and jobs within 400 m (City of Melbourne's land use survey). The time features shape each sensor's day, and the street features set its level. Those level features are weaker, which matches where the error is.
 
 **Hyperparameters.** Optuna's fANOVA importance (`param_importance.json` on each tuning parent run) shows which settings moved the trial score. Across the 30 trials, rich LightGBM ranged from 0.871 to 1.071 log MAE, so the settings matter:
 
-![Hyperparameter importance](docs/models/figures/hyperparameter_importance.png)
+![Hyperparameter importance](docs/models/figures/hyperparameter_importance_rich.png)
 
 For LightGBM, the number of leaves, the share of features per tree and the minimum rows per leaf matter most; for XGBoost, the share of features and the minimum child weight; for HistGradientBoosting, the number of leaves. The number of trees (200 or 400) barely matters. We also tested much larger leaves by hand (1,000 to 30,000 rows): see [docs/models/accuracy_target.md](docs/models/accuracy_target.md).
 
@@ -490,7 +490,7 @@ For the selected rich model (seed 7), six groups are worse than the overall WAPE
 | Volume tiers weighted equally | 0.895 | 0.652 | 1.65, quiet | 5 | 1.09 | 0.70 | 0.69 |
 | Calibrated to 28 days of each sensor's counts | 0.603 | 0.420 | 1.69, Melbourne (Remainder) | 15 | 0.57 | 0.65 | 0.67 |
 
-![Mitigations: overall WAPE and worst slice](docs/models/figures/mitigation.png)
+![Mitigations: overall WAPE and worst slice](docs/models/figures/mitigation_rich.png)
 
 - **Reweighting** trades accuracy for a little fairness. Weighting every sensor equally brings the worst slice down from 1.70 to 1.56, but costs 4% in log MAE and raises the overall WAPE, and the quiet sensors only improve from 1.08 to 1.02. We keep the selected model unweighted.
 - **Calibration is the mitigation we use.** Scaling each sensor to its first four weeks of counts halves the quiet sensors' error (1.08 to 0.57) and cuts the overall WAPE by a third. It's also the product's design: a site with a few weeks of local counts gets calibrated predictions. More groups count as "worse" afterwards, but only because the overall error they're compared with fell so far: 59 of the 60 groups improve in absolute terms (the exception is Parkville, with one sensor). What's left (the City's "Remainder" precinct, the COVID era, night, Docklands) is error in the daily pattern, which needs better features rather than weights or scales.

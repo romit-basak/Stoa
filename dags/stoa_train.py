@@ -72,8 +72,8 @@ def stoa_train():
     @task.bash
     def train_candidates(params=None):
         # Without a search, reuse the parameters the last run used (its candidates.json in
-        # data/models), so tuned values carry over to the monthly retrain instead of the
-        # defaults. A variant with no earlier run falls back to the defaults.
+        # data/models), so a later search carries over to the monthly retrain. A variant
+        # with no earlier run uses the searched values in configs/models.yaml (`tuned`).
         if params and params.get("tune"):
             return f"{STOA} src.models.flow.train --variant both --tune"
         return f"{STOA} src.models.flow.train --variant both --params-from data/models"

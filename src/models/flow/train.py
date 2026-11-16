@@ -355,7 +355,7 @@ def run(
     """Train every variant; returns each variant's candidates.json content.
 
     `params_from` ({variant: {family: params}}, from `load_params`) replaces the configured
-    defaults, for example to retrain on other data with an earlier run's tuned values."""
+    parameters, for example to retrain on other data with an earlier run's tuned values."""
     seed, train_rows = fcfg["seed"], fcfg["train_rows_per_fold"]
     baseline_preds: dict[str, np.ndarray] | None = None
     baseline_runs: dict[str, dict[str, Any]] = {}
@@ -372,10 +372,7 @@ def run(
         plan_id = plan_tag(len(plan), train_rows, seed, start, data.buffer_m)
         params = {
             f: candidates.capped(
-                f,
-                (params_from or {}).get(variant, {}).get(f)
-                or fcfg["candidates"][f]["params"],
-                max_trees,
+                f, family_params(fcfg, f, variant, params_from), max_trees
             )
             for f in families
         }
@@ -464,7 +461,7 @@ def main() -> None:
     ap.add_argument(
         "--params-from",
         help="output dir of an earlier train run: reuse each family's parameters from "
-        "its candidates.json instead of the configured defaults",
+        "its candidates.json instead of the configured ones",
     )
     args = ap.parse_args()
 
@@ -498,13 +495,29 @@ def apply_args(fcfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]
     return fcfg
 
 
+def family_params(
+    fcfg: dict[str, Any],
+    family: str,
+    variant: str,
+    params_from: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """An earlier run's parameters (`params_from`), else the searched values checked into
+    configs/models.yaml for this variant (`tuned`), else the family's defaults (`params`)."""
+    spec = fcfg["candidates"][family]
+    return (
+        (params_from or {}).get(variant, {}).get(family)
+        or spec.get("tuned", {}).get(variant)
+        or spec["params"]
+    )
+
+
 def load_params(
     root: str | Path, variants: list[str]
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json.
 
-    A variant with no earlier run is left out, so it trains with the configured defaults
-    (the first run of the monthly DAG, which passes --params-from every time).
+    A variant with no earlier run is left out, so it trains with the configured parameters
+    (`family_params`): the first run of the monthly DAG, which passes --params-from every time.
     """
     out = {}
     for v in variants:

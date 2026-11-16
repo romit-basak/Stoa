@@ -155,7 +155,10 @@ docker compose up -d mlflow                     # the tracking server (localhost
 .venv/bin/python -m src.models.flow.mitigate    # reweighting and calibration, scored on the slices
 .venv/bin/python -m src.models.flow.registry --check     # gates only
 .venv/bin/python -m src.models.flow.registry --promote   # gate, register, champion
+.venv/bin/python -m src.models.flow.figures              # copy the latest results into docs/models/figures
 ```
+
+`figures` reads the latest selected run of each variant and the tuning and mitigation runs of the same training, and writes their charts (model comparison and bias check, calibration curve, SHAP importance, mitigations, hyperparameter importance, tuning history) and a `summary.json` with the run ids and metrics behind them. Run it with a tunnel to the VM open (`ops/vm/vm.sh tunnel`); if a local `mlflow` container also holds port 5001, stop it or set `MLFLOW_TRACKING_URI` to another forwarded port. Editing `figures.py` doesn't start a training run.
 
 Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
 

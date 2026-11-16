@@ -12,7 +12,8 @@ rollback moves `champion` back to `previous`.
 
 The gate (configs/models.yaml, flow.gates) compares the latest selected run with the latest
 baseline_space_syntax run on the same data version (stoa.dvc.processed) and fold plan
-(stoa.plan): log_mae_cv must be at least 10% lower (gates.log_mae_improvement), and coverage80_cv within [0.75, 0.85].
+(stoa.plan): log_mae_cv must be at least 10% lower (gates.log_mae_improvement), and
+coverage80_cv within [0.75, 0.85].
 If a variant in `required_variants` fails, nothing is registered, the team is emailed the
 reasons (src/models/flow/notify.py) and the command exits 1; other variants that fail are
 reported and left out.

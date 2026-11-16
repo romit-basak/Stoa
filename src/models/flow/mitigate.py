@@ -36,7 +36,7 @@ from src.models.flow import candidates, select
 from src.models.flow import data as flow_data
 from src.models.flow.data import Data, calibration_window
 from src.models.flow.evaluate import scored_mask
-from src.models.flow.train import fold_scores, plan_tag
+from src.models.flow.train import fold_scores
 
 # Groups whose WAPE the summary lists for every mitigation, as dimension=group.
 WATCHED = ("volume_tier=quiet", "time_of_day=night", "era=covid")
@@ -185,12 +185,7 @@ def mitigate_variant(
             "stoa.family": family,
             "stoa.variant": data.variant,
             "stoa.mitigation": name,
-            "stoa.plan": plan_tag(
-                len(plan),
-                summary["train_rows"],
-                summary["seed"],
-                summary.get("train_start"),
-            ),
+            "stoa.plan": summary["plan"],
         }
         run_params = {**params, "family": family, "variant": data.variant, **spec}
         with tracking.run(

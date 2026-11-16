@@ -182,6 +182,26 @@ def drop_unplaceable(counts: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return counts[~dup], int(dup.sum())
 
 
+def drop_listed(
+    counts: pd.DataFrame, drops: list[dict[str, Any]]
+) -> tuple[pd.DataFrame, int]:
+    """Drop the (sensor, local date range) rows listed in `counts_hourly.drop_rows`.
+
+    Each entry has location_id, from and to (local dates, both included) and a reason. For
+    rows the portal holds but that aren't that sensor's own counts, such as one sensor's
+    series copied under another's id.
+    """
+    drop = pd.Series(False, index=counts.index)
+    day = counts["ts_local_naive"].dt.normalize()
+    for d in drops:
+        drop |= (
+            (counts["location_id"] == int(d["location_id"]))
+            & (day >= pd.Timestamp(d["from"]))
+            & (day <= pd.Timestamp(d["to"]))
+        )
+    return counts[~drop], int(drop.sum())
+
+
 def localize(counts: pd.DataFrame, tz: str) -> tuple[pd.DataFrame, int]:
     """Attach local (tz-aware) and UTC timestamps; drop the non-existent spring-forward hour."""
     local = counts["ts_local_naive"].dt.tz_localize(
@@ -375,6 +395,7 @@ def build(
     counts = pd.concat(parts, ignore_index=True)
     n_read = len(counts)
     counts, n_dup = drop_unplaceable(counts)
+    counts, n_listed = drop_listed(counts, cfg.get("drop_rows") or [])
     counts, n_nonexistent = localize(counts, s["timezone"])
     counts = counts.reset_index(drop=True)
     log.info("counts: %d rows read in %.0f s", n_read, time.perf_counter() - t)
@@ -461,6 +482,7 @@ def build(
         },
         "archive_rows_rehoured": n_rehoured,
         "dropped_unplaceable_duplicates": n_dup,
+        "dropped_listed": n_listed,
         "dropped_nonexistent_spring_forward": n_nonexistent,
         "sensors": int(table["location_id"].nunique()),
         "sensors_without_location": sorted(

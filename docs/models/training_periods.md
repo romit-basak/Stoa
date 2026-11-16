@@ -4,6 +4,8 @@ The Melbourne counts go back to 2009. Older years might teach the flow model pat
 
 **Result:** keep the 2009 start. Every later start is worse on all hours, and for the rich variant on the held-out precincts too. The 2022 start does a little better on the most recent hours: rich log MAE is 0.799 against 0.820 after the Metro Tunnel opened. It gets there by giving up everything older, though, and the gap is small enough that one seed can't settle it.
 
+These runs predate the neighbour buffer in the location folds (added in November 2026, see [flow_model.md](flow_model.md)). Every start was scored on the same folds, so the comparison between starts holds, but the absolute numbers below would shift on buffered folds.
+
 ## How the runs were set up
 
 - `train --train-start YYYY-01-01` (Melbourne time) limits only the **training** rows. Each fold still predicts the same out-of-fold hours, so every run is scored on exactly the same 6,456,502 hours. The location folds, the 600,000-row sample per fold and the seed are unchanged.

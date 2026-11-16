@@ -46,7 +46,9 @@ def inner_plan(
     data: Data, n_folds: int, train_rows: int, seed: int, start: str | None = None
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """Inner folds over the fold sensors, split by spatial group, each side sampled. With a
-    training `start`, only the training side is limited to hours from then."""
+    training `start`, only the training side is limited to hours from then. Sensors within
+    the neighbour buffer of an inner fold's test sensors are left out of its training side,
+    as data.fold_plan does for the outer folds."""
     rng = np.random.default_rng(seed)
     rows = np.flatnonzero(data.fold >= 0)
     allowed = flow_data.trainable(data, start)
@@ -54,6 +56,9 @@ def inner_plan(
     folds = GroupKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     for train, test in folds.split(rows, groups=data.group[rows]):
         train, test = rows[train], rows[test]
+        if data.close:
+            near = flow_data.neighbours_outside(data.close, data.sensors[test])
+            train = train[~np.isin(data.sensors[train], near)]
         if allowed is not None:
             train = train[allowed[train]]
         if len(train) > train_rows:

@@ -88,6 +88,7 @@
       "model_comparison_rich.png",
       "calibration_curve_rich.png",
       "feature_importance_rich.png",
+      "fairness_by_group_rich.png",
       "mitigation_rich.png",
       "hyperparameter_importance_rich.png",
       "tuning_history_rich.png"
@@ -183,6 +184,7 @@
       "model_comparison_portable.png",
       "calibration_curve_portable.png",
       "feature_importance_portable.png",
+      "fairness_by_group_portable.png",
       "mitigation_portable.png",
       "hyperparameter_importance_portable.png",
       "tuning_history_portable.png"

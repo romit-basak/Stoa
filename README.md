@@ -461,6 +461,10 @@ This run used the code of 16 November before the buffered folds (`607c7b1`): its
 
 *Reweighting changes little (WAPE 0.648 to 0.634 or 0.658) and makes the worst slice worse (2.05 and 2.10). Calibration cuts WAPE to 0.402 and the worst slice to 1.80. Same conclusion as [Bias in the model](#bias-in-the-model).*
 
+![Error by group for the registered rich model](docs/models/figures/registered_2026-11-16/fairness_by_group_rich.png)
+
+*The registered rich model's WAPE in each of the 60 groups of the 18 bias slices (`configs/bias.yaml`), with 95% intervals from resampling sensors; the dashed line is the overall WAPE, 0.617 (scored, like the bias check, on the hours after each sensor's first 28 days). Seven groups are clearly worse, their whole interval above the line. Quiet sensors are furthest (WAPE 1.23, 1.99 times overall, the slice the gate checks against its 2.25 limit), then Southbank (1.33 times), Melbourne (Remainder) (1.26 times), sensors with few amenities nearby (1.22 times) and the COVID era (1.10 times). Carlton and West Melbourne (Residential) are also above, but on 1 and 4 sensors, too few to count (grey). Time of day, weekdays, holidays, weather, AFL days and slope all sit on the overall error. For the portable model (`fairness_by_group_portable.png`), ten groups are worse, led by the same quiet sensors (1.87 times) and night (1.11 times).*
+
 The portable model's charts, the calibration curves and `summary.json` (the run ids, metrics and tuned values behind every number here) are in [`docs/models/figures/registered_2026-11-16/`](docs/models/figures/registered_2026-11-16/).
 
 ### Hyperparameter tuning

@@ -49,6 +49,13 @@ def _selected(tmp_path, variant: str = "rich", dvc: str = "v1") -> str:
     art.mkdir()
     for name in figures.SELECTION_CHARTS:
         (art / f"{name}.png").write_bytes(PNG)
+    (art / "slices.csv").write_text(
+        "model,dimension,group,wape,wape_lo,wape_hi,wape_vs_overall,worse,n_sensors\n"
+        "lgbm,volume_tier,quiet,1.2,1.0,1.4,2.0,True,29\n"
+        "lgbm,volume_tier,busy,0.5,0.45,0.55,0.83,False,40\n"
+        "lgbm,precinct,Carlton,0.7,0.5,0.9,1.17,False,1\n"
+        "xgb,volume_tier,quiet,1.3,1.1,1.5,2.1,True,29\n"
+    )
     with mlflow.start_run(run_name=f"lgbm_{variant}") as run:
         mlflow.set_tags(
             {
@@ -107,6 +114,7 @@ def test_tuned_training_exports_every_chart(tmp_path, exp):
     assert s["selected_run_id"] == sel and s["family"] == "lgbm"
     assert s["git_commit"] == "abc123" and s["data_version"] == "v1"
     assert s["missing"] == []
+    assert "fairness_by_group_rich.png" in s["written"]
     for name in s["written"]:
         assert (out / name).stat().st_size > 0, name
     assert {m["mitigation"] for m in s["mitigations"]} == {"none", "calibrated"}

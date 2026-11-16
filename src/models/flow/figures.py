@@ -11,6 +11,8 @@ the same data version. It writes to --out:
 - model_comparison_<variant>.png, calibration_curve_<variant>.png,
   feature_importance_<variant>.png: the charts select.py logged with the selected run
   (model ranking and bias check, the calibration curve, SHAP importance);
+- fairness_by_group_<variant>.png: the selected model's WAPE in every bias slice group, with
+  its 95% interval, against the overall WAPE (from the run's selection/slices.csv);
 - mitigation_<variant>.png: WAPE and worst slice under each bias mitigation, rebuilt from the
   mitigation runs' metrics;
 - hyperparameter_importance_<variant>.png and tuning_history_<variant>.png: Optuna's estimate
@@ -169,6 +171,56 @@ def load_json_artifact(run_id: str, path: str) -> dict[str, Any] | None:
         return json.loads(local.read_text()) if local else None
 
 
+THIN_SENSORS = (
+    5  # configs/bias.yaml thin_min_sensors: groups below it don't count as worst
+)
+
+
+def fairness_chart(slices: pd.DataFrame, family: str, path: Path) -> None:
+    """One bar per slice group: the selected model's WAPE with its 95% interval (resampled
+    sensors), against the overall WAPE. Red: clearly worse (whole interval above overall);
+    grey: under THIN_SENSORS sensors, too few to judge."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    t = slices[slices["model"] == family].reset_index(drop=True)
+    overall = float((t["wape"] / t["wape_vs_overall"]).median())
+    colors = [
+        "#bbbbbb" if n < THIN_SENSORS else ("#c0392b" if w else "#2e86c1")
+        for n, w in zip(t["n_sensors"], t["worse"], strict=True)
+    ]
+    labels = [
+        f"{d}: {g} ({n})"
+        for d, g, n in zip(t["dimension"], t["group"], t["n_sensors"], strict=True)
+    ]
+    y = range(len(t))[::-1]
+    fig, ax = plt.subplots(figsize=(8, 0.22 * len(t) + 1.5))
+    ax.barh(list(y), t["wape"], color=colors)
+    ax.errorbar(
+        t["wape"],
+        list(y),
+        xerr=[t["wape"] - t["wape_lo"], t["wape_hi"] - t["wape"]],
+        fmt="none",
+        ecolor="#333333",
+        elinewidth=0.8,
+        capsize=2,
+    )
+    ax.axvline(overall, color="#555555", linestyle="--", linewidth=1)
+    ax.set_yticks(list(y))
+    ax.set_yticklabels(labels, fontsize=7)
+    ax.set_xlabel(f"WAPE per group, 95% interval (dashed: overall {overall:.3f})")
+    ax.set_title(
+        "Error by group (sensors in brackets): red = clearly worse, grey = under "
+        f"{THIN_SENSORS} sensors",
+        fontsize=9,
+    )
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
 def importance_chart(importances: dict[str, dict[str, float]], path: Path) -> None:
     """One panel per family: Optuna's importance of each hyperparameter."""
     import matplotlib
@@ -232,6 +284,17 @@ def export_variant(
             written.append(dest.name)
         else:
             missing.append(dest.name)
+
+    family = sel.data.params.get("family")
+    with tempfile.TemporaryDirectory() as tmp:
+        local = fetch(sel.info.run_id, "selection/slices.csv", tmp)
+        slices = pd.read_csv(local) if local else None
+    dest = f"fairness_by_group_{variant}.png"
+    if slices is not None and family in set(slices["model"]):
+        fairness_chart(slices, family, out / dest)
+        written.append(dest)
+    else:
+        missing.append(dest)
 
     mit = mitigation_runs(client, exp_id, sel)
     mitigations = [

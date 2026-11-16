@@ -135,3 +135,37 @@ def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     assert back["champion"] == first["version"]
     assert registry.alias_version(client, name, "champion") == first["version"]
     assert registry.alias_version(client, name, "previous") is None
+
+
+def test_worse_retrain_does_not_replace_champion(tmp_path, fcfg, mlflow_store):
+    """The automatic rollback guard: a model worse than the champion is registered as
+    challenger and never served; a better one is promoted."""
+    run_all(fcfg, tmp_path / "models", families=["hgb"])
+    mlflow.set_tracking_uri(mlflow_store)
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(
+        tracking.load_models_config()["tracking"]["experiment"]
+    )
+    g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
+    first = registry.register(client, g, promote=True)
+    name = registry.model_name("rich")
+    base = client.get_run(g.run_id)
+
+    def retrain(scale: float) -> registry.Gate:
+        # A later selected run that reuses the same model files with a different score.
+        with mlflow.start_run(experiment_id=exp.experiment_id) as r:
+            mlflow.log_metric("log_mae_cv", base.data.metrics["log_mae_cv"] * scale)
+            uri = base.data.tags.get("stoa.model_uri") or f"runs:/{g.run_id}/model"
+            mlflow.set_tag("stoa.model_uri", uri)
+        return registry.Gate("rich", True, [], r.info.run_id)
+
+    worse = registry.register(client, retrain(1.10), promote=True)
+    assert worse["kept_champion"] and worse["alias"] == "challenger"
+    assert worse["champion_before"] == first["version"]
+    assert registry.alias_version(client, name, "champion") == first["version"]
+    assert registry.alias_version(client, name, "challenger") == worse["version"]
+
+    better = registry.register(client, retrain(0.90), promote=True)
+    assert not better["kept_champion"]
+    assert registry.alias_version(client, name, "champion") == better["version"]
+    assert registry.alias_version(client, name, "previous") == first["version"]

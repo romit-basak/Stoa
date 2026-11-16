@@ -33,10 +33,8 @@ import argparse
 import json
 import logging
 import os
-import smtplib
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +42,7 @@ import pandas as pd
 import yaml
 
 from src.ingest.common import REPO_ROOT, setup_logging
+from src.pipeline.alerts import send_email
 
 # Great Expectations sends usage statistics unless told not to; set before importing it.
 os.environ.setdefault("GX_ANALYTICS_ENABLED", "false")
@@ -726,29 +725,9 @@ def warning_email(
     return subject, body
 
 
-def smtp_settings() -> dict[str, Any] | None:
-    """The smtp_default connection that docker-compose.yaml passes in AIRFLOW_CONN_SMTP_DEFAULT
-    (JSON), the one the failure emails use, or None if it isn't set or has no login.
-
-    Read directly rather than through Airflow: inside a task, Airflow 3 hides the metadata
-    database from the task's process, so importing airflow there fails.
-    """
-    raw = os.environ.get("AIRFLOW_CONN_SMTP_DEFAULT", "")
-    try:
-        conn = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        log.warning(
-            "AIRFLOW_CONN_SMTP_DEFAULT is not JSON, so the warnings were not emailed"
-        )
-        return None
-    if not conn.get("host") or not conn.get("login"):
-        return None
-    return conn
-
-
 def send_warning_alert(checks: list[Check], report: str | None = None) -> bool:
-    """Email the warnings to STOA_ALERT_EMAILS through the smtp_default settings. Returns
-    whether an email went out.
+    """Email the warnings to STOA_ALERT_EMAILS (src/pipeline/alerts.py). Returns whether an
+    email went out.
 
     Nothing here raises: warnings never stop the pipeline, so a failed send is only logged.
     """
@@ -756,42 +735,12 @@ def send_warning_alert(checks: list[Check], report: str | None = None) -> bool:
         message = warning_email(
             checks, os.environ.get("AIRFLOW_CTX_DAG_RUN_ID"), report
         )
-        recipients = [
-            e.strip()
-            for e in os.environ.get("STOA_ALERT_EMAILS", "").split(",")
-            if e.strip()
-        ]
-        if message is None:
-            return False
-        if not recipients:
-            log.info("STOA_ALERT_EMAILS is empty, so the warnings were not emailed")
-            return False
-        conn = smtp_settings()
-        if conn is None:
-            log.info(
-                "no SMTP settings (AIRFLOW_CONN_SMTP_DEFAULT), so the warnings were not emailed"
-            )
-            return False
-        subject, body = message
-        sender = os.environ.get("STOA_SMTP_USER") or conn["login"]
-        mail = EmailMessage()
-        mail["Subject"] = subject
-        mail["From"] = sender
-        mail["To"] = ", ".join(recipients)
-        mail.set_content("This email needs an HTML-capable mail client.")
-        mail.add_alternative(body, subtype="html")
-        with smtplib.SMTP(
-            conn["host"], int(conn.get("port") or 587), timeout=30
-        ) as smtp:
-            # Gmail on 587: plain connection upgraded with STARTTLS (disable_ssl in extra).
-            smtp.starttls()
-            smtp.login(conn["login"], conn.get("password") or "")
-            smtp.send_message(mail)
     except Exception:
         log.exception("could not email the warnings")
         return False
-    log.info("emailed the warnings to %s", ", ".join(recipients))
-    return True
+    if message is None:
+        return False
+    return send_email(*message, what="the warnings")
 
 
 def log_checks(checks: list[Check]) -> None:

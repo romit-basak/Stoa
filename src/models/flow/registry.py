@@ -13,8 +13,14 @@ rollback moves `champion` back to `previous`.
 The gate (configs/models.yaml, flow.gates) compares the latest selected run with the latest
 baseline_space_syntax run on the same data version (stoa.dvc.processed) and fold plan
 (stoa.plan): log_mae_cv must be at least 15% lower, and coverage80_cv within [0.75, 0.85].
-If a variant in `required_variants` fails, nothing is registered and the command exits 1;
-other variants that fail are reported and left out.
+If a variant in `required_variants` fails, nothing is registered, the team is emailed the
+reasons (src/models/flow/notify.py) and the command exits 1; other variants that fail are
+reported and left out.
+
+A model that passes must also beat the current champion before it replaces it. With
+`--promote`, a new version whose log_mae_cv is worse than the champion's (by more than
+`gates.champion_tolerance`) is registered as `challenger` and `champion` stays where it is, so
+a worse retrain is never served. `--rollback` undoes a promotion by hand.
 
 Writes <output_dir>/registry.json: what was registered or promoted. Building and pushing the
 serving image is the deploy step's job, not this one.
@@ -24,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -36,6 +43,9 @@ from mlflow.tracking import MlflowClient
 from src.ingest.common import setup_logging
 from src.models import tracking
 from src.models.flow import data as flow_data
+from src.models.flow import notify
+
+log = logging.getLogger("stoa.models")
 
 CHAMPION, PREVIOUS, CHALLENGER = "champion", "previous", "challenger"
 
@@ -53,6 +63,7 @@ class Gate:
     baseline_run_id: str | None = None
     improvement: float | None = None
     coverage80: float | None = None
+    log_mae_cv: float | None = None
 
 
 def evaluate_gate(
@@ -126,6 +137,7 @@ def gate(client: MlflowClient, experiment_id: str, variant: str, gates: dict) ->
         base.info.run_id if base else None,
         improvement,
         sel.data.metrics.get("coverage80_cv"),
+        sel.data.metrics.get("log_mae_cv"),
     )
 
 
@@ -136,21 +148,68 @@ def alias_version(client: MlflowClient, name: str, alias: str) -> str | None:
         return None
 
 
-def register(client: MlflowClient, g: Gate, promote: bool) -> dict[str, Any]:
+def beats_champion(
+    new: float | None, champion: float | None, tolerance: float = 0.0
+) -> tuple[bool, str]:
+    """(may replace the champion, why) from the two models' log_mae_cv (lower is better).
+
+    No champion, or a champion without the metric, can't block a model that passed the gate.
+    """
+    if champion is None:
+        return True, "no champion to compare with"
+    if new is None:
+        return False, "the new model has no log_mae_cv"
+    if new <= champion * (1 + tolerance):
+        return True, f"log_mae_cv {new:.4f} vs champion {champion:.4f}"
+    return False, (
+        f"log_mae_cv {new:.4f} is worse than the champion's {champion:.4f}"
+        + (f" (tolerance {tolerance:.0%})" if tolerance else "")
+    )
+
+
+def champion_metric(client: MlflowClient, name: str) -> tuple[str | None, float | None]:
+    """(champion version, its log_mae_cv) from the run it was registered from."""
+    version = alias_version(client, name, CHAMPION)
+    if version is None:
+        return None, None
+    run_id = client.get_model_version(name, version).run_id
+    if not run_id:
+        return version, None
+    return version, client.get_run(run_id).data.metrics.get("log_mae_cv")
+
+
+def register(
+    client: MlflowClient, g: Gate, promote: bool, tolerance: float = 0.0
+) -> dict[str, Any]:
     run = client.get_run(g.run_id)
     uri = run.data.tags.get("stoa.model_uri") or f"runs:/{g.run_id}/model"
     name = model_name(g.variant)
+    new_metric = run.data.metrics.get("log_mae_cv")
+    # Read the champion before registering, so the comparison is with the served version.
+    old, old_metric = champion_metric(client, name)
     version = mlflow.register_model(uri, name).version
-    if promote:
-        old = alias_version(client, name, CHAMPION)
-        if old is not None and old != version:
-            client.set_registered_model_alias(name, PREVIOUS, old)
-        client.set_registered_model_alias(name, CHAMPION, version)
-        alias = CHAMPION
-    else:
+    result = {"name": name, "version": version, "run_id": g.run_id}
+    if not promote:
         client.set_registered_model_alias(name, CHALLENGER, version)
-        alias = CHALLENGER
-    return {"name": name, "version": version, "alias": alias, "run_id": g.run_id}
+        return {**result, "alias": CHALLENGER}
+    better, why = beats_champion(new_metric, old_metric, tolerance)
+    result |= {
+        "log_mae_cv": new_metric,
+        "champion_before": old,
+        "champion_log_mae_cv": old_metric,
+        "champion_check": why,
+    }
+    if not better:
+        # Automatic rollback guard: the worse model is kept for inspection, never served.
+        client.set_registered_model_alias(name, CHALLENGER, version)
+        log.warning(
+            "%s v%s not promoted: %s; champion stays v%s", name, version, why, old
+        )
+        return {**result, "alias": CHALLENGER, "kept_champion": True}
+    if old is not None and old != version:
+        client.set_registered_model_alias(name, PREVIOUS, old)
+    client.set_registered_model_alias(name, CHAMPION, version)
+    return {**result, "alias": CHAMPION, "kept_champion": False}
 
 
 def rollback(client: MlflowClient, variant: str) -> dict[str, Any]:
@@ -203,11 +262,13 @@ def main() -> None:
         if failed:
             # A required variant failing blocks the whole deployment, so nothing registers.
             write_manifest(out, manifest)
+            notify.send(*notify.gate_failed_email(manifest), what="the gate result")
             sys.exit(1)
         if args.check:
             return
+        tolerance = fcfg["gates"].get("champion_tolerance", 0.0)
         manifest["registered"] = [
-            register(client, g, args.promote) for g in gates if g.passed
+            register(client, g, args.promote, tolerance) for g in gates if g.passed
         ]
     write_manifest(out, manifest)
 

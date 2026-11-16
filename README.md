@@ -371,6 +371,7 @@ On an Apple M4 laptop (10 cores, 16 GB), for both variants: `train` takes about 
 | `baseline_betweenness` | Shortest-path betweenness at 1,600 m, calibrated to counts: rung 1 of the baseline ladder |
 | `baseline_space_syntax` | Every Space Syntax metric at 400, 800 and 1,600 m, calibrated to counts: rung 2, and the bar the gate measures against |
 | `hgb`, `lgbm`, `xgb` | scikit-learn histogram gradient boosting, LightGBM and XGBoost, all with a Poisson loss, since the target is a count |
+| `rf` | A random forest with Poisson splitting. Opt-in (`--families ... rf`), so `stoa_train` doesn't train it: on an earlier data version it scored outside the selection tolerance in both variants |
 
 Each family is trained twice. `rich` uses every feature, including Melbourne-only layers (the land use survey, business data, canopy, the footpath steepness survey). `portable` uses only features any city has (OpenStreetMap, terrain, weather, calendars, events) and is the one for NYC and Boston.
 

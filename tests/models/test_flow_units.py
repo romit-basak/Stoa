@@ -8,8 +8,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 
 from src.models.flow import baselines, candidates, notify, registry, select
+from src.models.flow import train as flow_train
 from src.models.flow.data import (
     close_sensors,
     final_rows,
@@ -215,7 +217,7 @@ def test_a_feature_missing_in_every_training_row_is_ignored(family, data, fcfg):
 
 def test_unknown_family_is_rejected():
     with pytest.raises(ValueError):
-        candidates.make("rf", {}, 7)
+        candidates.make("svm", {}, 7)
 
 
 def test_capped():
@@ -224,6 +226,22 @@ def test_capped():
     assert candidates.capped("xgb", {"n_estimators": 300}, None) == {
         "n_estimators": 300
     }
+
+
+def test_rf_is_a_poisson_random_forest():
+    params = {"n_estimators": 50, "max_depth": 8, "min_samples_leaf": 20}
+    model = candidates.make("rf", params, 7)
+    assert isinstance(model, RandomForestRegressor)
+    assert model.criterion == "poisson"
+    assert candidates.capped("rf", {"n_estimators": 200}, 5) == {"n_estimators": 5}
+
+
+def test_rf_intervals_are_quantile_boosting_with_its_depth_and_leaf_size():
+    params = {"n_estimators": 50, "max_depth": 8, "min_samples_leaf": 20}
+    q10 = candidates.make("rf", params, 7, quantile=0.1)
+    assert isinstance(q10, HistGradientBoostingRegressor)
+    assert q10.loss == "quantile" and q10.quantile == 0.1
+    assert q10.max_depth == 8 and q10.min_samples_leaf == 20
 
 
 # --- selection ------------------------------------------------------------------------------
@@ -423,6 +441,12 @@ def test_send_goes_through_alerts(monkeypatch):
     )
     assert notify.send("subj", "<p>x</p>")
     assert sent == ["subj"]
+
+
+def test_rf_is_opt_in(fcfg):
+    defaults = flow_train.default_families(fcfg)
+    assert "rf" not in defaults
+    assert {"hgb", "lgbm", "xgb"} <= set(defaults)
 
 
 def test_params_come_from_an_earlier_run_then_the_tuned_values_then_the_defaults():

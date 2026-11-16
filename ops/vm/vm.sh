@@ -129,9 +129,12 @@ case "${1:-}" in
   train)
     [ "${2:-}" = "" ] || [ "$2" = --tune ] || { echo "usage: $0 train [--tune]" >&2; exit 1; }
     # Run train.sh as it is on main: the VM's checkout may predate it until train.sh deploys.
+    # A fresh temp file each time: a fixed /tmp name left by another user (a teammate, or
+    # the CI account) can't be overwritten, since /tmp is sticky.
     start && vm_ssh --command "cd /srv/stoa && sudo -u stoa git fetch -q origin main &&
-      sudo -u stoa git show origin/main:ops/vm/train.sh > /tmp/stoa-train.sh &&
-      sudo bash /tmp/stoa-train.sh ${2:-} < /dev/null"
+      f=\$(mktemp /tmp/stoa-train.XXXXXX) &&
+      sudo -u stoa git show origin/main:ops/vm/train.sh > \$f &&
+      sudo bash \$f ${2:-} < /dev/null; rc=\$?; rm -f \$f; exit \$rc"
     ;;
   resize)
     [ -n "${2:-}" ] || { echo "usage: $0 resize <machine-type>" >&2; exit 1; }

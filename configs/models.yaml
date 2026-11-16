@@ -98,7 +98,9 @@ flow:
   # src/models/flow/registry.py before a model is registered.
   gates:
     # log_mae_cv at least this much lower than baseline_space_syntax on the same data version.
-    log_mae_improvement: 0.15
+    # Team decision 16 November 2026: 10%, lowered from the October target of 15%, which no
+    # fair attempt reached (docs/models/accuracy_target.md).
+    log_mae_improvement: 0.10
     coverage80: [0.75, 0.85]
     # Variants that must pass for the gate task to succeed; others are registered only if
     # they pass, and reported either way.

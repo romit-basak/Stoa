@@ -1,6 +1,8 @@
 # The 15% accuracy target
 
-The team's success criterion (October 2026, `docs/PROJECT_CONTEXT.md`) is that the flow model's log MAE on held-out sensors be at least 15% lower than the Space Syntax baseline's. The registry gate enforces it (`flow.gates.log_mae_improvement: 0.15` in `configs/models.yaml`). With Space Syntax at 0.979, the model needs 0.832 or lower.
+The team's success criterion (October 2026, `docs/PROJECT_CONTEXT.md`) is that the flow model's log MAE on held-out sensors be at least 15% lower than the Space Syntax baseline's. With Space Syntax at 0.979, the model would need 0.832 or lower.
+
+**Decision (16 November 2026):** the team lowered the gate to **10% below Space Syntax** (`flow.gates.log_mae_improvement: 0.10` in `configs/models.yaml`), as recommended below. The write-up reports the 15% target as missed, with the results on this page. At 10% the model needs 0.881 or lower against a Space Syntax of 0.979.
 
 The models of 12 November 2026 fall short:
 
@@ -56,8 +58,8 @@ Most of the error is in each sensor's overall level, not in its daily and weekly
 
 The CLAUDE.md checkpoint is to stop investing in the model if it doesn't beat Space Syntax. It does beat Space Syntax, so the project carries on as planned.
 
-## If the team agrees
+## What changed with the decision
 
-- Set `flow.gates.log_mae_improvement` to the agreed value (for example 0.10) in `configs/models.yaml`, and update the criterion in `docs/PROJECT_CONTEXT.md`, `docs/models/flow_model.md` and `docs/models/modelling_plan.md`.
-- Run `registry --check`, then `--promote` once both variants pass.
-- Report the 15% target as missed, with these results, rather than dropping it from the write-up.
+- `flow.gates.log_mae_improvement` is 0.10, and the criterion is updated in `docs/PROJECT_CONTEXT.md`, `docs/models/flow_model.md` and `docs/models/modelling_plan.md`.
+- The next `stoa_train` run on main gates against 10%; models that pass are registered and promoted.
+- The 15% target is reported as missed, with these results, not dropped from the write-up.

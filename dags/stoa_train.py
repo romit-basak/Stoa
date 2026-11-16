@@ -8,7 +8,7 @@ after a good stoa_pipeline run. Runs and models go to the MLflow service in dock
   folds (with tune = true, an Optuna search per family first);
 - select_model: the bias check on the shortlist, the interval models, the final fit, and the
   holdout precincts;
-- check_gates: fails the run when the rich model doesn't beat Space Syntax by 15% or its 80%
+- check_gates: fails the run when the rich model doesn't beat Space Syntax by 10% or its 80%
   intervals miss 75-85% coverage, so nothing below the bar is registered;
 - register_model: registers both variants and moves `champion` to them (the version it
   replaces becomes `previous`, for `src.models.flow.registry --rollback`). A new version

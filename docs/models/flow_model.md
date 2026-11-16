@@ -98,11 +98,11 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
-- its `log_mae_cv` is at least 15% below Space Syntax's;
+- its `log_mae_cv` is at least 10% below Space Syntax's (the team lowered it from 15% on 16 November 2026; [accuracy_target.md](accuracy_target.md));
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1, nothing is registered, and the team gets an email listing each variant's gate result and reasons. `portable` is registered only if it passes. The models of 12 November 2026 miss the 15% (11.7% rich, 10.3% portable); what we tried to close the gap, and the recommendation to the team, are in [accuracy_target.md](accuracy_target.md).
+If `rich` fails, the command exits 1, nothing is registered, and the team gets an email listing each variant's gate result and reasons. `portable` is registered only if it passes. The models of 12 November 2026 missed the original 15% (11.7% rich, 10.3% portable) and pass the 10%; what we tried to close the gap, and why the team chose 10%, are in [accuracy_target.md](accuracy_target.md).
 
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 

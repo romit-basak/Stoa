@@ -221,7 +221,7 @@ The weights would enter as baseline rung 3 ("hand-weighted costs"), as cost-weig
 
 ### Validation
 
-1. Model gates in code: beat the baselines and the deployed model on held-out sensors (at least 15% lower MAE on log counts than Space Syntax plus calibration), 80% intervals covering 75–85%, no event-day regression, and the sanity scenarios.
+1. Model gates in code: beat the baselines and the deployed model on held-out sensors (at least 15% lower MAE on log counts than Space Syntax plus calibration; lowered to 10% on 16 November 2026, see `docs/models/accuracy_target.md`), 80% intervals covering 75–85%, no event-day regression, and the sanity scenarios.
 2. Transfer tests: NYC rank correlation and log-total error before and after calibrating on 5 locations (needs the NYC site build); within-Melbourne precinct holdouts, uncalibrated and calibrated on 1–2 sensors.
 3. The calibration curve: accuracy against the number of local sensors used.
 4. Event days separately, centred on Marvel Stadium.

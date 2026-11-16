@@ -71,6 +71,26 @@ follow at 1.3 m/s. Settings are under `walkers:` in `configs/simulation.yaml`.
 - The minute profile is pooled from the same archive, including this night, so the
   timing at 161 is not an independent test.
 
+### All five concert nights at sensor 161
+
+The same settings on the other good nights:
+
+| Night | Observed | Simulated | Observed peak | Simulated peak | Correlation |
+|---|---|---|---|---|---|
+| 26 Oct | 994 | 989 | 22:50 | 22:25 | 0.11 |
+| 27 Oct | 1,477 | 1,468 | 23:00 | 23:00 | 0.87 |
+| 28 Oct | 1,448 | 1,438 | 22:25 | 22:25 | 0.77 |
+| 29 Oct | 1,271 | 1,262 | 22:25 | 22:25 | 0.79 |
+| 2 Nov | 1,028 | 884 | 23:15 | 23:00 | 0.42 |
+
+- Totals match because 161 is in the fit. 2 November is lower because part of its crowd
+  leaves after midnight, outside the fitted hours.
+- The peak block matches on three nights. On 26 October and 2 November the simulated peak
+  comes 15 to 25 minutes early: the minute profile is pooled across nights, so a show that
+  finishes at an unusual time puts the peak in the wrong part of the hour. Calibrating
+  the departure spread per night (step 4) is the fix.
+- 75 gets about half its observed count each night, and 136 gets no routes on any night.
+
 ## Next
 
 1. A route cost with path type, slope, shade and crossings, so routes follow the river

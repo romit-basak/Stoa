@@ -21,6 +21,7 @@ ops/vm/vm.sh tunnel     # starts the VM if needed; Airflow at http://localhost:8
 ops/vm/vm.sh status     # VM state, containers, last idle checks
 ops/vm/vm.sh ssh        # a shell on the VM (repo at /srv/stoa; `sudo docker compose ...`)
 ops/vm/vm.sh deploy     # pull main on the VM and restart the stack
+ops/vm/vm.sh train      # deploy main and start stoa_train (add --tune for the Optuna search)
 ops/vm/vm.sh stop       # stop now instead of waiting for the idle stop
 ```
 
@@ -42,7 +43,30 @@ The `e2-standard-4` is slow for training: its vCPUs are shared cores. On the fir
 
 Once `stoa_pipeline` is unpaused on the VM, it is the one machine that runs it. Pause `stoa_pipeline` on laptop stacks, or every unpaused machine sends its own alert emails and pushes its own data version.
 
-`dvc_push` on the VM leaves `data/*.dvc` and `dvc.lock` changed but uncommitted, as on laptops. To publish a version, copy those four files into a PR (`gcloud compute scp` through IAP, or `vm.sh ssh` and `sudo -u stoa git diff`). `vm.sh deploy` refuses during a DAG run, stops the scheduler while it pulls, and stops with an error if main changed those files too.
+`dvc_push` on the VM leaves `data/*.dvc` and `dvc.lock` changed but uncommitted, as on laptops. To publish a version, copy those four files into a PR (`gcloud compute scp` through IAP, or `vm.sh ssh` and `sudo -u stoa git diff`). `vm.sh deploy` refuses during a DAG run and stops the scheduler while it pulls. It sets the four pointer files aside for the pull and puts them back, since they describe the data on the VM's disk. If main changed them too, main's copies win and the VM's stay in `git stash`; nothing is lost, because `dvc_push` already uploaded that data and records the disk's data again on the next run. If the pull fails anyway, the scheduler is restarted on the old code.
+
+## Training from CI
+
+`.github/workflows/train.yml` (Actions, "Train flow model") retrains the flow model on the VM:
+
+| Trigger | When |
+|---|---|
+| Push to `main` | The commit changes `src/models/**`, `configs/models.yaml`, `dags/stoa_train.py`, or the training frame's code (`src/features/training_frame.py`, `schema.py`) |
+| Monthly | The 2nd of each month at 12:00 UTC (the retrain cadence in CLAUDE.md), clear of the daily 00:00 UTC run |
+| By hand | Actions > Train flow model > Run workflow, with an optional `tune` box for the Optuna search |
+
+It runs `ops/vm/vm.sh train`, which starts the VM and runs `ops/vm/train.sh` on it, taken from `main`:
+1. wait (up to 90 minutes) for any active DAG run to finish;
+2. deploy `main`, so the run trains the code that triggered it;
+3. unpause `stoa_train`, trigger a run, and pause it again once the run is over (`ops/vm/repause-train.sh`, as a systemd unit). `stoa_train` stays paused between runs, because its own `@monthly` slot is 00:00 UTC, when the VM is off or busy with `stoa_pipeline`.
+
+The job returns once the run is queued; the run takes hours on the `e2-standard-4` and keeps the VM up until it ends. `stoa_train` then gates the models, registers them, promotes a model only if it beats the champion, and emails the team the result ([flow_model.md](../models/flow_model.md#notifications)). A teammate can do the same from a laptop with `ops/vm/vm.sh train`.
+
+**Credentials.** The job authenticates as `stoa-ci-trigger@stoa-511822.iam.gserviceaccount.com`, whose JSON key is the repo secret `GCP_CI_KEY`. Without the secret, the job logs a warning and does nothing. The account needs:
+- `roles/compute.instanceAdmin.v1` (start the VM), `roles/iap.tunnelResourceAccessor` (connect through IAP) and `roles/compute.osAdminLogin` (SSH with sudo; the VM uses OS Login), on the project;
+- `roles/iam.serviceAccountUser` on the VM's own service account (required to SSH into a VM that runs as a service account).
+
+Avoid pushing model code shortly before 00:00 UTC: training on the VM can still be running when `stoa_pipeline` starts, and the two together may run short of the VM's 16 GB.
 
 ## Setting it up (done once)
 

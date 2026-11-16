@@ -1,14 +1,16 @@
 # The 15% accuracy target
 
-The team's success criterion (October 2026, `docs/PROJECT_CONTEXT.md`) is that the flow model's log MAE on held-out sensors be at least 15% lower than the Space Syntax baseline's. The registry gate enforces it (`flow.gates.log_mae_improvement: 0.15` in `configs/models.yaml`).
+The team's success criterion (October 2026, `docs/PROJECT_CONTEXT.md`) was that the flow model's log MAE on held-out sensors be at least 15% lower than the Space Syntax baseline's.
 
-**Where it stands (15 November 2026).** On the buffered location folds, the rich model is 14.3% to 15.5% below Space Syntax across three seeds (mean 14.8%), and the portable model 13.1% to 13.8% (mean 13.5%). Resampling the spatial groups gives each run a 95% range of roughly 5% to 25%. The target sits inside the noise: one seed passes and two don't.
+**Decision (16 November 2026):** the team lowered the gate to **10% below Space Syntax** (`flow.gates.log_mae_improvement: 0.10` in `configs/models.yaml`), the first of the two options recommended below. The write-up reports the 15% target as missed, with the results on this page.
 
-**Recommendation.** The gate shouldn't depend on the seed. The team could:
+**Where it stands (15 November 2026).** On the buffered location folds, the rich model is 14.3% to 15.5% below Space Syntax across three seeds (mean 14.8%), and the portable model 13.1% to 13.8% (mean 13.5%). Resampling the spatial groups gives each run a 95% range of roughly 5% to 25%. The 15% target sits inside that noise: one seed passes it and two don't.
+
+**What we recommended.** The gate shouldn't depend on the seed. The two options were:
 - lower the gate to 10%, which every buffered run clears (the lowest is 11.5%, the portable run retuned on two inner folds), and report the 15% target as missed by a small margin, at 14.8% on the mean of three seeds; or
 - keep 15% and gate on the mean of several seeds, which costs about 20 minutes of training per extra seed.
 
-We'd pick the first. Either way it's the team's call, and it should be recorded as a decision.
+The team chose the first.
 
 ## The neighbour buffer
 
@@ -78,8 +80,8 @@ Most of the error is in each sensor's overall level, not in its daily and weekly
 
 The CLAUDE.md checkpoint is to stop investing in the model if it doesn't beat Space Syntax. It does, so the project carries on as planned.
 
-## If the team agrees
+## What changed with the decision
 
-- Set `flow.gates.log_mae_improvement` to the agreed value in `configs/models.yaml`, and update the criterion in `docs/PROJECT_CONTEXT.md`, `docs/models/flow_model.md` and `docs/models/modelling_plan.md`.
-- Retrain `stoa-flow` on buffered folds (`train --params-from` the 12 November run), then run `registry --check` and `--promote`.
-- Report the 15% target with these results rather than dropping it from the write-up.
+- `flow.gates.log_mae_improvement` is 0.10, and the criterion is updated in `docs/PROJECT_CONTEXT.md`, `docs/models/flow_model.md` and `docs/models/modelling_plan.md`.
+- `stoa-flow` still holds the unbuffered models of 12 November. The next `stoa_train` run on main trains on buffered folds with their parameters (it reuses the last run's, `--params-from`), gates against 10%, and registers and promotes the models that pass.
+- The 15% target is reported as missed, with these results, not dropped from the write-up.

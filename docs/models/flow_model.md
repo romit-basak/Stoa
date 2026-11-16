@@ -103,11 +103,11 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
-- its `log_mae_cv` is at least 15% below Space Syntax's;
+- its `log_mae_cv` is at least 10% below Space Syntax's (the team lowered it from 15% on 16 November 2026; [accuracy_target.md](accuracy_target.md));
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. On buffered folds the rich model is 14.3% to 15.5% below Space Syntax across three seeds, so it passes or misses the 15% depending on the seed; the runs, what we tried to close the gap, and the recommendation to the team are in [accuracy_target.md](accuracy_target.md).
+If `rich` fails, the command exits 1, nothing is registered, and the team gets an email listing each variant's gate result and reasons. `portable` is registered only if it passes. The team lowered the gate from 15% to 10% on 16 November 2026. On buffered folds the rich model is 14.3% to 15.5% below Space Syntax across three seeds and the portable model 13.1% to 13.8%, so both pass 10% on every seed. The runs, what we tried to close the gap to 15%, and the decision are in [accuracy_target.md](accuracy_target.md).
 
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
@@ -116,7 +116,21 @@ Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portab
 - without `--promote`, the new version gets `challenger`;
 - `--rollback --variant rich` points `champion` back at `previous`.
 
-Each command writes what it did to `data/models/registry.json`.
+**A retrain never replaces a better model.** Passing the gate isn't enough to be served: with `--promote`, the new version's `log_mae_cv` is compared with the current champion's (read from the run the champion was registered from). If it is worse by more than `gates.champion_tolerance` (0, so any worse score), the new version is registered as `challenger`, `champion` stays where it is, and the email says so. This is the automatic rollback: a worse model is kept in the registry for inspection but never served. A tie replaces the champion, since it was trained on newer data. `--rollback` is still there to undo a promotion by hand.
+
+Each command writes what it did to `data/models/registry.json`, including the champion comparison.
+
+## Notifications
+
+`stoa_train` emails `STOA_ALERT_EMAILS` (the same settings as the pipeline alerts, [README](../../README.md#validation-anomalies-and-alerts)) in three cases:
+
+| When | Email |
+|---|---|
+| A task fails | `[Stoa] stoa_train: <task> failed`, with a link to the log |
+| The gate blocks registration (`check_gates`) | `[Stoa] stoa_train: gate failed, nothing registered`, with each variant's score, improvement over Space Syntax, coverage and reasons |
+| The run finishes (`notify_team`) | `[Stoa] stoa_train finished: model registered` (or `new model held back, champion kept`), with each variant's version, alias, the version it replaced and its metrics |
+
+`src.models.flow.notify` builds the last two; `src/pipeline/alerts.py` sends them. A failed send is logged and never fails the run.
 
 ## Outputs
 

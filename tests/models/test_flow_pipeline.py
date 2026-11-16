@@ -148,11 +148,41 @@ def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     assert client.get_model_version(name, first["version"]).source == bundle_uri
 
 
-def test_registry_keeps_a_better_champion_and_rolls_back_step_by_step(
-    tmp_path, fcfg, mlflow_store
-):
-    from dataclasses import replace
+def test_worse_retrain_does_not_replace_champion(tmp_path, fcfg, mlflow_store):
+    """The automatic rollback guard: a model worse than the champion is registered as
+    challenger and never served; a better one is promoted."""
+    run_all(fcfg, tmp_path / "models", families=["hgb"])
+    mlflow.set_tracking_uri(mlflow_store)
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(
+        tracking.load_models_config()["tracking"]["experiment"]
+    )
+    g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
+    first = registry.register(client, g, promote=True)
+    name = registry.model_name("rich")
+    base = client.get_run(g.run_id)
 
+    def retrain(scale: float) -> registry.Gate:
+        # A later selected run that reuses the same model files with a different score.
+        with mlflow.start_run(experiment_id=exp.experiment_id) as r:
+            mlflow.log_metric("log_mae_cv", base.data.metrics["log_mae_cv"] * scale)
+            uri = base.data.tags.get("stoa.model_uri") or f"runs:/{g.run_id}/model"
+            mlflow.set_tag("stoa.model_uri", uri)
+        return registry.Gate("rich", True, [], r.info.run_id)
+
+    worse = registry.register(client, retrain(1.10), promote=True)
+    assert worse["kept_champion"] and worse["alias"] == "challenger"
+    assert worse["champion_before"] == first["version"]
+    assert registry.alias_version(client, name, "champion") == first["version"]
+    assert registry.alias_version(client, name, "challenger") == worse["version"]
+
+    better = registry.register(client, retrain(0.90), promote=True)
+    assert not better["kept_champion"]
+    assert registry.alias_version(client, name, "champion") == better["version"]
+    assert registry.alias_version(client, name, "previous") == first["version"]
+
+
+def test_rollback_walks_back_one_version_at_a_time(tmp_path, fcfg, mlflow_store):
     import pytest
 
     run_all(fcfg, tmp_path / "models", families=["hgb"])
@@ -163,31 +193,22 @@ def test_registry_keeps_a_better_champion_and_rolls_back_step_by_step(
     )
     g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
     name = registry.model_name("rich")
-    v1 = registry.register(client, replace(g, improvement=0.15), promote=True)
-    v2 = registry.register(client, replace(g, improvement=0.16), promote=True)
-    v3 = registry.register(
-        client, replace(g, improvement=0.155), promote=True, tolerance=0.01
-    )
-    assert v3["alias"] == "champion"  # 0.5 points worse, within the tolerance
-
-    # Two points worse than the champion: registered, but the champion stays.
-    worse = registry.register(
-        client, replace(g, improvement=0.135), promote=True, tolerance=0.01
-    )
-    assert worse["held_back"] and worse["alias"] == "challenger"
+    # The same run scores the same, and a tie replaces the champion.
+    v1, v2, v3 = (registry.register(client, g, promote=True) for _ in range(3))
     assert registry.alias_version(client, name, "champion") == v3["version"]
-    assert registry.alias_version(client, name, "challenger") == worse["version"]
 
-    # Rollback walks back one version at a time: v3 -> v2 -> v1, then refuses.
+    # v3 -> v2 -> v1, then nothing left to roll back to.
     registry.rollback(client, "rich")
     assert registry.alias_version(client, name, "champion") == v2["version"]
     assert registry.alias_version(client, name, "previous") == v1["version"]
     registry.rollback(client, "rich")
     assert registry.alias_version(client, name, "champion") == v1["version"]
     assert registry.alias_version(client, name, "previous") is None
+    with pytest.raises(SystemExit):
+        registry.rollback(client, "rich")
 
     # Rolling back both variants changes neither when one has nothing to roll back to.
-    registry.register(client, replace(g, improvement=0.2), promote=True)
+    registry.register(client, g, promote=True)
     with pytest.raises(SystemExit, match="nothing rolled back"):
         registry.rollback_all(client, ["rich", "portable"])
     assert registry.alias_version(client, name, "previous") == v1["version"]

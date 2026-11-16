@@ -8,10 +8,13 @@ after a good stoa_pipeline run. Runs and models go to the MLflow service in dock
   folds (with tune = true, an Optuna search per family first);
 - select_model: the bias check on the shortlist, the interval models, the final fit, and the
   holdout precincts;
-- check_gates: fails the run when the rich model doesn't beat Space Syntax by 15% or its 80%
+- check_gates: fails the run when the rich model doesn't beat Space Syntax by 10% or its 80%
   intervals miss 75-85% coverage, so nothing below the bar is registered;
 - register_model: registers both variants and moves `champion` to them (the version it
-  replaces becomes `previous`, for `src.models.flow.registry --rollback`).
+  replaces becomes `previous`, for `src.models.flow.registry --rollback`). A new version
+  worse than the current champion is registered as `challenger` and not served;
+- notify_team: emails the team what was registered and promoted (a failed gate emails the
+  reasons from check_gates; any failed task sends the failure email).
 """
 
 import os
@@ -88,12 +91,17 @@ def stoa_train():
     def register_model():
         return f"{STOA} src.models.flow.registry --promote"
 
+    @task.bash
+    def notify_team():
+        return f"{STOA} src.models.flow.notify"
+
     (
         train_candidates()
         >> select_model()
         >> mitigate_bias()
         >> check_gates()
         >> register_model()
+        >> notify_team()
     )
 
 

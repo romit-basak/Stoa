@@ -98,11 +98,11 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
-- its `log_mae_cv` is at least 15% below Space Syntax's;
+- its `log_mae_cv` is at least 10% below Space Syntax's (the team lowered it from 15% on 16 November 2026; [accuracy_target.md](accuracy_target.md));
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. The models of 12 November 2026 miss the 15% (11.7% rich, 10.3% portable); what we tried to close the gap, and the recommendation to the team, are in [accuracy_target.md](accuracy_target.md).
+If `rich` fails, the command exits 1, nothing is registered, and the team gets an email listing each variant's gate result and reasons. `portable` is registered only if it passes. The models of 12 November 2026 missed the original 15% (11.7% rich, 10.3% portable) and pass the 10%; what we tried to close the gap, and why the team chose 10%, are in [accuracy_target.md](accuracy_target.md).
 
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
@@ -111,7 +111,21 @@ Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portab
 - without `--promote`, the new version gets `challenger`;
 - `--rollback --variant rich` points `champion` back at `previous`.
 
-Each command writes what it did to `data/models/registry.json`.
+**A retrain never replaces a better model.** Passing the gate isn't enough to be served: with `--promote`, the new version's `log_mae_cv` is compared with the current champion's (read from the run the champion was registered from). If it is worse by more than `gates.champion_tolerance` (0, so any worse score), the new version is registered as `challenger`, `champion` stays where it is, and the email says so. This is the automatic rollback: a worse model is kept in the registry for inspection but never served. A tie replaces the champion, since it was trained on newer data. `--rollback` is still there to undo a promotion by hand.
+
+Each command writes what it did to `data/models/registry.json`, including the champion comparison.
+
+## Notifications
+
+`stoa_train` emails `STOA_ALERT_EMAILS` (the same settings as the pipeline alerts, [README](../../README.md#validation-anomalies-and-alerts)) in three cases:
+
+| When | Email |
+|---|---|
+| A task fails | `[Stoa] stoa_train: <task> failed`, with a link to the log |
+| The gate blocks registration (`check_gates`) | `[Stoa] stoa_train: gate failed, nothing registered`, with each variant's score, improvement over Space Syntax, coverage and reasons |
+| The run finishes (`notify_team`) | `[Stoa] stoa_train finished: model registered` (or `new model held back, champion kept`), with each variant's version, alias, the version it replaced and its metrics |
+
+`src.models.flow.notify` builds the last two; `src/pipeline/alerts.py` sends them. A failed send is logged and never fails the run.
 
 ## Outputs
 
@@ -139,8 +153,8 @@ Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --f
 
 `train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
 
-In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+In Airflow, the `stoa_train` DAG runs these steps, then the bias mitigation, the gates, the registration and the email (train_candidates, select_model, mitigate_bias, check_gates, register_model, notify_team). The GitHub workflow `.github/workflows/train.yml` starts it on the VM when model code is pushed, on the 2nd of each month, or by hand (`tune` option); see [cloud_vm.md](../pipeline/cloud_vm.md#training-from-ci). The daily pipeline never trains.
 
 ## Not included yet
 
-Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.
+Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either: one was tried on a side branch (PR #48) but not merged into `main`, so it never ran in `stoa_train`. `report.py` still knows how to label one. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.

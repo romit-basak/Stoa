@@ -150,7 +150,7 @@ Step 1 measures the **data**. Whether a model is actually worse on these groups 
 .venv/bin/python -m src.bias.slice_errors     # ~16 min; the DAG runs it weekly
 ```
 
-Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. The real flow model doesn't exist yet, so a baseline stands in for it (`src/bias/slice_errors.py`):
+Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. This step was built before the flow model existed, so a baseline stands in for it (`src/bias/slice_errors.py`), and it still runs that way in the daily pipeline as a data check. The flow model's own slicing, mitigation and deployment gate are in [model_bias.md](model_bias.md).
 - **Model:** scikit-learn gradient boosting (`HistGradientBoostingRegressor`, Poisson loss) on time, calendar, weather, slope and OSM segment features. Following core rule 9, it has no sensor or segment IDs, no coordinates and no month or day of year.
 - **Held-out sensors:** 5 folds grouped by sensor (core rule 2), so every one of the 118 sensors gets predictions from a model that never saw it. Each fold trains on 600,000 sampled rows, and the model is seeded (`random_state: 7`), so a rerun on the same data gives the same numbers.
 - **Error:** WAPE, the sum of absolute errors divided by the sum of counts, computed per slice group with Fairlearn's `MetricFrame` (MIT). A relative error keeps busy sensors from drowning out quiet ones, and night (2.8% of pedestrians) from disappearing.

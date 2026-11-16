@@ -1,0 +1,77 @@
+# Retrain the flow model on the team's cloud VM (docs/pipeline/cloud_vm.md, "Training from CI").
+#
+# Starts the VM, waits for any active DAG run, deploys main and triggers stoa_train
+# (ops/vm/vm.sh train). The run itself takes hours on the VM; this job returns once it is
+# queued. stoa_train then gates the models, registers and promotes them (a worse model never
+# replaces the champion) and emails the team the result.
+#
+# Triggers:
+# - a push to main that changes the model code or its settings;
+# - monthly (the retrain cadence in CLAUDE.md), on the 2nd at 12:00 UTC, clear of the daily
+#   00:00 UTC stoa_pipeline run;
+# - by hand (Actions > Train flow model > Run workflow), optionally with an Optuna search.
+#
+# Needs the repo secret GCP_CI_KEY: the JSON key of stoa-ci-trigger@stoa-511822, which can start
+# the VM and SSH to it through IAP. Without it the job says so and stops without failing.
+name: Train flow model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/models/**"
+      - "src/features/training_frame.py"
+      - "src/features/schema.py"
+      - "configs/models.yaml"
+      - "dags/stoa_train.py"
+  schedule:
+    - cron: "0 12 2 * *"
+  workflow_dispatch:
+    inputs:
+      tune:
+        description: "Run the Optuna search per family first (adds hours)"
+        type: boolean
+        default: false
+
+# One training request at a time; a newer push supersedes a queued one.
+concurrency:
+  group: train-flow-model
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150 # up to 90 min waiting for an active run, then the deploy
+    env:
+      HAS_KEY: ${{ secrets.GCP_CI_KEY != '' }}
+    steps:
+      - name: Check for the service-account key
+        if: env.HAS_KEY != 'true'
+        run: echo "::warning::GCP_CI_KEY is not set, so training was not triggered (see docs/pipeline/cloud_vm.md)."
+
+      - uses: actions/checkout@v5
+        if: env.HAS_KEY == 'true'
+
+      - uses: google-github-actions/auth@v2
+        if: env.HAS_KEY == 'true'
+        with:
+          credentials_json: ${{ secrets.GCP_CI_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: env.HAS_KEY == 'true'
+
+      - name: SSH key for gcloud compute ssh (OS Login)
+        if: env.HAS_KEY == 'true'
+        run: mkdir -p ~/.ssh && ssh-keygen -q -t rsa -b 3072 -N "" -f ~/.ssh/google_compute_engine
+
+      - name: Deploy main and trigger stoa_train on the VM
+        if: env.HAS_KEY == 'true'
+        run: |
+          tune=""
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.tune }}" = true ]; then
+            tune=--tune
+          fi
+          ops/vm/vm.sh train $tune

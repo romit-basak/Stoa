@@ -98,7 +98,9 @@ flow:
   # src/models/flow/registry.py before a model is registered.
   gates:
     # log_mae_cv at least this much lower than baseline_space_syntax on the same data version.
-    log_mae_improvement: 0.15
+    # Team decision 16 November 2026: 10%, lowered from the October target of 15%, which no
+    # fair attempt reached (docs/models/accuracy_target.md).
+    log_mae_improvement: 0.10
     coverage80: [0.75, 0.85]
     # Variants that must pass for the gate task to succeed; others are registered only if
     # they pass, and reported either way.
@@ -108,6 +110,10 @@ flow:
     # (rich) and 1.94 (portable), both on quiet sensors; the XGBoost candidate was at 2.24.
     # A failed gate fails stoa_train's check_gates task, which sends the failure email.
     max_worst_slice_ratio: 2.25
+    # A model that passes the gates replaces `champion` only if its log_mae_cv is no worse
+    # than the champion's by more than this fraction; otherwise it is registered as
+    # `challenger` and the champion keeps serving (src/models/flow/registry.py).
+    champion_tolerance: 0.0
 
   calibration_curve:
     k: [1, 3, 5, 10, 20]

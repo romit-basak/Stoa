@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.flow import baselines, candidates, select
+from src.models.flow import baselines, candidates, notify, registry, select
 from src.models.flow.data import final_rows, fold_plan, summary_plan, trainable
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
@@ -286,3 +286,72 @@ def test_gate_can_block_on_bias():
     selected = {"log_mae_cv": 0.4, "coverage80_cv": 0.8, "worst_slice_ratio": 2.5}
     ok, reasons, _ = evaluate_gate(selected, {"log_mae_cv": 0.5}, gates)
     assert not ok and "worst slice" in reasons[0]
+
+
+@pytest.mark.parametrize(
+    "new, champ, tol, ok",
+    [
+        (0.80, None, 0.0, True),  # nothing to compare with
+        (0.80, 0.85, 0.0, True),  # better
+        (0.85, 0.85, 0.0, True),  # a tie still replaces (fresher data)
+        (0.86, 0.85, 0.0, False),  # worse: keep the champion
+        (0.86, 0.85, 0.02, True),  # within the tolerance
+        (None, 0.85, 0.0, False),  # can't tell, so don't replace
+    ],
+)
+def test_beats_champion(new, champ, tol, ok):
+    assert registry.beats_champion(new, champ, tol)[0] is ok
+
+
+def test_gate_failed_email_lists_reasons():
+    manifest = {
+        "gates": [
+            {
+                "variant": "rich",
+                "passed": False,
+                "reasons": ["log_mae_cv is 8.9% below Space Syntax (needs 15%)"],
+                "log_mae_cv": 0.886,
+                "improvement": 0.089,
+                "coverage80": 0.77,
+            }
+        ]
+    }
+    subject, body = notify.gate_failed_email(manifest)
+    assert "gate failed" in subject and "nothing was registered" in body
+    assert "8.9% below Space Syntax (needs 15%)" in body
+
+
+def test_success_email_says_when_champion_was_kept():
+    manifest = {
+        "registered": [
+            {
+                "name": "stoa-flow-rich",
+                "version": "3",
+                "alias": "challenger",
+                "kept_champion": True,
+                "champion_before": "2",
+                "champion_check": "log_mae_cv 0.9000 is worse than the champion's 0.8800",
+            },
+            {
+                "name": "stoa-flow-portable",
+                "version": "4",
+                "alias": "champion",
+                "kept_champion": False,
+                "champion_before": "1",
+            },
+        ]
+    }
+    selected = {"rich": {"family": "lgbm", "metrics": {"log_mae_cv": 0.9}}}
+    subject, body = notify.success_email(manifest, selected)
+    assert "champion kept" in subject
+    assert "not promoted" in body and "champion stays v2" in body
+    assert "v4 is now <b>champion</b>" in body and "replaces v1" in body
+
+
+def test_send_goes_through_alerts(monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        notify.alerts, "send_email", lambda s, b, what: sent.append(s) or True
+    )
+    assert notify.send("subj", "<p>x</p>")
+    assert sent == ["subj"]

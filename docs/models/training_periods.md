@@ -62,7 +62,7 @@ The portable variant is the exception: on the precincts together the 2020 start 
 - **More data wins on most hours.** Starting in 2014 already costs about 0.016 of log MAE on all hours (rich), and it is worse in every window, including the hours from 2014 that it was trained on. The older years help the model learn how place and time shape counts, and that carries over to later years.
 - **Starting in 2020 doesn't help anywhere.** About a fifth of its training hours fall in the lockdowns, and it has none of the normal years before them. It is worse than the 2009 start even on the hours from 2020.
 - **Starting in 2022 helps a little on recent hours only.** Rich log MAE after the Metro Tunnel drops from 0.820 to 0.799 (2.6% lower); portable drops from 0.839 to 0.833 (0.7%). The UniMelb edge after the Metro Tunnel also improves (1.019 to 0.970). The cost is large on everything older: COVID-era error goes from 0.913 to 1.206, which is expected, because the 2022 model never saw a lockdown.
-- **None of this moves the 15% gate.** The gate scores all hours, where the 2009 start is best.
+- **None of this moves the 15% target** (the gate is now 10%, [accuracy_target.md](accuracy_target.md)). The gate scores all hours, where the 2009 start is best.
 
 ## Caveats
 

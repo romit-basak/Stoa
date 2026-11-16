@@ -1,6 +1,6 @@
 # Modelling plan
 
-Decisions from the 5 November 2026 discussion on the model phase, and the order of work from here. The flow-model code is in progress on the `romit/flow-model` branch, so the sections on selection, gates, the registry and the training DAG describe planned work; its implementation details (commands, config keys, search spaces) will be in `docs/models/flow_model.md`. Experiment tracking conventions are in [experiment_tracking.md](experiment_tracking.md).
+Decisions from the 5 November 2026 discussion on the model phase, and the order of work from here. The plan has since been built and is on `main` (`src/models/flow/`, `dags/stoa_train.py`); this page keeps the reasoning, and the implementation details (commands, config keys, search spaces) are in [flow_model.md](flow_model.md). Where the build differs from the plan, `flow_model.md` is right: the gate is 10%, not 15% ([accuracy_target.md](accuracy_target.md)), and selection, bias mitigation, the champion check and the emails are described there. Experiment tracking conventions are in [experiment_tracking.md](experiment_tracking.md).
 
 ## What the course asks for
 
@@ -44,7 +44,7 @@ The selected model gets its quantile models and is scored once on the held-out p
 
 A model reaches the registry only if:
 
-- its `log_mae_cv` is at least 15% lower than `baseline_space_syntax` on the same data version (the run's `stoa.dvc.processed` tag), and
+- its `log_mae_cv` is at least 10% lower (15% until the team's decision of 16 November 2026, [accuracy_target.md](accuracy_target.md)) than `baseline_space_syntax` on the same data version (the run's `stoa.dvc.processed` tag), and
 - its 80% intervals cover 75 to 85% of held-out hours (`coverage80_cv`).
 
 The registry uses MLflow aliases, because MLflow 3 deprecates stages. `champion` is the served version and `previous` the one it replaced; rollback moves `champion` back to `previous`. If the learned model doesn't beat Space Syntax, the weeks 5 to 6 checkpoint in CLAUDE.md applies.

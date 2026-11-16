@@ -2,7 +2,7 @@
 
 Stoa predicts where people walk, how many, and when, on every path of a site. Planners can test a change ("close this path", "add an entrance", "it's game day") before building it, and store owners can see the hourly pass-by at a candidate storefront and how many of those people can see it.
 
-We train on the City of Melbourne's pedestrian sensors: 118 sensors, hourly counts from 2009 to today, 7.4 million sensor-hours. This repo is the data pipeline that pulls those counts and everything around them (weather, calendars, the street network, terrain), turns them into one clean hourly table, checks it, measures bias in it, and versions it.
+We train on the City of Melbourne's pedestrian sensors: 118 sensors, hourly counts from 2009 to today, 7.4 million sensor-hours. This repo has two pipelines. The **data pipeline** pulls those counts and everything around them (weather, calendars, the street network, terrain), turns them into one clean hourly table, checks it, measures bias in it, and versions it. The **model pipeline** trains and compares the flow models on that versioned data, checks them for accuracy and bias, and registers the best one, retraining automatically when model code changes.
 
 IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 
@@ -26,6 +26,7 @@ IE7374 MLOps, Northeastern University, Fall 2026. *Formerly DesireLine.*
 | Folder structure | [Repository layout](#repository-layout) |
 | Code style (PEP 8) | `pyproject.toml` (ruff settings). See [Tests and lint](#tests-and-lint) |
 | Experiment tracking (model phase) | `src/models/tracking.py` and the `mlflow` service. See [Experiment tracking](#experiment-tracking) |
+| **Model pipeline** (all sections of the model guidelines) | `src/models/flow/`, `dags/stoa_train.py`, `.github/workflows/train.yml`. See [The model pipeline](#the-model-pipeline), which maps each guideline to its code |
 
 ## Quickstart
 
@@ -245,7 +246,7 @@ Our data has no people in it. The counts are anonymous totals per sensor and hou
 We slice the hourly table 20 ways, including precinct, how busy the sensor is, nearby amenities, slope, time of day, holidays, rain, temperature, era (before, during and after COVID) and AFL match days. The slices are defined in `configs/bias.yaml`.
 
 1. **How much data each group has** (`bias_slices`). Each group's share is compared with a fair reference: hours in the study period for time and weather, walkable network for precincts, and footpath length for slope. Place is the most uneven: the city centre has five times its share of sensors, while Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less.
-2. **Where a model does worse** (`bias_errors`). The real flow model comes later, so a gradient-boosting baseline stands in for it. It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
+2. **Where a model does worse** (`bias_errors`). This data-stage check uses a stand-in gradient-boosting model, so it runs in the daily pipeline without the flow model; the flow model's own bias check, mitigation and gate are in [The model pipeline](#the-model-pipeline) and [docs/bias/model_bias.md](docs/bias/model_bias.md). It's trained in 5 folds with whole sensors held out. We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
 3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about 30% (WAPE 0.53 to 0.38) and fixed the quiet, low-amenity, Southbank and Kensington sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights. The rerun on 5 November, with eleven more days of counts, gave 0.53 before calibration and 0.37 after.
 4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the run of 13 November (18 days of minutes) that raised coverage from 71% to 92% of sensor-hours (quiet sensors from 60% to 97%, night from 33% to 92%). Carlton and Parkville stay the least covered (63% and 65%), because three of their sensors never publish the first 5 minutes of each hour.
 
@@ -295,6 +296,57 @@ A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minu
 ## Experiment tracking
 
 Model runs are logged to MLflow, which runs as the `mlflow` service in `docker-compose.yaml` (http://localhost:5001; `docker compose up -d mlflow` starts it alone). Training code wraps its work in `src.models.tracking.run(...)`, which records the settings and metrics plus the git commit, the DVC version of each data folder and the training frame's `frame_spec.json`, so every run can be traced back to its code and data. `python -m src.models.tracking --smoke` checks the setup. How to log a run, the naming conventions and where runs are stored: [docs/models/experiment_tracking.md](docs/models/experiment_tracking.md).
+
+## The model pipeline
+
+The flow model predicts hourly pedestrian counts on a path segment. It is trained on Melbourne's sensors and must work on sensors and precincts it has never seen, so every score comes from **whole sensors held out**, never from held-out hours of a sensor it trained on. Full write-up: [docs/models/flow_model.md](docs/models/flow_model.md).
+
+**How it runs.** `stoa_train` (`dags/stoa_train.py`) is an Airflow DAG in the same Docker image as the data pipeline, on the team's GCP VM:
+
+```
+train_candidates -> select_model -> mitigate_bias -> check_gates -> register_model -> notify_team
+```
+
+1. **train_candidates** (`train.py`): three model families (scikit-learn HistGradientBoosting, LightGBM, XGBoost, all with a Poisson loss) and two baselines (shortest-path betweenness and Space Syntax, each with calibration), for two variants: **rich**, with Melbourne-only layers, and **portable**, with features any city has, for the NYC and Boston transfer tests. Each is scored on 5 location folds. With `tune=true`, an Optuna search runs per family first.
+2. **select_model** (`select.py`): shortlists the candidates within 3% of the best `log_mae_cv`, picks the one with the smallest worst bias slice, adds 80% prediction intervals, fits it on every sensor outside the held-out precincts, and scores it once on three held-out precincts that no step ever trains or chooses on.
+3. **mitigate_bias** (`mitigate.py`): retrains the selected model with two reweightings and calibrates it, all scored on the same bias slices.
+4. **check_gates** (`registry.py --check`): the model must beat Space Syntax by at least **10%** on `log_mae_cv`, its 80% intervals must cover 75–85% of held-out hours, and its worst slice must be under 2.25 times the overall error. A failure stops the run and emails the reasons.
+5. **register_model** (`registry.py --promote`): registers the model in the MLflow Model Registry and makes it `champion`, but only if it also beats the current champion. A worse model is registered as `challenger` and the champion keeps serving.
+6. **notify_team** (`notify.py`): emails the team what was registered or held back, with its metrics.
+
+**What triggers it.** `.github/workflows/train.yml` starts the VM and runs `stoa_train` when a push to `main` changes the model code or its settings, on the 2nd of every month, or by hand (Actions, "Train flow model", with an optional tuning run). From a laptop: `ops/vm/vm.sh train [--tune]`. Details: [docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md#training-from-ci).
+
+**Each model guideline, and where it is met:**
+
+| Guideline | How we meet it | Where |
+|---|---|---|
+| Load data from the data pipeline | Reads the DVC-versioned training frame that `stoa_pipeline` builds; every run is tagged with the data version (`stoa.dvc.processed`) and the git commit | `src/models/flow/data.py`, `src/models/tracking.py` |
+| Train and select the best model | 3 families + 2 baselines per variant; selection by `log_mae_cv`, then by the worst bias slice | `train.py`, `candidates.py`, `baselines.py`, `select.py` |
+| Validation on held-out data | 5 folds that hold out whole sensors (grouped by location), plus 3 held-out precincts (UniMelb edge, Carlton, North Melbourne) scored once; metrics: log MAE, WAPE, 80% interval coverage, rank correlation, calibration curve | `evaluate.py`, `select.py` |
+| Bias detection with slicing | WAPE per slice (precinct, busy vs quiet sensors, time of day, holidays, weather, era) with Fairlearn's `MetricFrame` and sensor-resampled 95% intervals | `select.py`, `mitigate.py`, [docs/bias/model_bias.md](docs/bias/model_bias.md) |
+| Bias mitigation and trade-offs | Two reweightings and per-sensor calibration, compared slice by slice; why calibration is the one we keep | `mitigate.py`, [docs/bias/model_bias.md](docs/bias/model_bias.md) |
+| Hyperparameter tuning | Optuna (Bayesian, TPE), 30 trials per family on inner location folds; the search spaces are in `configs/models.yaml` | `tune.py` |
+| Experiment tracking | Every candidate, baseline, tuning trial and selected model is an MLflow run with its parameters, metrics, model files and reports | `tracking.py`, [docs/models/experiment_tracking.md](docs/models/experiment_tracking.md) |
+| Result charts and model selection | Model comparison, calibration curve, feature importance and mitigation charts, logged with every selected run | `select.py`, `mitigate.py`, [docs/models/flow_model.md](docs/models/flow_model.md) |
+| Sensitivity: features | SHAP importance of the selected model | `select.py` (`feature_importance.png`) |
+| Sensitivity: hyperparameters | Optuna's importance of each hyperparameter, per family | `tune.py` (`param_importance.json`) |
+| Model registry on GCP | MLflow Model Registry on the GCP VM, model files in `gs://stoa-dvc-data/mlflow-artifacts`; aliases `champion`, `previous`, `challenger` | `registry.py` |
+| CI/CD training on a code push | GitHub Actions starts training on the VM when model code is pushed | `.github/workflows/train.yml`, `ops/vm/train.sh` |
+| Automated validation and bias gates | `check_gates` blocks registration below the thresholds | `registry.py`, `configs/models.yaml` (`flow.gates`) |
+| Notifications | Emails on a failed task, a failed gate (with the reasons) and a finished run | `notify.py`, `src/pipeline/alerts.py` |
+| Rollback | A model worse than the champion is never promoted; `registry --rollback` moves `champion` back to `previous` | `registry.py` |
+| Docker | Training runs in the same Airflow image as the data pipeline, with MLflow as its own service | `Dockerfile`, `docker-compose.yaml`, `ops/mlflow/` |
+
+**Accuracy target.** The team's original target was 15% better than Space Syntax. No fair attempt reached it: the models are about 12% better than Space Syntax and about 19% better than betweenness. On 16 November 2026 the team set the gate to 10% and reports the 15% as missed. What we tried, and why: [docs/models/accuracy_target.md](docs/models/accuracy_target.md).
+
+**Commands:**
+
+```bash
+ops/vm/vm.sh train [--tune]                               # deploy main and run stoa_train on the VM
+ops/vm/vm.sh tunnel                                       # Airflow and MLflow UIs on localhost:8080 / :5001
+.venv/bin/python -m src.models.flow.registry --check      # gates only
+.venv/bin/python -m src.models.flow.registry --rollback --variant rich   # undo a promotion
+```
 
 ## Tests and lint
 
@@ -412,8 +464,8 @@ configs/sensor_overrides.yaml  hand-checked sensor-to-segment matches
 configs/validation.yaml  validation thresholds; configs/schemas/ holds the expected table schema
 configs/bias.yaml        bias slices: precincts, time and weather bins, eras, thresholds
 configs/analysis.yaml    parameters for src/analysis/
-configs/models.yaml      model settings (MLflow server and experiment)
-dags/                    Airflow DAGs (stoa_pipeline, stoa_site_build, stoa_minute_feed, stoa_osm_watch);
+configs/models.yaml      model settings: candidates and search spaces, folds, gates, MLflow
+dags/                    Airflow DAGs (stoa_pipeline, stoa_train, stoa_site_build, stoa_minute_feed, stoa_osm_watch);
                          Dockerfile and docker-compose.yaml run them
 data/                    raw/, interim/, processed/ (git-ignored; versioned with DVC)
 dvc.yaml, dvc.lock       pipeline stages with their inputs, and the input versions behind the committed data
@@ -424,21 +476,23 @@ src/features/            feature building (osm.py runs extract -> graph -> featu
 src/pipeline/            validation (validate, validate_segments, minute_checks), DVC versioning, osm_watch
 src/bias/                bias slices, representation report, per-slice errors, per-minute coverage
 src/analysis/            one-off analyses (new_openings: before/after study feasibility)
-src/models/              model code (tracking.py: MLflow runs with code and data versions)
+src/models/              model code (tracking.py: MLflow runs with code and data versions;
+                         flow/: train, tune, select, mitigate, gate, register, notify)
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
 ops/hpc/                 the cluster job that polls the per-minute feed
 ops/mlflow/              the MLflow tracking server image (docker-compose service `mlflow`)
+ops/vm/                  the team's GCP VM: create, deploy, train, idle stop (docs/pipeline/cloud_vm.md)
 notebooks/               exploration only; the pipeline doesn't run them (below)
 docs/data_cards/         one card per dataset: schema, coverage, known issues
 docs/features/           feature tables: how they're built, column dictionaries, joins
 docs/pipeline/           validation checks, site builds, Gantt charts, the gaps review
 docs/bias/               bias analysis and figures
-docs/models/             experiment tracking, and later the model write-ups
+docs/models/             the flow model, experiment tracking, accuracy target, training periods
 docs/analysis/           write-ups of one-off analyses
 docs/data_licenses.md    license register; check it before adding a dataset
 docs/PROJECT_CONTEXT.md  the reasoning behind decisions, scope tiers, validation plan
 docs/scoping/            project scoping document (LaTeX source)
-.github/workflows/       CI: lint, unit tests, DAG tests
+.github/workflows/       CI: lint, unit tests, DAG tests; train.yml retrains the flow model
 requirements.txt         pinned versions generated from pyproject.toml
 CLAUDE.md                project rules and conventions
 ```
@@ -491,9 +545,9 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 | Event scenario | Demonstration. Melbourne event days (centred on Marvel Stadium) are evaluated separately. |
 | Marathons (stretch) | Melbourne Marathon (validation) and Boston Marathon (demonstration) |
 
-**Done:** ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI; MLflow experiment tracking (local server). The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
+**Done:** ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI; the flow model pipeline (training, tuning, selection, bias checks and mitigation, gates, MLflow registry, rollback, emails, retraining from CI); a shared Airflow and MLflow server on a GCP VM. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
 
-**Planned:** the flow model (`src/models/flow/`), path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, a shared MLflow server on a GCP VM, deployment and Cloud Run.
+**Planned:** path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, deployment of the flow model and Cloud Run.
 
 ## Ground rules
 

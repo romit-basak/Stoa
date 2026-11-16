@@ -47,7 +47,7 @@ Rich variant (portable in brackets where it differs):
 - **Keep the selected model unweighted.** Both weightings cost accuracy, and the fairness they buy is small and not consistent across the two variants.
 - **Calibration is the mitigation.** That's the product's design anyway: a site with even a few weeks of local counts gets calibrated predictions (CLAUDE.md, "Generalization"). The trade-off is that it needs local counts. A site without any keeps the uncalibrated model's errors.
 - **For uncalibrated sites, say so in the app.** Predictions on quiet streets can be off by more than their own volume. Relative comparisons ("busier than", rankings, changes under a scenario) hold up better than absolute counts there. The intervals already widen for this.
-- **The gate limit is 2.25.** It was set just under the 12 November XGBoost candidate's 2.24. Every buffered run so far has a worst slice between 1.67 and 1.90, so a retrain that makes the worst slice noticeably worse is blocked and emailed, without failing on today's models. It's a team setting in `configs/models.yaml` (`gates.max_worst_slice_ratio`).
+- **The gate limit is 2.25.** It was set just above the 12 November XGBoost candidate's 2.24. Every buffered run so far has a worst slice between 1.67 and 1.90, so a retrain that makes the worst slice noticeably worse is blocked and emailed, without failing on today's models. It's a team setting in `configs/models.yaml` (`gates.max_worst_slice_ratio`).
 - **Next, for night and COVID:** features that describe night-time activity (venues open late, lighting), and a check on whether the COVID era should be down-weighted or dropped. Training from later start years didn't help ([training_periods.md](../models/training_periods.md)).
 
 ## Running it

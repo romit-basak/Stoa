@@ -428,6 +428,41 @@ What this shows:
 
 The charts, tables and a training report (data, loss and cost, learned parameters, hyperparameters) are logged with each selected run in MLflow and written to `data/models/<variant>/selected/`. `python -m src.models.flow.figures` copies the latest selected run's charts, and the tuning and mitigation charts of the same training, into `docs/models/figures/` with a `summary.json` of the run ids and metrics behind them; the charts here came from the seed-7 run above.
 
+### The registered model
+
+The models in the registry come from the first `stoa_train` run on the team's GCP VM, on 16 November 2026: run `ci__20261116T005046`, data version `961075e6`, code `607c7b1`, with `tune` on. All six gate checks passed, and both variants were registered as `stoa-flow-rich` v1 and `stoa-flow-portable` v1, alias `champion`. The team got the "model registered" email at 03:58 UTC.
+
+| | Rich | Portable |
+|---|---|---|
+| Selected | LightGBM (shortlist: LightGBM, XGBoost) | LightGBM (shortlist: LightGBM) |
+| log MAE, location folds | 0.874 | 0.878 |
+| Below Space Syntax (0.980) | **10.8%** (gate: 10%) | **10.3%** |
+| Below betweenness (1.073) | 18.5% | 18.2% |
+| WAPE | 0.648 | 0.644 |
+| Sensor rank correlation, uncalibrated / calibrated | 0.55 / 0.94 | 0.58 / 0.95 |
+| 80% interval coverage (gate: 0.75 to 0.85) | 0.774 | 0.785 |
+| log MAE, holdout precincts | 0.878 | 1.017 |
+| log MAE, event days / other days | 0.859 / 0.842 | 0.869 / 0.850 |
+| log MAE after the Metro Tunnel opened | 0.833 | 0.841 |
+| Worst slice (quiet sensors), times overall WAPE (gate: 2.25) | 1.99 | 1.87 |
+| WAPE calibrated to 28 days of each sensor's counts | 0.402 | 0.406 |
+
+This run used the code of 16 November before the buffered folds (`607c7b1`): its folds don't leave out each test sensor's neighbours, and its search used two inner folds. That's why its gain over Space Syntax (10.8%) is smaller than in the seed study above (14.8%). The model scores about the same (0.874 against 0.872); without the buffer, Space Syntax gets an easier test (0.980 against 1.023), since its calibration can lean on sensors next to the one it predicts. The next `stoa_train` run on main uses the buffered folds and the parameters in `configs/models.yaml`, and must beat these champions to replace them.
+
+![Candidates, baselines and the bias check of the registered rich model](docs/models/figures/registered_2026-11-16/model_comparison_rich.png)
+
+*Left: every candidate and baseline (rich). Tuned HGB (0.921) trails LightGBM (0.874) and XGBoost (0.878). Right: the bias check on the shortlist. LightGBM was both more accurate and fairer (worst slice 1.99 against about 2.2 for XGBoost), so it was selected.*
+
+![Feature importance of the registered rich model (mean |SHAP|)](docs/models/figures/registered_2026-11-16/feature_importance_rich.png)
+
+*The same ranking as in the seed study: the hour of day dominates, then the COVID period, harmonic closeness at 800 m, sun elevation, weekday and daylight, then street and place features.*
+
+![Mitigations for the registered rich model](docs/models/figures/registered_2026-11-16/mitigation_rich.png)
+
+*Reweighting changes little (WAPE 0.648 to 0.634 or 0.658) and makes the worst slice worse (2.05 and 2.10). Calibration cuts WAPE to 0.402 and the worst slice to 1.80. Same conclusion as [Bias in the model](#bias-in-the-model).*
+
+The portable model's charts, the calibration curves and `summary.json` (the run ids, metrics and tuned values behind every number here) are in [`docs/models/figures/registered_2026-11-16/`](docs/models/figures/registered_2026-11-16/).
+
 ### Hyperparameter tuning
 
 `train --tune` (or `tune` in the DAG) runs an Optuna search (TPE sampler, a form of Bayesian optimisation) of 30 trials per family and variant before training. Trials are scored by log MAE on four inner folds of the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. The holdout precincts never enter. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent run logs the best values and Optuna's estimate of each parameter's importance. Without `--tune`, `train` uses the 12 November values below, which are checked into `configs/models.yaml` per family and variant (`tuned`), or an earlier run's parameters with `--params-from`, which is what `stoa_train` does.
@@ -445,6 +480,12 @@ The results above use the parameters from the search of 12 November. For rich Li
 - **Four buffered inner folds** (rich, LightGBM and XGBoost) picked values close to the 12 November ones (learning rate 0.075, 96 leaves; XGBoost 7 deep) and matched them: 0.866, 15.4% below Space Syntax.
 
 So the search now uses four inner folds, and the reported model keeps the 12 November parameters, which do as well on the folds and better on the holdout precincts (0.881 against 0.958). The details are in [docs/models/accuracy_target.md](docs/models/accuracy_target.md).
+
+**The search in the registered run.** The `stoa_train` run of 16 November ran the full search in the pipeline: 180 trials (30 per family and variant, two unbuffered inner folds), each a nested MLflow run in `stoa-flow`. It took about 80 minutes on 8 vCPUs. For rich LightGBM it picked exactly the 12 November values above, since the search is seeded and saw the same sample. Best inner-fold log MAE per family: XGBoost 0.869, LightGBM 0.880, HGB 0.927 (rich); 0.891, 0.908 and 0.955 (portable). The best inner score didn't pick the winner: on the outer folds LightGBM (0.874) beat XGBoost (0.878), and tuned HGB did worse than the untuned HGB of 13 November (0.921 against 0.892), the underfitting that led to four inner folds.
+
+![Tuning history of the registered run](docs/models/figures/registered_2026-11-16/tuning_history_rich.png)
+
+*Each dot is one trial, and the lines the best so far. Most of the gain comes in the first 10 trials; HGB keeps improving to trial 16.*
 
 ### Experiment tracking
 
@@ -466,11 +507,17 @@ Model versions live in the MLflow model registry ([below](#registry-promotion-an
 
 The hour of day dominates (0.87), then the COVID period (0.17), harmonic closeness at 800 m (0.13), sun elevation, weekday and daylight. Next come the street and place features: junction density at 800 m, the distance to a train station, elevation, and jobs within 400 m (City of Melbourne's land use survey). The time features shape each sensor's day, and the street features set its level. Those level features are weaker, which matches where the error is.
 
-**Hyperparameters.** Optuna's fANOVA importance (`param_importance.json` on each tuning parent run) shows which settings moved the trial score. Across the 30 trials, rich LightGBM ranged from 0.871 to 1.071 log MAE, so the settings matter:
+**Hyperparameters.** Optuna's parameter importance (`param_importance.json` on each tuning parent run; Optuna 5's default estimator, PED-ANOVA) shows which settings moved the trial score. Across the 30 trials, rich LightGBM ranged from 0.871 to 1.071 log MAE, so the settings matter:
 
 ![Hyperparameter importance](docs/models/figures/hyperparameter_importance_rich.png)
 
-For LightGBM, the number of leaves, the share of features per tree and the minimum rows per leaf matter most; for XGBoost, the share of features and the minimum child weight; for HistGradientBoosting, the number of leaves. The number of trees (200 or 400) barely matters. We also tested much larger leaves by hand (1,000 to 30,000 rows): see [docs/models/accuracy_target.md](docs/models/accuracy_target.md).
+For LightGBM, the number of leaves, the share of features per tree and the minimum rows per leaf matter most; for XGBoost, the share of features and the minimum child weight; for HistGradientBoosting, the number of leaves. The number of trees (200 or 400) barely matters.
+
+The registered run's search (180 trials) agrees on the main points:
+
+![Hyperparameter importance in the registered run](docs/models/figures/registered_2026-11-16/hyperparameter_importance_rich.png)
+
+*Rich variant. The share of features per tree (`colsample_bytree`) matters most for LightGBM and XGBoost, then the learning rate (LightGBM) and tree depth (XGBoost); for HGB, the L2 penalty and the number of leaves. The number of trees doesn't matter in any family. Which setting ranks first moves between searches, since 30 trials per family is a small sample; the share of features and the tree size are the settings that matter in both.* We also tested much larger leaves by hand (1,000 to 30,000 rows): see [docs/models/accuracy_target.md](docs/models/accuracy_target.md).
 
 ### Bias in the model
 
@@ -519,7 +566,7 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 ### Where the model stands
 
 - **The gate.** The team set it at 10% below Space Syntax on 16 November 2026, down from the original 15%. On the buffered folds both variants clear it on every seed: rich 14.3% to 15.5%, portable 13.1% to 13.8%. At seed 7 both also pass the other two checks (coverage 0.782 and 0.780; worst slice 1.70 and 1.67, limit 2.25).
-- **What's registered.** The runs above are in the side experiment `stoa-flow-buffer`. The first `stoa_train` run on main, on the GCP VM, trains the same models on buffered folds with the parameters in `configs/models.yaml`, gates them and registers the first champions.
+- **What's registered.** `stoa-flow-rich` v1 and `stoa-flow-portable` v1 are the champions, from the first `stoa_train` run on the GCP VM (16 November 2026, [The registered model](#the-registered-model)): 10.8% and 10.3% below Space Syntax on unbuffered folds, all gate checks passed. The seed study above is in the side experiment `stoa-flow-buffer`. The next `stoa_train` run on main trains on buffered folds with the parameters in `configs/models.yaml`, and replaces the champions only if it beats them.
 - **Next for the model:** the NYC cross-city test with the portable model.
 
 ## Tests and lint

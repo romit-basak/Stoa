@@ -1,0 +1,192 @@
+[
+  {
+    "variant": "rich",
+    "selected_run_id": "2b730d3086a14685ba53467982389672",
+    "family": "lgbm",
+    "data_version": "961075e6eccefc649b5e62a428912c35.dir",
+    "git_commit": "607c7b1fc82a21528c56ecc1f86055a867aad33e",
+    "metrics": {
+      "log_mae_cv": 0.8742475862804782,
+      "wape_cv": 0.6477933380787448,
+      "coverage80_cv": 0.7737153724135734,
+      "sensor_rank_corr_cv": 0.5473130733897256,
+      "wape_holdout": 0.8388121891270575,
+      "log_mae_holdout": 0.8777984417442833,
+      "worst_slice_ratio": 1.9903945454242549
+    },
+    "mitigations": [
+      {
+        "mitigation": "none",
+        "run_id": "dfb806e5bb1c49dab2c8a355e069bc6a",
+        "wape_cv": 0.6477933380787448,
+        "log_mae_cv": 0.8742475862804782,
+        "worst_slice_ratio": 1.9927469615871727
+      },
+      {
+        "mitigation": "sensor_equal",
+        "run_id": "7e462526530b4c799b137690a18811a2",
+        "wape_cv": 0.6342085315940226,
+        "log_mae_cv": 0.8970166209660414,
+        "worst_slice_ratio": 2.0481188044047802
+      },
+      {
+        "mitigation": "volume_tier_equal",
+        "run_id": "87c569ff8c8b46cca67ab1c993be5640",
+        "wape_cv": 0.6577830104178053,
+        "log_mae_cv": 0.8928349684458536,
+        "worst_slice_ratio": 2.097758359709879
+      },
+      {
+        "mitigation": "calibrated",
+        "run_id": "185445d4a2334d6bb21a867e13851679",
+        "wape_cv": 0.40215929239852277,
+        "log_mae_cv": 0.5934307198054231,
+        "worst_slice_ratio": 1.8011060872857063
+      }
+    ],
+    "tuning": {
+      "xgb": {
+        "run_id": "67cee8143a454d01a00906795cc56226",
+        "log_mae_inner_best": 0.869099381949717,
+        "params": {
+          "learning_rate": "0.0988874360199741",
+          "n_estimators": "400",
+          "max_depth": "8",
+          "min_child_weight": "11.112516070953665",
+          "reg_lambda": "1.2997384977901545",
+          "colsample_bytree": "0.5007134402813791"
+        },
+        "trials": 30
+      },
+      "lgbm": {
+        "run_id": "c0af1d6b92c2494b9553cfe036bcb004",
+        "log_mae_inner_best": 0.8803365380786253,
+        "params": {
+          "learning_rate": "0.13243789998171596",
+          "n_estimators": "400",
+          "num_leaves": "94",
+          "min_child_samples": "130",
+          "reg_lambda": "4.526486577035891",
+          "colsample_bytree": "0.5141462548940666"
+        },
+        "trials": 30
+      },
+      "hgb": {
+        "run_id": "5145b6b32cea425e9829d0d4d6e102cc",
+        "log_mae_inner_best": 0.9267884298535982,
+        "params": {
+          "learning_rate": "0.10136027919758282",
+          "max_iter": "400",
+          "max_leaf_nodes": "61",
+          "min_samples_leaf": "271",
+          "l2_regularization": "2.338590318858569"
+        },
+        "trials": 30
+      }
+    },
+    "written": [
+      "model_comparison_rich.png",
+      "calibration_curve_rich.png",
+      "feature_importance_rich.png",
+      "mitigation_rich.png",
+      "hyperparameter_importance_rich.png",
+      "tuning_history_rich.png"
+    ],
+    "missing": []
+  },
+  {
+    "variant": "portable",
+    "selected_run_id": "e49097714b2b414385dff278ae6c1669",
+    "family": "lgbm",
+    "data_version": "961075e6eccefc649b5e62a428912c35.dir",
+    "git_commit": "607c7b1fc82a21528c56ecc1f86055a867aad33e",
+    "metrics": {
+      "log_mae_cv": 0.8784916145124109,
+      "wape_cv": 0.6440718233316665,
+      "coverage80_cv": 0.7848059490251693,
+      "sensor_rank_corr_cv": 0.5809549474522252,
+      "wape_holdout": 1.005484021675412,
+      "log_mae_holdout": 1.0165574771746095,
+      "worst_slice_ratio": 1.86865250319811
+    },
+    "mitigations": [
+      {
+        "mitigation": "none",
+        "run_id": "8270c533f16d4c519618768081701b2f",
+        "wape_cv": 0.6440718233316665,
+        "log_mae_cv": 0.8784916145124109,
+        "worst_slice_ratio": 1.870260632126158
+      },
+      {
+        "mitigation": "sensor_equal",
+        "run_id": "1fec7056291c45a2999e1df700052643",
+        "wape_cv": 0.6370592599857723,
+        "log_mae_cv": 0.9101673659404023,
+        "worst_slice_ratio": 2.0270894343407555
+      },
+      {
+        "mitigation": "volume_tier_equal",
+        "run_id": "ce5f9ff16f724ce08eaa1156a5c48ed4",
+        "wape_cv": 0.6442015098589027,
+        "log_mae_cv": 0.8861320473885778,
+        "worst_slice_ratio": 1.992690830066287
+      },
+      {
+        "mitigation": "calibrated",
+        "run_id": "e2ca9dad141749c3962def86ada470c6",
+        "wape_cv": 0.4057290385245082,
+        "log_mae_cv": 0.6062607238094173,
+        "worst_slice_ratio": 1.7850134894560967
+      }
+    ],
+    "tuning": {
+      "xgb": {
+        "run_id": "94d4477361234cb5a5fc613f97acdf66",
+        "log_mae_inner_best": 0.8906490904780894,
+        "params": {
+          "learning_rate": "0.13501872069932072",
+          "n_estimators": "400",
+          "max_depth": "6",
+          "min_child_weight": "18.560394960319567",
+          "reg_lambda": "2.1823608740699956",
+          "colsample_bytree": "0.5323564753943195"
+        },
+        "trials": 30
+      },
+      "lgbm": {
+        "run_id": "20f268bdf6f644b39636a3ddc086d8c7",
+        "log_mae_inner_best": 0.9079178045282216,
+        "params": {
+          "learning_rate": "0.11217349465245427",
+          "n_estimators": "400",
+          "num_leaves": "110",
+          "min_child_samples": "184",
+          "reg_lambda": "2.941330309374189",
+          "colsample_bytree": "0.5414007880518291"
+        },
+        "trials": 30
+      },
+      "hgb": {
+        "run_id": "4edee62234af444e9778161ac3c58141",
+        "log_mae_inner_best": 0.9549627229083044,
+        "params": {
+          "learning_rate": "0.0844054198665203",
+          "max_iter": "400",
+          "max_leaf_nodes": "34",
+          "min_samples_leaf": "279",
+          "l2_regularization": "2.7011589673509504"
+        },
+        "trials": 30
+      }
+    },
+    "written": [
+      "model_comparison_portable.png",
+      "calibration_curve_portable.png",
+      "feature_importance_portable.png",
+      "mitigation_portable.png",
+      "hyperparameter_importance_portable.png",
+      "tuning_history_portable.png"
+    ],
+    "missing": []
+  }
+]

@@ -64,7 +64,7 @@ The job returns once the run is queued; the run takes hours on the `e2-standard-
 
 **Credentials.** The job authenticates as `stoa-ci-trigger@stoa-511822.iam.gserviceaccount.com`, whose JSON key is the repo secret `GCP_CI_KEY`. Without the secret, the job logs a warning and does nothing. The account needs:
 - `roles/compute.instanceAdmin.v1` (start the VM), `roles/iap.tunnelResourceAccessor` (connect through IAP) and `roles/compute.osAdminLogin` (SSH with sudo; the VM uses OS Login), on the project;
-- `roles/iam.serviceAccountUser` on the VM's own service account (required to SSH into a VM that runs as a service account).
+- `roles/iam.serviceAccountUser` on the VM's own service account, only if the VM runs as one. `stoa-ops` has no service account attached, so the CI account doesn't need it.
 
 Avoid pushing model code shortly before 00:00 UTC: training on the VM can still be running when `stoa_pipeline` starts, and the two together may run short of the VM's 16 GB.
 

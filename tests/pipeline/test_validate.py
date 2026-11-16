@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from src.ingest.common import REPO_ROOT
+from src.pipeline import alerts
 from src.pipeline import validate as v
 
 NOW = datetime(2026, 10, 20, 12, tzinfo=UTC)
@@ -308,7 +309,7 @@ class FakeSMTP:
 def smtp(monkeypatch):
     """Replace smtplib.SMTP and set the smtp_default connection as docker-compose.yaml does."""
     FakeSMTP.sent = []
-    monkeypatch.setattr(v.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
     monkeypatch.setenv(
         "AIRFLOW_CONN_SMTP_DEFAULT",
         '{"conn_type": "smtp", "host": "smtp.gmail.com", "port": 587, '

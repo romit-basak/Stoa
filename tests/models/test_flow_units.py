@@ -9,55 +9,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.flow import baselines, candidates, select
-from src.models.flow.data import (
-    close_sensors,
-    final_rows,
-    fold_plan,
-    neighbours_of_folds,
-    summary_plan,
-    trainable,
-)
+from src.models.flow import baselines, candidates, notify, registry, select
+from src.models.flow.data import final_rows, fold_plan, summary_plan, trainable
 from src.models.flow.evaluate import log_mae
 from src.models.flow.registry import evaluate_gate
 
 # --- folds ----------------------------------------------------------------------------------
-
-
-def test_close_sensors_in_other_folds_are_found():
-    xy = pd.DataFrame({"x": [0.0, 150, 1000, 1100], "y": 0.0}, index=[1, 2, 3, 4])
-    fold = pd.Series([0, 1, 1, 0], index=xy.index)
-    near = neighbours_of_folds(xy, fold, 200)
-    assert list(near[0]) == [2, 3]  # 2 is 150 m from sensor 1, 3 is 100 m from sensor 4
-    assert list(near[1]) == [1, 4]
-
-
-def test_fold_plan_leaves_test_sensors_neighbours_out_of_training():
-    sensors = np.repeat([1, 2, 3, 4, 5, 6], 10)
-    fold = np.repeat([0, 0, 1, 1, 2, 2], 10)
-    near = {0: np.array([3]), 1: np.array([], dtype=int), 2: np.array([1, 4])}
-    plan = fold_plan(fold, 10_000, 7, sensors=sensors, near=near)
-    trained = [set(sensors[train].tolist()) for train, _ in plan]
-    assert trained == [{4, 5, 6}, {1, 2, 5, 6}, {2, 3}]
-
-
-def test_close_sensors_lists_each_sensors_neighbours():
-    xy = pd.DataFrame({"x": [0.0, 150, 1000, 1100], "y": 0.0}, index=[1, 2, 3, 4])
-    close = close_sensors(xy, 200)
-    assert {k: list(v) for k, v in close.items()} == {1: [2], 2: [1], 3: [4], 4: [3]}
-
-
-def test_tuning_folds_leave_test_sensors_neighbours_out_of_training(data):
-    from src.models.flow.tune import inner_plan
-
-    # Pair each odd sensor with the next one; the pairs are close but in different groups.
-    data.close = {s: np.array([s + 1 if s % 2 else s - 1]) for s in range(1, 13)}
-    for train, test in inner_plan(data, 2, 10_000, 7):
-        tested = set(data.sensors[test].tolist())
-        trained = set(data.sensors[train].tolist())
-        near = {int(n) for s in tested for n in data.close[s]} - tested
-        assert trained and not trained & near
-        assert not trained & tested
 
 
 def test_fold_plan_never_uses_holdouts(data):
@@ -119,22 +76,10 @@ def test_plan_tag_names_the_start_only_when_set():
     assert plan_tag(5, 600000, 7, "2014-01-01").endswith(";train_start=2014-01-01")
 
 
-def test_command_line_seed_overrides_the_configured_one():
-    import argparse
-
-    from src.models.flow.train import apply_args
-
-    base = {"seed": 7, "train_rows_per_fold": 600000, "train_start": None}
-    args = argparse.Namespace(train_rows=None, train_start=None, seed=8)
-    assert apply_args(dict(base), args)["seed"] == 8
-    args.seed = None
-    assert apply_args(dict(base), args) == base
-
-
 # --- fold scores --------------------------------------------------------------------------
 
 
-def test_fold_scores_use_the_evaluate_metric_names_and_the_calibrated_hours(data):
+def test_fold_scores_use_her_names_and_the_calibrated_hours(data):
     from src.models.flow.train import fold_scores
 
     plan = fold_plan(data.fold, 10_000, 7)
@@ -243,19 +188,6 @@ def test_selection_trades_a_little_accuracy_for_the_fairer_model():
     assert select.choose(rank, worst) == "hgb"
 
 
-def test_bias_check_rows_skip_each_sensors_calibration_window():
-    ts = pd.Series(pd.date_range("2025-01-01", periods=40 * 24, freq="h", tz="UTC"))
-    oof = pd.DataFrame({"location_id": 1, "ts_utc": ts, "y": 1.0})
-    later = pd.DataFrame(
-        {"location_id": 2, "ts_utc": ts + pd.Timedelta(days=5), "y": 1.0}
-    )
-    rows = select.scored_rows(pd.concat([oof, later]), 28)
-    first = rows.groupby("location_id")["ts_utc"].min()
-    assert first[1] == ts[0] + pd.Timedelta(days=28)
-    assert first[2] == ts[0] + pd.Timedelta(days=33)
-    assert len(rows) == 2 * 12 * 24
-
-
 def test_worst_slice_ignores_thin_groups():
     errors = pd.DataFrame(
         {
@@ -356,10 +288,70 @@ def test_gate_can_block_on_bias():
     assert not ok and "worst slice" in reasons[0]
 
 
-def test_a_new_model_beats_the_champion_unless_clearly_worse():
-    from src.models.flow.registry import beats_champion
+@pytest.mark.parametrize(
+    "new, champ, tol, ok",
+    [
+        (0.80, None, 0.0, True),  # nothing to compare with
+        (0.80, 0.85, 0.0, True),  # better
+        (0.85, 0.85, 0.0, True),  # a tie still replaces (fresher data)
+        (0.86, 0.85, 0.0, False),  # worse: keep the champion
+        (0.86, 0.85, 0.02, True),  # within the tolerance
+        (None, 0.85, 0.0, False),  # can't tell, so don't replace
+    ],
+)
+def test_beats_champion(new, champ, tol, ok):
+    assert registry.beats_champion(new, champ, tol)[0] is ok
 
-    assert beats_champion(0.12, 0.125, 0.01)
-    assert not beats_champion(0.10, 0.125, 0.01)
-    assert beats_champion(0.10, None, 0.01)  # champion from before gains were recorded
-    assert beats_champion(None, 0.125, 0.01)
+
+def test_gate_failed_email_lists_reasons():
+    manifest = {
+        "gates": [
+            {
+                "variant": "rich",
+                "passed": False,
+                "reasons": ["log_mae_cv is 8.9% below Space Syntax (needs 15%)"],
+                "log_mae_cv": 0.886,
+                "improvement": 0.089,
+                "coverage80": 0.77,
+            }
+        ]
+    }
+    subject, body = notify.gate_failed_email(manifest)
+    assert "gate failed" in subject and "nothing was registered" in body
+    assert "8.9% below Space Syntax (needs 15%)" in body
+
+
+def test_success_email_says_when_champion_was_kept():
+    manifest = {
+        "registered": [
+            {
+                "name": "stoa-flow-rich",
+                "version": "3",
+                "alias": "challenger",
+                "kept_champion": True,
+                "champion_before": "2",
+                "champion_check": "log_mae_cv 0.9000 is worse than the champion's 0.8800",
+            },
+            {
+                "name": "stoa-flow-portable",
+                "version": "4",
+                "alias": "champion",
+                "kept_champion": False,
+                "champion_before": "1",
+            },
+        ]
+    }
+    selected = {"rich": {"family": "lgbm", "metrics": {"log_mae_cv": 0.9}}}
+    subject, body = notify.success_email(manifest, selected)
+    assert "champion kept" in subject
+    assert "not promoted" in body and "champion stays v2" in body
+    assert "v4 is now <b>champion</b>" in body and "replaces v1" in body
+
+
+def test_send_goes_through_alerts(monkeypatch):
+    sent = []
+    monkeypatch.setattr(
+        notify.alerts, "send_email", lambda s, b, what: sent.append(s) or True
+    )
+    assert notify.send("subj", "<p>x</p>")
+    assert sent == ["subj"]

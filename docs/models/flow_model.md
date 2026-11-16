@@ -23,10 +23,8 @@ The baselines use only network features, which both variants share, so they run 
 ## Folds
 
 Rows and features come from the training frame (`src/features/training_frame.py`, `docs/features/training_frame.md`): located outdoor sensors, outage hours dropped. Folds come from its `splits.parquet`:
-- sensors are grouped so that every member of a group is within 200 m of every other (complete linkage), and a group is never split between training and testing;
+- sensors within 200 m of each other share a spatial group, and a group is never split between training and testing;
 - the three holdout precincts (UniMelb edge, Carlton, North Melbourne) and their neighbours are in no fold, so no model trains on them before the final evaluation (CLAUDE.md core rule 2).
-
-A sensor just outside a group can still be close to one of its members and land in another fold (64 of the 191 pairs closer than 200 m did). So each fold's training rows leave out every other fold's sensor within 200 m of one of its test sensors (`data.neighbours_of_folds`), which drops 9 to 19 of 76 to 86 training sensors per fold. The buffer is recorded as `buffer_m` in `candidates.json` and in the `stoa.plan` tag, so the gate never compares buffered and unbuffered runs.
 
 Each fold's training rows are a 600,000-row sample of the other folds, drawn once per fold, so every candidate and baseline trains on exactly the same rows. Every model then predicts its fold's sensors, which gives out-of-fold predictions for every fold sensor.
 
@@ -47,13 +45,12 @@ All scoring is in `src/models/flow/evaluate.py`, named as in `experiment_trackin
 | `interval_margin_low`, `interval_margin_high` | The widening, on log1p counts (also in `selected.json`) |
 | `interval_width_ratio` | Median of (1 + upper) / (1 + lower) for the widened interval |
 | `log_mae_holdout`, `wape_holdout` | On the holdout precincts, once (selected model only) |
-| `coverage80_holdout`, `coverage80_raw_holdout` | The final interval models' coverage on the holdout precincts, after and before widening (selected model only) |
 | `log_mae_<part>`, `wape_<part>` | Event days, other days and each era of `configs/bias.yaml`, scored apart (`standard_parts`, `score_parts`; selected model only) |
 | `worst_slice_ratio` | Worst bias-slice WAPE over overall WAPE (selected model only) |
 
 ## Hyperparameters
 
-Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by log MAE on four inner folds over the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. With two inner folds the search chose models that underfit ([accuracy_target.md](accuracy_target.md)). Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
+Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 trials) runs per family and variant before training. Trials are scored by log MAE on two inner folds over the fold sensors, split by spatial group, on 200,000-row samples. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent logs the best values and Optuna's estimate of each parameter's importance (hyperparameter sensitivity).
 
 | Family | Searched |
 |---|---|
@@ -61,14 +58,14 @@ Defaults live in `configs/models.yaml`. With `--tune`, an Optuna TPE search (30 
 | lgbm | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `num_leaves` 31 to 127, `min_child_samples` 50 to 300, `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 | xgb | `learning_rate` 0.03 to 0.15 (log), `n_estimators` {200, 400}, `max_depth` 4 to 10, `min_child_weight` 1 to 100 (log), `reg_lambda` 0.5 to 5 (log), `colsample_bytree` 0.5 to 1 |
 
-The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. The inner folds apply the same 200 m neighbour buffer as the outer folds: an inner fold's training side leaves out every sensor within 200 m of one of its test sensors (`data.close_sensors`, `tune.inner_plan`). Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
+The inner folds draw on the same sensors the `*_cv` metrics score, so tuned `*_cv` numbers are slightly optimistic. Holdout precincts are never seen. Untuned runs (the monthly default) don't have this issue.
 
 ## Selection, after the bias check
 
 `src.models.flow.select`, per variant:
 1. Rank the candidates by `log_mae_cv`.
 2. Shortlist those within 3% of the best.
-3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions, on the hours after each sensor's calibration window (as every other score and `mitigate` do). The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
+3. For each shortlisted candidate, measure WAPE per slice of its out-of-fold predictions. The slices are the ones in `configs/bias.yaml` (time of day, rain, temperature, slope, precinct, era, volume and amenity tiers, AFL days and their crosstabs), and the code is `src/bias`'s: Fairlearn `MetricFrame` with sensor-bootstrap intervals. A candidate's worst slice is its largest group-to-overall WAPE ratio, among groups with at least five sensors.
 4. The candidate with the smallest worst slice wins, so a slightly more accurate model can't win while failing one group.
 
 Then, for the winner:
@@ -83,8 +80,6 @@ The selected run (`stoa.role = selected`) holds the three models, `features.json
 ### Prediction intervals
 
 The quantile models learn the spread of counts at the sensors they trained on. At a new location most of the error is in the sensor's overall level, which can be off by a factor of three either way, so their raw interval covers far less than 80% of out-of-fold counts. `select.interval_margins` measures, on log1p counts, how far out-of-fold counts fall below the 10% bound and above the 90% bound. It picks each side's margin so that 10% of counts stay outside that side. Prediction widens the interval by those margins (`select.widen`) using the values in `selected.json`. `coverage80_cv` widens each fold with margins from the other folds only, so the margins never saw the sensors they are scored on.
-
-`coverage80_cv` measures the per-fold quantile models, trained on 600,000-row samples, but prediction uses the final ones, trained on 2 million rows and widened by the same margins. `coverage80_holdout` checks those final, widened intervals on the holdout precincts (`select.holdout_coverage`; `coverage80_raw_holdout` before widening). It is reported, not gated.
 
 The widened interval describes a location with no local counts. After calibrating on a site's own counts, most of the level error is gone and the interval is conservative.
 
@@ -103,11 +98,11 @@ After selection, `src.models.flow.mitigate` retrains the selected model with sen
 ## Gate, registry and rollback
 
 `src.models.flow.registry --check` compares the latest selected run of each variant with the latest `baseline_space_syntax` run on the same data version (`stoa.dvc.processed`) and fold plan (`stoa.plan`). A variant passes when:
-- its `log_mae_cv` is at least 15% below Space Syntax's;
+- its `log_mae_cv` is at least 10% below Space Syntax's (the team lowered it from 15% on 16 November 2026; [accuracy_target.md](accuracy_target.md));
 - its `coverage80_cv` is between 0.75 and 0.85;
 - its worst slice is under `gates.max_worst_slice_ratio`, 2.25 times the overall WAPE ([model_bias.md](../bias/model_bias.md)).
 
-If `rich` fails, the command exits 1 and nothing is registered. `portable` is registered only if it passes. On buffered folds the rich model is 14.3% to 15.5% below Space Syntax across three seeds, so it passes or misses the 15% depending on the seed; the runs, what we tried to close the gap, and the recommendation to the team are in [accuracy_target.md](accuracy_target.md).
+If `rich` fails, the command exits 1, nothing is registered, and the team gets an email listing each variant's gate result and reasons. `portable` is registered only if it passes. The models of 12 November 2026 missed the original 15% (11.7% rich, 10.3% portable) and pass the 10%; what we tried to close the gap, and why the team chose 10%, are in [accuracy_target.md](accuracy_target.md).
 
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
@@ -116,11 +111,23 @@ Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portab
 - without `--promote`, the new version gets `challenger`;
 - `--rollback --variant rich` points `champion` back at `previous`, and `previous` at the version before that. Each champion records the version it replaced (tag `stoa.previous_champion`), so rollback can be repeated one version at a time. `--rollback` with both variants changes neither unless both have a `previous`.
 
-**Compared with the champion.** Passing the gate isn't enough to replace the served model. `--promote` compares the new version's gain over Space Syntax (`1 - log_mae_cv / Space Syntax's`, stored on every version as `stoa.improvement`) with the champion's. If it's more than `gates.champion_tolerance` (0.01) lower, the new version is registered as `challenger`, `champion` stays where it is, and the command exits 1, so `stoa_train` fails and sends its alert. The comparison uses gains rather than raw log MAE because a monthly retrain is scored on newer data, and a run on another fold plan on other rows. A champion registered before gains were recorded counts as beaten.
-
 **What is registered.** The selected run's `bundle` (`src/models/flow/bundle.py`, tag `stoa.bundle_uri`): one MLflow pyfunc model holding the mean model, the 10% and 90% quantile models and the interval margins. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` per row, the Predictions interface in CLAUDE.md. The bounds are stretched to include `predicted` where the mean falls outside them. Runs from before the bundle register their mean model (`stoa.model_uri`).
 
-Each command writes what it did to `data/models/registry.json`.
+**A retrain never replaces a better model.** Passing the gate isn't enough to be served: with `--promote`, the new version's `log_mae_cv` is compared with the current champion's (read from the run the champion was registered from). If it is worse by more than `gates.champion_tolerance` (0, so any worse score), the new version is registered as `challenger`, `champion` stays where it is, and the email says so. This is the automatic rollback: a worse model is kept in the registry for inspection but never served. A tie replaces the champion, since it was trained on newer data. `--rollback` is still there to undo a promotion by hand.
+
+Each command writes what it did to `data/models/registry.json`, including the champion comparison.
+
+## Notifications
+
+`stoa_train` emails `STOA_ALERT_EMAILS` (the same settings as the pipeline alerts, [README](../../README.md#validation-anomalies-and-alerts)) in three cases:
+
+| When | Email |
+|---|---|
+| A task fails | `[Stoa] stoa_train: <task> failed`, with a link to the log |
+| The gate blocks registration (`check_gates`) | `[Stoa] stoa_train: gate failed, nothing registered`, with each variant's score, improvement over Space Syntax, coverage and reasons |
+| The run finishes (`notify_team`) | `[Stoa] stoa_train finished: model registered` (or `new model held back, champion kept`), with each variant's version, alias, the version it replaced and its metrics |
+
+`src.models.flow.notify` builds the last two; `src/pipeline/alerts.py` sends them. A failed send is logged and never fails the run.
 
 ## Outputs
 
@@ -140,7 +147,6 @@ Each command writes what it did to `data/models/registry.json`.
 docker compose up -d mlflow                     # the tracking server (localhost:5001)
 .venv/bin/python -m src.models.flow.train       # candidates and baselines, both variants
 .venv/bin/python -m src.models.flow.select      # bias check, intervals, final fit, holdouts
-.venv/bin/python -m src.models.flow.mitigate    # reweighting and calibration, scored on the slices
 .venv/bin/python -m src.models.flow.registry --check     # gates only
 .venv/bin/python -m src.models.flow.registry --promote   # gate, register, champion
 ```
@@ -149,7 +155,7 @@ Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --f
 
 `train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
 
-In Airflow, the `stoa_train` DAG runs the same steps (train, select, mitigate, check, promote) monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
 
 ## Not included yet
 

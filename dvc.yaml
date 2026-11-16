@@ -245,6 +245,7 @@ stages:
     deps:
       - data/processed/features/melbourne/counts_hourly.parquet
       - src/pipeline/validate.py
+      - src/pipeline/alerts.py
       - configs/validation.yaml
       - configs/schemas/counts_hourly.yaml
 
@@ -332,6 +333,7 @@ stages:
     deps:
       - data/raw/osm/melbourne.osm.pbf
       - src/pipeline/osm_watch.py
+      - src/pipeline/alerts.py
       - configs/data.yaml
       - configs/features.yaml
     always_changed: true
@@ -370,10 +372,15 @@ stages:
 
   check_gates:
     cmd: python -m src.models.flow.registry --check
-    deps: [src/models/flow/registry.py, configs/models.yaml]
+    deps: [src/models/flow/registry.py, src/models/flow/notify.py, configs/models.yaml]
     always_changed: true
 
   register_model:
     cmd: python -m src.models.flow.registry --promote
-    deps: [src/models/flow/registry.py, configs/models.yaml]
+    deps: [src/models/flow/registry.py, src/models/flow/notify.py, configs/models.yaml]
+    always_changed: true
+
+  notify_team:
+    cmd: python -m src.models.flow.notify
+    deps: [src/models/flow/notify.py, src/pipeline/alerts.py]
     always_changed: true

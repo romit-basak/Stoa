@@ -7,6 +7,7 @@
 #   ops/vm/vm.sh tunnel       # start the VM if needed, forward localhost:8080 (Airflow) and :5001 (MLflow)
 #   ops/vm/vm.sh start|stop|status|ssh
 #   ops/vm/vm.sh deploy       # pull main on the VM and restart the stack (refuses during a run)
+#   ops/vm/vm.sh train [--tune]  # deploy main and start stoa_train (what the train workflow runs)
 #   ops/vm/vm.sh resize e2-highmem-4   # change the machine type (stops the VM first)
 #
 # One-time setup (done once for the team, not per person):
@@ -125,6 +126,13 @@ case "${1:-}" in
     vm_ssh -- -N -L 8080:localhost:8080 -L 5001:localhost:5001
     ;;
   deploy) start && vm_ssh --command 'sudo bash /srv/stoa/ops/vm/deploy.sh' ;;
+  train)
+    [ "${2:-}" = "" ] || [ "$2" = --tune ] || { echo "usage: $0 train [--tune]" >&2; exit 1; }
+    # Run train.sh as it is on main: the VM's checkout may predate it until train.sh deploys.
+    start && vm_ssh --command "cd /srv/stoa && sudo -u stoa git fetch -q origin main &&
+      sudo -u stoa git show origin/main:ops/vm/train.sh > /tmp/stoa-train.sh &&
+      sudo bash /tmp/stoa-train.sh ${2:-} < /dev/null"
+    ;;
   resize)
     [ -n "${2:-}" ] || { echo "usage: $0 resize <machine-type>" >&2; exit 1; }
     g compute instances stop "$VM" --zone "$ZONE" --quiet

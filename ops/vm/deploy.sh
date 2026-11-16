@@ -14,8 +14,25 @@ if [ "$runs" -gt 0 ]; then
 fi
 
 docker compose stop airflow-scheduler
-# dvc_push leaves data/*.dvc and dvc.lock changed but uncommitted (as on laptops). If main changed
-# them too, the pull stops here and the scheduler stays stopped until someone sorts it out.
-sudo -u stoa git pull --ff-only
+# dvc_push leaves data/*.dvc and dvc.lock changed but uncommitted (as on laptops); those versions
+# are already in the bucket. Set them aside for the pull, then put them back: they describe the
+# data on this disk. If main changed them too, main's copies win and the VM's stay in a stash;
+# the next dvc_push records the data on disk again either way.
+POINTERS=(data/raw.dvc data/interim.dvc data/processed.dvc dvc.lock)
+stashed=""
+if [ -n "$(sudo -u stoa git status --porcelain -- "${POINTERS[@]}")" ]; then
+  sudo -u stoa git stash push -q -m "vm dvc pointers, deploy $(date -u +%FT%TZ)" -- "${POINTERS[@]}"
+  stashed=1
+fi
+if ! sudo -u stoa git pull --ff-only; then
+  # Leave nothing half done: restart the scheduler on the old code and give the pointers back.
+  [ -n "$stashed" ] && sudo -u stoa git stash pop -q
+  docker compose start airflow-scheduler
+  exit 1
+fi
+if [ -n "$stashed" ] && ! sudo -u stoa git stash pop -q 2>/dev/null; then
+  sudo -u stoa git checkout -q HEAD -- "${POINTERS[@]}"
+  echo "main changed the DVC pointers too: kept main's; the VM's are in git stash" >&2
+fi
 docker compose up -d --build
 sudo -u stoa git log --oneline -1

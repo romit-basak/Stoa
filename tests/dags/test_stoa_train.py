@@ -31,6 +31,7 @@ def test_stages_run_in_order(dag):
         "mitigate_bias",
         "check_gates",
         "register_model",
+        "notify_team",
     ]
     assert set(dag.task_ids) == set(order)
     for a, b in itertools.pairwise(order):

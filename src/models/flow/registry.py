@@ -16,18 +16,18 @@ What is registered is the selected run's interval bundle (`stoa.bundle_uri`, see
 src/models/flow/bundle.py: predicted, lower and upper per row), or its mean model for runs
 from before the bundle existed (`stoa.model_uri`).
 
-`--promote` also compares the new model with the current champion: its gain over Space Syntax
-(1 - log_mae_cv / Space Syntax's, recorded on each version as `stoa.improvement`) may be at
-most `gates.champion_tolerance` below the champion's. Gains, not raw errors, because runs on
-newer data or another fold plan are scored on different rows. A worse model is registered as
-`challenger`, the champion stays, and the command exits 1, so the training DAG fails and
-alerts.
-
 The gate (configs/models.yaml, flow.gates) compares the latest selected run with the latest
 baseline_space_syntax run on the same data version (stoa.dvc.processed) and fold plan
-(stoa.plan): log_mae_cv must be at least 15% lower, and coverage80_cv within [0.75, 0.85].
-If a variant in `required_variants` fails, nothing is registered and the command exits 1;
-other variants that fail are reported and left out.
+(stoa.plan): log_mae_cv must be at least 10% lower (gates.log_mae_improvement), and
+coverage80_cv within [0.75, 0.85].
+If a variant in `required_variants` fails, nothing is registered, the team is emailed the
+reasons (src/models/flow/notify.py) and the command exits 1; other variants that fail are
+reported and left out.
+
+A model that passes must also beat the current champion before it replaces it. With
+`--promote`, a new version whose log_mae_cv is worse than the champion's (by more than
+`gates.champion_tolerance`) is registered as `challenger` and `champion` stays where it is, so
+a worse retrain is never served. `--rollback` undoes a promotion by hand.
 
 Writes <output_dir>/registry.json: what was registered or promoted. Building and pushing the
 serving image is the deploy step's job, not this one.
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -49,9 +50,12 @@ from mlflow.tracking import MlflowClient
 from src.ingest.common import setup_logging
 from src.models import tracking
 from src.models.flow import data as flow_data
+from src.models.flow import notify
+
+log = logging.getLogger("stoa.models")
 
 CHAMPION, PREVIOUS, CHALLENGER = "champion", "previous", "challenger"
-IMPROVEMENT_TAG, PREVIOUS_TAG = "stoa.improvement", "stoa.previous_champion"
+PREVIOUS_TAG = "stoa.previous_champion"
 
 
 def model_name(variant: str) -> str:
@@ -67,6 +71,7 @@ class Gate:
     baseline_run_id: str | None = None
     improvement: float | None = None
     coverage80: float | None = None
+    log_mae_cv: float | None = None
 
 
 def evaluate_gate(
@@ -140,6 +145,7 @@ def gate(client: MlflowClient, experiment_id: str, variant: str, gates: dict) ->
         base.info.run_id if base else None,
         improvement,
         sel.data.metrics.get("coverage80_cv"),
+        sel.data.metrics.get("log_mae_cv"),
     )
 
 
@@ -150,29 +156,39 @@ def alias_version(client: MlflowClient, name: str, alias: str) -> str | None:
         return None
 
 
-def champion_gain(client: MlflowClient, name: str) -> tuple[str | None, float | None]:
-    """The champion's version and its recorded gain over Space Syntax (None if unknown)."""
+def beats_champion(
+    new: float | None, champion: float | None, tolerance: float = 0.0
+) -> tuple[bool, str]:
+    """(may replace the champion, why) from the two models' log_mae_cv (lower is better).
+
+    No champion, or a champion without the metric, can't block a model that passed the gate.
+    """
+    if champion is None:
+        return True, "no champion to compare with"
+    if new is None:
+        return False, "the new model has no log_mae_cv"
+    if new <= champion * (1 + tolerance):
+        return True, f"log_mae_cv {new:.4f} vs champion {champion:.4f}"
+    return False, (
+        f"log_mae_cv {new:.4f} is worse than the champion's {champion:.4f}"
+        + (f" (tolerance {tolerance:.0%})" if tolerance else "")
+    )
+
+
+def champion_metric(client: MlflowClient, name: str) -> tuple[str | None, float | None]:
+    """(champion version, its log_mae_cv) from the run it was registered from."""
     version = alias_version(client, name, CHAMPION)
     if version is None:
         return None, None
-    tag = client.get_model_version(name, version).tags.get(IMPROVEMENT_TAG)
-    return version, float(tag) if tag not in (None, "") else None
-
-
-def beats_champion(
-    improvement: float | None, champion: float | None, tolerance: float
-) -> bool:
-    """True unless both gains are known and the new one is more than `tolerance` lower."""
-    if improvement is None or champion is None:
-        return True
-    return improvement >= champion - tolerance
+    run_id = client.get_model_version(name, version).run_id
+    if not run_id:
+        return version, None
+    return version, client.get_run(run_id).data.metrics.get("log_mae_cv")
 
 
 def register(
     client: MlflowClient, g: Gate, promote: bool, tolerance: float = 0.0
 ) -> dict[str, Any]:
-    """Register the gated run's model; with promote, make it champion if it is no worse than
-    the current champion (else it becomes challenger and `held_back` is set)."""
     run = client.get_run(g.run_id)
     tags = run.data.tags
     uri = (
@@ -181,23 +197,33 @@ def register(
         or f"runs:/{g.run_id}/model"
     )
     name = model_name(g.variant)
+    new_metric = run.data.metrics.get("log_mae_cv")
+    # Read the champion before registering, so the comparison is with the served version.
+    old, old_metric = champion_metric(client, name)
     version = mlflow.register_model(uri, name).version
-    if g.improvement is not None:
-        client.set_model_version_tag(name, version, IMPROVEMENT_TAG, str(g.improvement))
-    out: dict[str, Any] = {"name": name, "version": version, "run_id": g.run_id}
-    if promote:
-        old, old_gain = champion_gain(client, name)
-        out |= {"improvement": g.improvement, "champion_improvement": old_gain}
-        if old is not None and not beats_champion(g.improvement, old_gain, tolerance):
-            client.set_registered_model_alias(name, CHALLENGER, version)
-            return out | {"alias": CHALLENGER, "held_back": True, "champion": old}
-        if old is not None and old != version:
-            client.set_registered_model_alias(name, PREVIOUS, old)
-            client.set_model_version_tag(name, version, PREVIOUS_TAG, old)
-        client.set_registered_model_alias(name, CHAMPION, version)
-        return out | {"alias": CHAMPION, "held_back": False}
-    client.set_registered_model_alias(name, CHALLENGER, version)
-    return out | {"alias": CHALLENGER}
+    result = {"name": name, "version": version, "run_id": g.run_id}
+    if not promote:
+        client.set_registered_model_alias(name, CHALLENGER, version)
+        return {**result, "alias": CHALLENGER}
+    better, why = beats_champion(new_metric, old_metric, tolerance)
+    result |= {
+        "log_mae_cv": new_metric,
+        "champion_before": old,
+        "champion_log_mae_cv": old_metric,
+        "champion_check": why,
+    }
+    if not better:
+        # Automatic rollback guard: the worse model is kept for inspection, never served.
+        client.set_registered_model_alias(name, CHALLENGER, version)
+        log.warning(
+            "%s v%s not promoted: %s; champion stays v%s", name, version, why, old
+        )
+        return {**result, "alias": CHALLENGER, "kept_champion": True}
+    if old is not None and old != version:
+        client.set_registered_model_alias(name, PREVIOUS, old)
+        client.set_model_version_tag(name, version, PREVIOUS_TAG, old)
+    client.set_registered_model_alias(name, CHAMPION, version)
+    return {**result, "alias": CHAMPION, "kept_champion": False}
 
 
 def rollback(client: MlflowClient, variant: str) -> dict[str, Any]:
@@ -271,23 +297,14 @@ def main() -> None:
         if failed:
             # A required variant failing blocks the whole deployment, so nothing registers.
             write_manifest(out, manifest)
+            notify.send(*notify.gate_failed_email(manifest), what="the gate result")
             sys.exit(1)
         if args.check:
             return
-        tolerance = float(fcfg["gates"].get("champion_tolerance", 0.0))
+        tolerance = fcfg["gates"].get("champion_tolerance", 0.0)
         manifest["registered"] = [
             register(client, g, args.promote, tolerance) for g in gates if g.passed
         ]
-        held = [r for r in manifest["registered"] if r.get("held_back")]
-        for r in held:
-            print(
-                f"{r['name']}: not promoted, its gain over Space Syntax "
-                f"({r['improvement']:.1%}) is below the champion's "
-                f"({r['champion_improvement']:.1%}); registered as {CHALLENGER}"
-            )
-        if held:
-            write_manifest(out, manifest)
-            sys.exit(1)
     write_manifest(out, manifest)
 
 

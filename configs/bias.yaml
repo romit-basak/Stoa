@@ -65,7 +65,8 @@ thin_ratio_below: 0.5
 # Step 2-3: per-slice error of a baseline on held-out sensors, and mitigations
 # (src/bias/slice_errors.py).
 errors:
-  folds: 5                  # grouped by sensor: a sensor is never in its own model's training
+  folds: 5                  # grouped by spatial group (splits.parquet): twins share a fold
+  fold_groups: spatial      # or sensor (each sensor its own group, as before 2026-11-15)
   train_rows_per_fold: 600000
   seed: 7
   model:                    # HistGradientBoostingRegressor, Poisson loss

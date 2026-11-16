@@ -333,6 +333,22 @@ def fold_plan(
     return plan
 
 
+def sensor_xy(
+    sensor_ids: np.ndarray, data_cfg: dict[str, Any], crs: int
+) -> pd.DataFrame:
+    """location_id, x and y in metres (the site's CRS) of the given sensors."""
+    locs = load_sensor_locations(data_cfg).to_crs(crs)
+    used = locs[locs["location_id"].isin(np.unique(sensor_ids))]
+    used = used.drop_duplicates("location_id")
+    return pd.DataFrame(
+        {
+            "location_id": used["location_id"].astype(int),
+            "x": used.geometry.x,
+            "y": used.geometry.y,
+        }
+    )
+
+
 def sensor_groups(xy: np.ndarray, radius_m: float) -> np.ndarray:
     """Group id per sensor: clusters whose members are all within radius_m of each other.
 
@@ -484,16 +500,7 @@ def main() -> None:
     site = site_settings(fcfg["counts_hourly"]["site"], data_cfg, fcfg)
     frame = load(site.name, "rich", args.drop_needs_review)
 
-    locs = load_sensor_locations(data_cfg).to_crs(site.crs)
-    used = locs[locs["location_id"].isin(np.unique(frame.sensors))]
-    used = used.drop_duplicates("location_id")
-    xy = pd.DataFrame(
-        {
-            "location_id": used["location_id"].astype(int),
-            "x": used.geometry.x,
-            "y": used.geometry.y,
-        }
-    )
+    xy = sensor_xy(frame.sensors, data_cfg, site.crs)
     split = splits(
         xy,
         bias["holdout_precincts"],

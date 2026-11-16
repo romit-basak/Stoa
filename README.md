@@ -54,6 +54,8 @@ uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 ```
 
+On macOS, LightGBM needs the OpenMP runtime: run `brew install libomp` once. Without it, importing LightGBM fails, and on some setups `tests/models/test_flow_mitigate.py` crashes (a segfault) when the whole file runs, although each test passes alone. Linux and the Docker image don't need it.
+
 Without uv, `pip install -r requirements.txt` (Python 3.11) installs the exact versions we tested with. `pyproject.toml` is the source of truth. After changing its dependencies, regenerate the pins with `uv pip compile pyproject.toml --extra dev --python-version 3.11 -o requirements.txt`.
 
 ## The pipeline

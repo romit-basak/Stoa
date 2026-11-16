@@ -72,9 +72,11 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
         "coverage80_fold0",
         "log_mae_holdout",
         "wape_holdout",
+        "coverage80_holdout",
         "worst_slice_ratio",
         "log_mae_other_days",
     } <= set(sel["metrics"])
+    assert 0 <= sel["metrics"]["coverage80_holdout"] <= 1
     for name in ("ranking.csv", "model_comparison.png", "calibration_curve.png"):
         assert (out / "rich" / "selected" / name).exists()
 

@@ -6,10 +6,10 @@ Usage: python -m src.models.flow.select [--variant rich|portable|both] [--output
 Reads <output_dir>/<variant>/oof.parquet and candidates.json from src.models.flow.train, then:
 1. ranks the candidates by log_mae_cv (the success criterion);
 2. for those within `selection.tolerance` of the best, measures WAPE per slice of their
-   out-of-fold predictions with the bias slices of configs/bias.yaml (src/bias: Fairlearn
-   MetricFrame, sensor-bootstrap intervals). The candidate whose worst slice is least worse
-   than its overall error wins, so a small accuracy gain can't buy a model that fails one
-   group;
+   out-of-fold predictions (after each sensor's calibration window) with the bias slices of
+   configs/bias.yaml (src/bias: Fairlearn MetricFrame, sensor-bootstrap intervals). The
+   candidate whose worst slice is least worse than its overall error wins, so a small
+   accuracy gain can't buy a model that fails one group;
 3. fits the winner's 10% and 90% quantile models on the same folds and widens their interval
    from the out-of-fold misses (`interval_margins`), for coverage80_cv;
 4. fits the winner and its interval models on every fold sensor, and scores the holdout
@@ -44,6 +44,7 @@ from src.models.flow import report as flow_report
 from src.models.flow.bundle import FlowBundle, widen
 from src.models.flow.data import Data, calibration_window
 from src.models.flow.evaluate import (
+    coverage,
     cv_coverage,
     log_mae,
     score,
@@ -86,6 +87,13 @@ def slice_rows(oof: pd.DataFrame) -> tuple[pd.DataFrame, list[str], dict[str, An
     keys = oof[["location_id", "ts_utc"]]
     aligned = keys.merge(rows, on=["location_id", "ts_utc"], how="left", validate="1:1")
     return aligned, sl["dims"], bias_cfg
+
+
+def scored_rows(oof: pd.DataFrame, calibration_days: float) -> pd.DataFrame:
+    """Out-of-fold rows after each sensor's calibration window, the hours every other score
+    uses (and mitigate's bias check), so the gated worst slice is measured on them too."""
+    keep = scored_mask(oof["location_id"].to_numpy(), oof["ts_utc"], calibration_days)
+    return oof[keep].reset_index(drop=True)
 
 
 def worst_slice(errors: pd.DataFrame, min_sensors: int) -> tuple[float, str]:
@@ -263,6 +271,38 @@ def holdout_scores(
     return pd.DataFrame(out), {
         "log_mae_holdout": s["log_mae"],
         "wape_holdout": s["wape"],
+    }
+
+
+def holdout_coverage(
+    data: Data,
+    models: dict[str, Any],
+    quantiles: list[float],
+    margins: tuple[float, float],
+    calibration_days: float,
+) -> dict[str, float]:
+    """Coverage of the final interval models on the holdout precincts, before and after the
+    margins, on the rows `holdout_scores` scores.
+
+    coverage80_cv measures the per-fold quantile models (600,000-row samples), but prediction
+    uses the final ones (final_train_rows) widened by the same margins, so this checks the
+    intervals actually registered on sensors none of them saw. Reported, not gated.
+    """
+    named = (data.holdout != "") & (data.holdout != "neighbour")
+    idx = np.flatnonzero(named)
+    if not len(idx):
+        return {}
+    keep = scored_mask(data.sensors[idx], data.ts.iloc[idx], calibration_days)
+    idx = idx[keep]
+    x = data.frame.matrix(idx)
+    lo_name, hi_name = (f"model_q{round(q * 100):02d}" for q in quantiles)
+    low = candidates.predict(models[lo_name], x)
+    high = candidates.predict(models[hi_name], x)
+    y = data.y[idx].astype(float)
+    wide_low, wide_high = widen(low, high, margins)
+    return {
+        "coverage80_raw_holdout": coverage(y, low, high),
+        "coverage80_holdout": coverage(y, wide_low, wide_high),
     }
 
 
@@ -567,10 +607,14 @@ def select_variant(
 ) -> dict[str, Any]:
     summary = json.loads((out / "candidates.json").read_text())
     oof = pd.read_parquet(out / "oof.parquet")
-    scfg, seed = fcfg["selection"], fcfg["seed"]
+    # The train run's seed (train --seed can override the configured one), so the interval
+    # models and the final fit use the same seed as the candidates they come from.
+    scfg, seed = fcfg["selection"], summary.get("seed", fcfg["seed"])
     rank = ranking(summary)
     short = shortlist(rank, scfg["tolerance"])
-    slices, worst = bias_fn(oof, short, scfg["skip_dimensions"])
+    slices, worst = bias_fn(
+        scored_rows(oof, fcfg["calibration_days"]), short, scfg["skip_dimensions"]
+    )
     winner = choose(rank, worst)
     log.info("%s: shortlisted %s, selected %s", data.variant, short, winner)
 
@@ -612,6 +656,7 @@ def select_variant(
     )
     models = fit_final(data, winner, params, q, rows, seed)
     precincts, holdout = holdout_scores(data, models["model"], fcfg["calibration_days"])
+    holdout |= holdout_coverage(data, models, q, margins, fcfg["calibration_days"])
     pred = oof[winner].to_numpy(dtype=float)
     parts, part_metrics = part_scores(data, oof, pred, fcfg["calibration_days"])
     ccfg = fcfg["calibration_curve"]

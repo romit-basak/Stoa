@@ -34,6 +34,7 @@ On the run of 13 November 2026 (the committed data version, the first after the 
 | **Weather present** | warning | Each `wx_*` column is present for at least 99% of rows. The weather archive lags about a week, so the newest rows have none until a later run fills them. |
 | **Outliers** | warning | New hours above 4x their own sensor's 99.9th percentile (from its whole history). Most big events stay below that; past hits were real events (below). |
 | **Stuck sensors** | warning | A run of the same count (10 or more) for 6+ hours at one sensor, reaching into the new hours. Small counts repeat naturally overnight (1 an hour), so they're ignored. |
+| **One series under two ids** | warning | No two sensors have identical counts (each 10 or more) for 720+ hours and in 90% or more of the hours both report. Busy hours collide by chance now and then, hence both thresholds. Over the whole table, about 3 seconds. On the 14 November table it finds sensors 15 and 66 (9,317 identical hours, 100%), which `counts_hourly.drop_rows` now removes. |
 | **Outage share** | warning | At most 1% of rows flagged `suspect_outage_zero`. |
 | **Recent completeness** | warning | Each sensor reported at least 90% of the last 7 days' **daytime** hours (08:00–20:00), and no sensor that reported in the 30 days before has gone silent. Night hours aren't expected: the live portal leaves out hours with no one counted. |
 | **Freshness** | warning | The newest hour is at most 5 days old. |

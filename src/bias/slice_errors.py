@@ -5,10 +5,11 @@ Usage: python -m src.bias.slice_errors [--if-older-than DAYS]
 Training takes about 3 minutes per mitigation, so the DAG runs it with --if-older-than 7: it
 skips itself (successfully) when the last run is under a week old and used the same settings.
 
-Trains a baseline (scikit-learn gradient boosting, Poisson loss) with whole sensors held out
-(grouped K-fold, CLAUDE.md core rule 2), so every located sensor gets predictions from a model
-that never saw it. Each slice from src/bias/slices.py then gets its error, measured with
-Fairlearn's MetricFrame. The run is repeated once per mitigation in configs/bias.yaml
+Trains a baseline (scikit-learn gradient boosting, Poisson loss) with whole spatial groups
+held out (grouped K-fold over the training frame's groups, CLAUDE.md core rule 2), so every
+located sensor gets predictions from a model that never saw it or a sensor within
+`group_radius_m` of it in its group. Each slice from src/bias/slices.py then gets its error,
+measured with Fairlearn's MetricFrame. The run is repeated once per mitigation in configs/bias.yaml
 (`errors.mitigations`), so the report shows what each one does to every slice and to the
 overall error. A mitigation either reweights the training rows (and retrains) or calibrates
 the baseline's predictions to each sensor's first weeks of counts. Those first weeks are kept
@@ -308,6 +309,29 @@ def summarize_mitigation(
 # --------------------------------------------------------------------------------------------
 
 
+def spatial_groups(sensors: np.ndarray, site: str, fcfg: dict[str, Any]) -> np.ndarray:
+    """Each row's spatial group from the training frame's splits.parquet, so sensors within
+    `group_radius_m` of each other (twins on opposite footpaths) share a fold, as in the flow
+    model. A sensor the splits don't list (dropped from the training frame) is its own group.
+    """
+    path = REPO_ROOT / fcfg["processed_dir"] / "training" / site / "splits.parquet"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{path} is missing; build it with `python -m src.features.training_frame`"
+        )
+    group = pd.read_parquet(path).set_index("location_id")["group"]
+    mapped = group.reindex(sensors)
+    missing = mapped.isna().to_numpy()
+    if missing.any():
+        log.warning(
+            "%d sensors have no spatial group; each is its own group",
+            len(np.unique(sensors[missing])),
+        )
+    # Unlisted sensors get ids past every listed group, one per sensor.
+    own = (group.max() + 1 + sensors).astype(np.int64)
+    return np.where(missing, own, mapped.fillna(-1).to_numpy()).astype(np.int64)
+
+
 def build(
     data_cfg: dict[str, Any], fcfg: dict[str, Any], cfg: dict[str, Any]
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
@@ -330,12 +354,19 @@ def build(
     y_all = hourly["pedestriancount"].to_numpy(dtype=float)
     y = y_all[eligible]
     groups = hourly["location_id"].to_numpy()[eligible]
+    fold_groups = (
+        groups
+        if ecfg.get("fold_groups", "spatial") == "sensor"
+        else spatial_groups(groups, site, fcfg)
+    )
     cap = fcfg["built_form"]["max_distance_m"]
 
     def build_x(pos: np.ndarray) -> np.ndarray:
         return design_matrix(hourly, eligible[pos], osm, cap, row_cols)
 
-    plan = fold_plan(groups, ecfg["folds"], ecfg["train_rows_per_fold"], ecfg["seed"])
+    plan = fold_plan(
+        fold_groups, ecfg["folds"], ecfg["train_rows_per_fold"], ecfg["seed"]
+    )
     edges = gpd.read_parquet(
         REPO_ROOT / fcfg["interim_dir"] / "osm" / site / "graph" / "edges.parquet",
         columns=["length_m", "geometry"],

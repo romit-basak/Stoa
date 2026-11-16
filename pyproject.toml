@@ -15,6 +15,7 @@ dependencies = [
     "matplotlib>=3.8",  # bias figures and the flow model's comparison charts (PSF/BSD-style)
     # Experiment tracking client (Apache-2.0); same version as the server in ops/mlflow.
     "mlflow-skinny==3.17.2",
+    "networkx>=3.3",  # route graphs for the simulation walkers; reference values in tests (BSD-3)
     "numba>=0.60",
     "optuna>=3.6",  # hyperparameter search for the flow-model candidates (MIT)
     "osmium>=4.0",
@@ -33,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["networkx>=3.3", "pytest>=8", "ruff>=0.6"]  # networkx: reference values in tests
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

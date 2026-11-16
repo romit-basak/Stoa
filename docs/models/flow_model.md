@@ -154,14 +154,17 @@ docker compose up -d mlflow                     # the tracking server (localhost
 .venv/bin/python -m src.models.flow.select      # bias check, intervals, final fit, holdouts
 .venv/bin/python -m src.models.flow.registry --check     # gates only
 .venv/bin/python -m src.models.flow.registry --promote   # gate, register, champion
+.venv/bin/python -m src.models.flow.figures              # copy the latest results into docs/models/figures
 ```
+
+`figures` reads the latest selected run of each variant and the tuning and mitigation runs of the same training, and writes their charts (model comparison and bias check, calibration curve, SHAP importance, mitigations, hyperparameter importance, tuning history) and a `summary.json` with the run ids and metrics behind them. Run it with a tunnel to the VM open (`ops/vm/vm.sh tunnel`); if a local `mlflow` container also holds port 5001, stop it or set `MLFLOW_TRACKING_URI` to another forwarded port. Editing `figures.py` doesn't start a training run.
 
 Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
 
 `train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. Without `--tune`, each family trains with the values of the search of 12 November 2026, per variant (`flow.candidates.<family>.tuned` in `configs/models.yaml`), which every reported result uses; a family without them uses its `params`. `train --params-from data/models` reuses an earlier run's parameters instead, so a later search carries over. The comparison of start years is in [training_periods.md](training_periods.md).
 
-In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+In Airflow, the `stoa_train` DAG runs these steps, then the bias mitigation, the gates, the registration and the email (train_candidates, select_model, mitigate_bias, check_gates, register_model, notify_team). The GitHub workflow `.github/workflows/train.yml` starts it on the VM when model code is pushed, on the 2nd of each month, or by hand (`tune` option); see [cloud_vm.md](../pipeline/cloud_vm.md#training-from-ci). The daily pipeline never trains.
 
 ## Not included yet
 
-Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.
+Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either: one was tried on a side branch (PR #48) but not merged into `main`, so it never ran in `stoa_train`. `report.py` still knows how to label one. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.

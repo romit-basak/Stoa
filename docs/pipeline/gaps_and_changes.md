@@ -41,6 +41,21 @@ The work below was built as a pipeline extension (data side and training frame; 
 
 Also added, from the follow-up requests: the per-minute counts archive (`stoa_minute_feed`, the Explorer cluster poller, checks in `validate`, within-hour profiles), the Stanford Drone annotations (validation only), CI, and the NYC feature mask.
 
+## Model phase status (16 November 2026)
+
+The training and validation items below that the model phase covered, and their state:
+
+| Item | State | Where |
+|---|---|---|
+| Training frame (Training 3) | Done | `src/features/training_frame.py`, `docs/features/training_frame.md` |
+| Baseline ladder and gradient-boosted models with MLflow and the DVC version (Training 5) | Done, without rung 3 (hand-weighted costs) | `src/models/flow/`, `docs/models/flow_model.md` |
+| Model gates in code (Validation 1) | Done for Space Syntax (now 10%), interval coverage, the worst bias slice and the deployed model (champion); event days are scored separately but don't block; sanity scenarios wait for the API | `src/models/flow/registry.py` |
+| Precinct holdouts (Validation 2) | Done, uncalibrated and calibrated; the NYC test is still to do | `src/models/flow/select.py` |
+| Calibration curve (Validation 3) | Done | `src/models/flow/select.py` |
+| Bias on the real model (Validation 5) | Done: slicing, mitigation and a gate | `src/models/flow/mitigate.py`, `docs/bias/model_bias.md` |
+| CI (Deployment 1) | Tests, lint and DAG tests on every PR; training on a push to model code, monthly and by hand. Building and deploying an API waits for the API | `.github/workflows/` |
+| Monitoring (Deployment 3) | Feature drift (PSI against the training reference) in `validate`, the weekly OSM comparison (`stoa_osm_watch`) and monthly retraining; the monthly accuracy check of a deployed model waits for deployment | `src/pipeline/validate.py`, `dags/stoa_osm_watch.py` |
+
 ## Where things stand
 
 The pipeline runs for Melbourne only. One daily Airflow DAG pulls the public sources, builds the OSM walking graph and segment features, joins the hourly training table (7,409,868 rows, 118 sensors, May 2009 to now), validates it, runs bias slicing and pushes the result to DVC. The NEU Boston and NYC data are one-off downloads outside the DAG.

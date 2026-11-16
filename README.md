@@ -55,6 +55,8 @@ uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 ```
 
+On macOS, LightGBM and XGBoost also need the OpenMP runtime: `brew install libomp` (without it, their tests fail with `Library not loaded: @rpath/libomp.dylib`).
+
 Without uv, `pip install -r requirements.txt` (Python 3.11) installs the exact versions we tested with. `pyproject.toml` is the source of truth. After changing its dependencies, regenerate the pins with `uv pip compile pyproject.toml --extra dev --python-version 3.11 -o requirements.txt`.
 
 ## The pipeline

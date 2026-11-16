@@ -97,20 +97,21 @@ def tuning_runs(
     client: MlflowClient, exp_id: str, sel: Any, window_ms: int = 24 * 3600 * 1000
 ) -> dict[str, Any]:
     """The latest tuning search per family for the selected run's variant, from the same
-    training: started before it, and within `window_ms` of it."""
-    variant = sel.data.tags.get("stoa.variant", "")
+    training: the same code and data (git commit and DVC version), started before it and
+    within `window_ms` of it. An untuned training that follows a tuned one on other code
+    gets no tuning charts, rather than the earlier search's."""
+    tags = sel.data.tags
     start = sel.info.start_time
-    runs = _search(
-        client,
-        exp_id,
-        [
-            "tags.`stoa.role` = 'tuning'",
-            f"tags.`stoa.variant` = '{variant}'",
-            f"attributes.start_time < {start}",
-            f"attributes.start_time > {start - window_ms}",
-        ],
-        max_results=50,
-    )
+    filters = [
+        "tags.`stoa.role` = 'tuning'",
+        f"tags.`stoa.variant` = '{tags.get('stoa.variant', '')}'",
+        f"attributes.start_time < {start}",
+        f"attributes.start_time > {start - window_ms}",
+    ]
+    for key in ("stoa.git_commit", "stoa.dvc.processed"):
+        if tags.get(key):
+            filters.append(f"tags.`{key}` = '{tags[key]}'")
+    runs = _search(client, exp_id, filters, max_results=50)
     found: dict[str, Any] = {}
     for r in runs:  # newest first
         found.setdefault(r.data.tags.get("stoa.family", r.info.run_name), r)

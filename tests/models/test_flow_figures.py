@@ -20,10 +20,18 @@ def _tick():
     time.sleep(0.01)  # distinct start times, since runs are ordered by them
 
 
-def _tuning(fam: str, variant: str = "rich") -> None:
+def _tuning(
+    fam: str, variant: str = "rich", commit: str = "abc123", dvc: str = "v1"
+) -> None:
     with mlflow.start_run(run_name=f"tune_{fam}_{variant}"):
         mlflow.set_tags(
-            {"stoa.role": "tuning", "stoa.family": fam, "stoa.variant": variant}
+            {
+                "stoa.role": "tuning",
+                "stoa.family": fam,
+                "stoa.variant": variant,
+                "stoa.git_commit": commit,
+                "stoa.dvc.processed": dvc,
+            }
         )
         for i, loss in enumerate([0.95, 0.90, 0.92]):
             with mlflow.start_run(run_name=f"trial_{i}", nested=True):
@@ -149,3 +157,15 @@ def test_a_chart_missing_from_the_run_is_listed(tmp_path, exp):
     s = figures.export_variant(client, exp_id, "rich", tmp_path / "out")
     assert s["git_commit"] is None
     assert "model_comparison_rich.png" in s["written"]
+
+
+def test_tuning_from_other_code_is_not_attached(tmp_path, exp):
+    """A tuned training on older code, then an untuned one on newer code: the newer
+    selected run gets no tuning charts."""
+    client, exp_id = exp
+    _tuning("lgbm", commit="old000")
+    _selected(tmp_path)  # git commit abc123
+    out = tmp_path / "figures"
+    s = figures.export_variant(client, exp_id, "rich", out)
+    assert s["tuning"] == {}
+    assert "tuning_history_rich.png" in s["missing"]

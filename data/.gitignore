@@ -4,3 +4,5 @@
 /notebooks
 # Flow-model outputs (src/models/flow): not DVC-tracked, the models live in MLflow.
 /models
+# Simulation outputs (src/simulation): regenerated from the per-minute archive.
+/simulation

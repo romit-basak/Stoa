@@ -112,9 +112,11 @@ If `rich` fails, the command exits 1, nothing is registered, and the team gets a
 Because the gate reads the latest selected run, an experiment logged to `stoa-flow` becomes the run the gate checks. Set `MLFLOW_EXPERIMENT_NAME` for anything that isn't a candidate for release.
 
 Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portable`, and versions are tracked with aliases rather than MLflow's deprecated stages:
-- `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced;
+- `--promote` points `champion` (the served version) at the new version, and `previous` at the one it replaced, but only if the new version is no worse than the current champion (below);
 - without `--promote`, the new version gets `challenger`;
-- `--rollback --variant rich` points `champion` back at `previous`.
+- `--rollback --variant rich` points `champion` back at `previous`, and `previous` at the version before that. Each champion records the version it replaced (tag `stoa.previous_champion`), so rollback can be repeated one version at a time. `--rollback` with both variants changes neither unless both have a `previous`.
+
+**What is registered.** The selected run's `bundle` (`src/models/flow/bundle.py`, tag `stoa.bundle_uri`): one MLflow pyfunc model holding the mean model, the 10% and 90% quantile models and the interval margins. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` per row, the Predictions interface in CLAUDE.md. The bounds are stretched to include `predicted` where the mean falls outside them. Runs from before the bundle register their mean model (`stoa.model_uri`).
 
 **A retrain never replaces a better model.** Passing the gate isn't enough to be served: with `--promote`, the new version's `log_mae_cv` is compared with the current champion's (read from the run the champion was registered from). If it is worse by more than `gates.champion_tolerance` (0, so any worse score), the new version is registered as `challenger`, `champion` stays where it is, and the email says so. This is the automatic rollback: a worse model is kept in the registry for inspection but never served. A tie replaces the champion, since it was trained on newer data. `--rollback` is still there to undo a promotion by hand.
 
@@ -159,7 +161,7 @@ docker compose up -d mlflow                     # the tracking server (localhost
 
 Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
 
-`train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
+`train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. Without `--tune`, each family trains with the values of the search of 12 November 2026, per variant (`flow.candidates.<family>.tuned` in `configs/models.yaml`), which every reported result uses; a family without them uses its `params`. `train --params-from data/models` reuses an earlier run's parameters instead, so a later search carries over. The comparison of start years is in [training_periods.md](training_periods.md).
 
 In Airflow, the `stoa_train` DAG runs these steps, then the bias mitigation, the gates, the registration and the email (train_candidates, select_model, mitigate_bias, check_gates, register_model, notify_team). The GitHub workflow `.github/workflows/train.yml` starts it on the VM when model code is pushed, on the 2nd of each month, or by hand (`tune` option); see [cloud_vm.md](../pipeline/cloud_vm.md#training-from-ci). The daily pipeline never trains.
 

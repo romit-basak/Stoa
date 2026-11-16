@@ -116,6 +116,15 @@ def test_train_and_select(tmp_path, fcfg, mlflow_store):
     x = np.zeros((2, len(make_data().frame.columns)), dtype="float32")
     assert model.predict(x).shape == (2,)
 
+    # The bundle: mean and widened interval, from a DataFrame of the feature columns.
+    bundle = mlflow.pyfunc.load_model(sel["bundle_uri"])
+    cols = make_data().frame.columns
+    frame = pd.DataFrame(make_data().frame.matrix(np.arange(5)), columns=cols)
+    out = bundle.predict(frame[cols[::-1]])  # column order doesn't matter
+    assert list(out.columns) == ["predicted", "lower", "upper"] and len(out) == 5
+    assert (out["lower"] <= out["predicted"]).all()
+    assert (out["predicted"] <= out["upper"]).all()
+
 
 def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     run_all(fcfg, tmp_path / "models", families=["hgb"])
@@ -137,6 +146,8 @@ def test_registry_aliases_and_rollback(tmp_path, fcfg, mlflow_store):
     assert back["champion"] == first["version"]
     assert registry.alias_version(client, name, "champion") == first["version"]
     assert registry.alias_version(client, name, "previous") is None
+    bundle_uri = client.get_run(g.run_id).data.tags["stoa.bundle_uri"]
+    assert client.get_model_version(name, first["version"]).source == bundle_uri
 
 
 def test_worse_retrain_does_not_replace_champion(tmp_path, fcfg, mlflow_store):
@@ -171,3 +182,35 @@ def test_worse_retrain_does_not_replace_champion(tmp_path, fcfg, mlflow_store):
     assert not better["kept_champion"]
     assert registry.alias_version(client, name, "champion") == better["version"]
     assert registry.alias_version(client, name, "previous") == first["version"]
+
+
+def test_rollback_walks_back_one_version_at_a_time(tmp_path, fcfg, mlflow_store):
+    import pytest
+
+    run_all(fcfg, tmp_path / "models", families=["hgb"])
+    mlflow.set_tracking_uri(mlflow_store)
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(
+        tracking.load_models_config()["tracking"]["experiment"]
+    )
+    g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
+    name = registry.model_name("rich")
+    # The same run scores the same, and a tie replaces the champion.
+    v1, v2, v3 = (registry.register(client, g, promote=True) for _ in range(3))
+    assert registry.alias_version(client, name, "champion") == v3["version"]
+
+    # v3 -> v2 -> v1, then nothing left to roll back to.
+    registry.rollback(client, "rich")
+    assert registry.alias_version(client, name, "champion") == v2["version"]
+    assert registry.alias_version(client, name, "previous") == v1["version"]
+    registry.rollback(client, "rich")
+    assert registry.alias_version(client, name, "champion") == v1["version"]
+    assert registry.alias_version(client, name, "previous") is None
+    with pytest.raises(SystemExit):
+        registry.rollback(client, "rich")
+
+    # Rolling back both variants changes neither when one has nothing to roll back to.
+    registry.register(client, g, promote=True)
+    with pytest.raises(SystemExit, match="nothing rolled back"):
+        registry.rollback_all(client, ["rich", "portable"])
+    assert registry.alias_version(client, name, "previous") == v1["version"]

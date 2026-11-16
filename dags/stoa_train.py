@@ -5,7 +5,8 @@ after a good stoa_pipeline run. Runs and models go to the MLflow service in dock
 (MLFLOW_TRACKING_URI). See docs/models/flow_model.md.
 
 - train_candidates: every candidate architecture and the baseline ladder on the location
-  folds (with tune = true, an Optuna search per family first);
+  folds (with tune = true, an Optuna search per family first; otherwise with the parameters
+  the last run used, from data/models);
 - select_model: the bias check on the shortlist, the interval models, the final fit, and the
   holdout precincts;
 - check_gates: fails the run when the rich model doesn't beat Space Syntax by 10% or its 80%
@@ -70,8 +71,12 @@ on_failure_alert = (
 def stoa_train():
     @task.bash
     def train_candidates(params=None):
-        tune = " --tune" if params and params.get("tune") else ""
-        return f"{STOA} src.models.flow.train --variant both{tune}"
+        # Without a search, reuse the parameters the last run used (its candidates.json in
+        # data/models), so a later search carries over to the monthly retrain. A variant
+        # with no earlier run uses the searched values in configs/models.yaml (`tuned`).
+        if params and params.get("tune"):
+            return f"{STOA} src.models.flow.train --variant both --tune"
+        return f"{STOA} src.models.flow.train --variant both --params-from data/models"
 
     @task.bash
     def select_model():

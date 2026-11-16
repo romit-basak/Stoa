@@ -228,14 +228,23 @@ def microsim_figure(table: pd.DataFrame, night: str, sensor: int, path: Path) ->
     labels = {"observed": "observed", "walkers": "walkers", "jupedsim": "JuPedSim"}
     fig, ax = plt.subplots(figsize=(9, 4.5))
     minutes = minutes_after_start(pd.Series(table.index), night)
+    styles = {
+        "observed": {"linewidth": 1.5, "marker": "o", "markersize": 3},
+        "walkers": {"linewidth": 5, "alpha": 0.45},
+        "jupedsim": {
+            "linewidth": 1.5,
+            "linestyle": "--",
+            "marker": "o",
+            "markersize": 3,
+        },
+    }
     for name in [c for c in colours if c in table.columns]:
         ax.plot(
             minutes,
             table[name].to_numpy(),
-            marker="o",
-            markersize=3,
             color=colours[name],
             label=labels[name],
+            **styles[name],
         )
     ax.xaxis.set_major_formatter(FuncFormatter(clock))
     ax.set_ylabel("people per 5 minutes")

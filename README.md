@@ -42,16 +42,16 @@ Numbers in the first column are the sections of the model development guidelines
 | 2.4, 2.5, 6.1, 6.2, 8.5 Bias detection with slicing (Fairlearn), and the code that checks it | `src/models/flow/select.py` (`bias_check`), slices from `src/bias/slices.py` and `configs/bias.yaml`. See [Bias in the model](#bias-in-the-model) |
 | 6.3, 6.4 Bias mitigation, documented with its trade-offs | `src/models/flow/mitigate.py`; [docs/bias/model_bias.md](docs/bias/model_bias.md) |
 | 8.6 Model selection after the bias check | `select.py` (`select_variant`). See [Models, and how the best one is chosen](#models-and-how-the-best-one-is-chosen) |
-| 2.6, 8.7 Pushing the model to a registry | `src/models/flow/registry.py`, `bundle.py` (MLflow model registry; the GCP push isn't done yet). See [Registry, promotion and rollback](#registry-promotion-and-rollback) |
+| 2.6, 8.7 Pushing the model to a registry | `src/models/flow/registry.py`, `bundle.py`: the MLflow model registry, which on the team's GCP VM keeps its model files in Cloud Storage. See [Registry, promotion and rollback](#registry-promotion-and-rollback) |
 | 3 Hyperparameter tuning (search space and process) | `src/models/flow/tune.py`. See [Hyperparameter tuning](#hyperparameter-tuning) |
 | 4 Experiment tracking | `src/models/tracking.py` and the `mlflow` service. See [Experiment tracking](#experiment-tracking) |
 | 4 Results and model selection charts | [Results](#results); charts in `docs/models/figures/` |
 | 5 Sensitivity analysis (SHAP, hyperparameters) | `select.py` (`importance`), `tune.py`. See [Sensitivity analysis](#sensitivity-analysis) |
-| 7.1 Training triggered by the pipeline | `dags/stoa_train.py`: monthly and on demand (training on a push to main isn't done yet). See [CI/CD and notifications](#cicd-and-notifications) |
+| 7.1 Training triggered by a code push | `.github/workflows/train.yml` starts `stoa_train` (`dags/stoa_train.py`) on the GCP VM on a push to main that changes the model code, monthly, or by hand. See [CI/CD and notifications](#cicd-and-notifications) |
 | 7.2, 7.3 Automated validation and bias check that block a bad model | `check_gates` in `stoa_train` (`registry.py --check`) |
 | 7.4 Automated registry push | `register_model` in `stoa_train` (`registry.py --promote`) |
-| 7.5 Notifications | Failure emails from every `stoa_train` task. See [CI/CD and notifications](#cicd-and-notifications) |
-| 7.6 Rollback | `registry.py` (champion comparison, `--rollback`). See [Registry, promotion and rollback](#registry-promotion-and-rollback) |
+| 7.5 Notifications | `notify_team` in `stoa_train` (`src/models/flow/notify.py`): an email with the result of every run, the gate's reasons when it fails, and a failure email from any failed task. See [CI/CD and notifications](#cicd-and-notifications) |
+| 7.6 Rollback | `registry.py`: a retrain worse than the champion is never promoted, and `--rollback` restores earlier versions. See [Registry, promotion and rollback](#registry-promotion-and-rollback) |
 | 8.1 Docker | `Dockerfile` and `docker-compose.yaml`: both DAGs and the MLflow server run in containers. See [Running it](#running-it) |
 
 ## Quickstart
@@ -147,7 +147,7 @@ To move to a newer OSM extract, trigger the DAG with `refresh_osm` set to true (
 
 | DAG | When | What |
 |---|---|---|
-| `stoa_train` | Monthly, and triggered (set `tune` for the Optuna search) | Trains, selects, checks and registers the flow model on the data `stoa_pipeline` last built. See [The model pipeline](#the-model-pipeline) |
+| `stoa_train` | Triggered (set `tune` for the Optuna search); on the team VM by GitHub Actions on a push to model code and monthly | Trains, selects, checks, registers and reports the flow model on the data `stoa_pipeline` last built. See [The model pipeline](#the-model-pipeline) |
 | `stoa_site_build` | Triggered, with `site` | A site's graph and features without counts: NEU Boston (the demonstration) and NYC (the transfer test, clipped around its 114 count locations). See [docs/pipeline/site_build.md](docs/pipeline/site_build.md) |
 | `stoa_minute_feed` | Every 15 minutes | Archives the per-minute counts into the bucket (see [The per-minute counts](#running-steps-by-hand)); leave it paused unless you poll for the team |
 | `stoa_osm_watch` | Weekly | Reports OSM path changes near the sensors since the pinned extract, without replacing it |
@@ -328,10 +328,10 @@ A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minu
 
 The flow model predicts the hourly pedestrian count on a path segment, with an 80% interval. It trains on the Melbourne sensors and can predict any segment that has features, so it covers the whole network, not only the sensors. The code is in `src/models/flow/`, the settings in `configs/models.yaml` (`flow`), and the full method in [docs/models/flow_model.md](docs/models/flow_model.md).
 
-A second Airflow DAG, `stoa_train` (`dags/stoa_train.py`), runs it in the same Docker image as the data pipeline, monthly or on demand, on the training frame that `stoa_pipeline` last built. The daily data pipeline never trains.
+A second Airflow DAG, `stoa_train` (`dags/stoa_train.py`), runs it in the same Docker image as the data pipeline, on the training frame that `stoa_pipeline` last built. On the team's GCP VM, GitHub Actions starts it on a push to main that changes the model code and once a month ([CI/CD and notifications](#cicd-and-notifications)); anyone can also trigger it by hand. The daily data pipeline never trains.
 
 ```
-train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─► register_model
+train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─► register_model ─► notify_team
 ```
 
 | Task | Module | What it does |
@@ -341,6 +341,7 @@ train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─
 | `mitigate_bias` | `mitigate.py` | Retrains the selected model with reweighted rows, and calibrates it, scored on the same slices and hours |
 | `check_gates` | `registry.py --check` | Fails the run if the model doesn't beat Space Syntax by the target, its intervals miss 75 to 85% coverage, or one slice's error is over 2.25 times the overall |
 | `register_model` | `registry.py --promote` | Registers the model in the MLflow model registry and makes it `champion`, unless the current champion is better |
+| `notify_team` | `notify.py` | Emails the team what was registered, each variant's metrics, and whether the champion changed |
 
 ### Running it
 
@@ -348,7 +349,7 @@ train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─
 docker compose up -d --build        # Airflow (http://localhost:8080) and MLflow (http://localhost:5001)
 ```
 
-In Airflow, trigger `stoa_train` after `stoa_pipeline` has built the training frame (set `tune` to true for the Optuna search). Or run the steps by hand:
+In Airflow, trigger `stoa_train` after `stoa_pipeline` has built the training frame (set `tune` to true for the Optuna search). On the team's GCP VM, `ops/vm/vm.sh train` (add `--tune` for the search) does the same as the CI job: deploy main, then trigger the DAG. Or run the steps by hand:
 
 ```bash
 .venv/bin/python -m src.models.flow.train            # --tune for the search, --seed to change the seed
@@ -411,7 +412,7 @@ All three families beat both baselines in every run. The two models selected at 
 | Worst slice (quiet sensors), times overall WAPE | 1.70 | 1.67 |
 
 What this shows:
-- **The model beats both baselines** by 14 to 16% (Space Syntax) and about 20% (betweenness). Resampling the 49 spatial groups puts each seed's gain over Space Syntax at roughly 5 to 25% (95% range), so the 15% target sits inside the uncertainty: one seed passes, two don't.
+- **The model beats both baselines** by 13 to 16% (Space Syntax) and about 20% (betweenness), so every run clears the 10% gate the team set on 16 November. Resampling the 49 spatial groups puts each seed's gain over Space Syntax at roughly 5 to 25% (95% range). The original 15% target sits inside that uncertainty: one seed passes it and two don't ([docs/models/accuracy_target.md](docs/models/accuracy_target.md)).
 - **Most of the remaining error is each sensor's overall level**, not its daily and weekly pattern. Calibrating on four weeks of a sensor's counts cuts log MAE from 0.865 to 0.603, and rank correlation rises from 0.53 to 0.95. That's the plan in CLAUDE.md ("Generalization"): the general model learns the pattern, and local counts set the volume. A single site-wide scale doesn't help in Melbourne (the calibration curve chart), because the model already trained there and has no city-wide offset to remove.
 - **Unfamiliar precincts.** The rich model holds up on the holdout precincts (0.881 against 0.865 on the folds). The portable model drops to 1.067, so features only Melbourne has carry part of that transfer.
 - The intervals hit 78% coverage on the folds. On the holdout precincts they're too narrow: 64% for rich and 60% for portable (`coverage80_holdout`), which is the cost of moving to a new area.
@@ -428,7 +429,7 @@ The charts, tables and a training report (data, loss and cost, learned parameter
 
 ### Hyperparameter tuning
 
-`train --tune` (or `tune` in the DAG) runs an Optuna search (TPE sampler, a form of Bayesian optimisation) of 30 trials per family and variant before training. Trials are scored by log MAE on four inner folds of the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. The holdout precincts never enter. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent run logs the best values and Optuna's estimate of each parameter's importance. Without `--tune`, `train` takes the parameters of an earlier run with `--params-from`, which is what the monthly `stoa_train` run does.
+`train --tune` (or `tune` in the DAG) runs an Optuna search (TPE sampler, a form of Bayesian optimisation) of 30 trials per family and variant before training. Trials are scored by log MAE on four inner folds of the fold sensors, split by spatial group and buffered like the outer folds, on 200,000-row samples. The holdout precincts never enter. Each trial is a nested MLflow run under `tune_<family>_<variant>`, and the parent run logs the best values and Optuna's estimate of each parameter's importance. Without `--tune`, `train` uses the 12 November values below, which are checked into `configs/models.yaml` per family and variant (`tuned`), or an earlier run's parameters with `--params-from`, which is what `stoa_train` does.
 
 The search space (`flow.candidates.<family>.search` in `configs/models.yaml`):
 
@@ -477,7 +478,7 @@ The model uses the same 20 slices as the data stage: precinct, time of day, holi
 The check is used three times:
 1. **In selection**, to choose between the near-best candidates (above).
 2. **In mitigation**, where `mitigate.py` retrains the selected model with sensor-equal and volume-tier-equal weights, and calibrates it, on the same folds and slices.
-3. **In the gate**, which blocks a model whose worst slice (among groups with at least 5 sensors) is over 2.25 times its overall error. In `stoa_train` that fails `check_gates`, so the model isn't registered and the team gets the failure email.
+3. **In the gate**, which blocks a model whose worst slice (among groups with at least 5 sensors) is over 2.25 times its overall error. In `stoa_train` that fails `check_gates`, so the model isn't registered, and the team gets an email listing the reasons.
 
 For the selected rich model (seed 7), six groups are worse than the overall WAPE of 0.632: quiet sensors (WAPE 1.08, 1.70 times overall, 29 sensors), Southbank (1.29 times), Carlton (1.22 times, 1 sensor), sensors with few amenities nearby (1.15 times), public holidays (1.10 times) and night (1.07 times). The worst slice, quiet sensors, is under the gate's 2.25. Quiet sensors aren't missed by a bigger factor than busy ones. WAPE divides by the count, and the same miss is a larger share of a small count.
 
@@ -501,24 +502,24 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 `registry.py` uses the MLflow model registry, with one registered model per variant (`stoa-flow-rich`, `stoa-flow-portable`):
 - **What's registered** is the selected run's bundle (`src/models/flow/bundle.py`): the mean model, the two quantile models and the interval margins as one MLflow model. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` for each segment-hour, the count and bounds of the Predictions interface in CLAUDE.md.
 - **Gate.** `--check` compares the latest selected run of each variant with the Space Syntax run on the same data version and fold plan. The rich variant must pass; the portable one is registered only if it passes.
-- **Promotion.** `--promote` registers a model that passed the gate and moves the `champion` alias to it. The exception is a model whose gain over Space Syntax is more than 1 point below the current champion's (`gates.champion_tolerance`). That one is registered as `challenger`, the champion keeps serving, and the task fails, which emails the team. Gains are compared rather than raw errors because they stay comparable across data versions.
-- **Rollback.** `--rollback --variant rich` moves `champion` back to the version it replaced. Each champion records its predecessor, so rollback can be repeated one version at a time. With `--variant both`, nothing changes unless both variants can roll back.
+- **Promotion.** `--promote` registers a model that passed the gate and moves the `champion` alias to it, unless its `log_mae_cv` is worse than the current champion's (`gates.champion_tolerance`, 0). Then it's registered as `challenger`, the champion keeps serving, and the run's email says so. This is the automatic rollback: a worse retrain is kept for inspection but never served. A tie replaces the champion, since the new model saw newer data.
+- **Rollback by hand.** `--rollback --variant rich` moves `champion` back to the version it replaced. Each champion records its predecessor, so rollback can be repeated one version at a time. With `--variant both`, nothing changes unless both variants can roll back.
 - Each command writes what it did to `data/models/registry.json`.
 
-**Not done yet:** pushing the registered model to GCP. The registry is the MLflow server in `docker-compose.yaml` until the team's shared MLflow server is set up on a small GCP VM (CLAUDE.md, "Infrastructure").
+**Where the registry lives.** On a laptop, it's the `mlflow` service in `docker-compose.yaml`. On the team's GCP VM, which runs the same stack and is where CI trains, the registry and runs are in the VM's Postgres, and every model file (the bundle, the quantile models, charts and reports) is stored in Cloud Storage at `gs://stoa-dvc-data/mlflow-artifacts` ([docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md)). We don't push models to GCP Artifact Registry: promotion and rollback need each version's lineage (its run, metrics and data version), which MLflow records and Artifact Registry doesn't. The serving image will go there when the API is built (Cloud Run, CLAUDE.md "Infrastructure").
 
 ### CI/CD and notifications
 
 - **Every pull request and push to main** runs GitHub Actions (`.github/workflows/`): ruff, the unit tests, and the DAG tests in a freshly built Airflow image. The model tests run the whole path on synthetic data against a throwaway MLflow store: train, select, mitigate, gate, register, promote, refuse a worse model and roll back (`tests/models/`).
-- **Training, validation, the bias check and registration** run automatically in `stoa_train`, monthly and on demand. A model that fails validation or the bias check fails the run before registration. A model worse than the champion fails it after registration, without being promoted.
-- **Notifications.** Every failed `stoa_train` task emails the team, with the same settings as the data pipeline's alerts ([Validation, anomalies and alerts](#validation-anomalies-and-alerts)). A run that finishes cleanly sends no email; its result is in Airflow, MLflow and `data/models/registry.json`.
-- **Not done yet:** training triggered by a push to main. A GitHub runner can't reach the local MLflow server or the data, so this waits for the shared MLflow server and data on GCP.
+- **Training on a code push.** `.github/workflows/train.yml` ("Train flow model") runs on a push to main that changes `src/models/**`, `configs/models.yaml`, `dags/stoa_train.py` or the training frame's code, on the 2nd of each month, and by hand (with an optional Optuna search). A GitHub runner can't hold the 7.4-million-row frame, so the job starts the team's GCP VM, connects through Identity-Aware Proxy, deploys main and triggers `stoa_train` there (`ops/vm/train.sh`). It authenticates with a service-account key in the repo secret `GCP_CI_KEY`, and without the secret it logs a warning and does nothing. Details: [docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md), "Training from CI".
+- **Validation, the bias check and registration** then run automatically in `stoa_train`. A model that fails validation or the bias check fails `check_gates`, so nothing is registered. A model worse than the champion is registered but not promoted.
+- **Notifications.** `notify_team` emails the team when a run finishes: what was registered, each variant's metrics, and whether the champion changed or was kept. A failed gate emails its reasons, and any other failed task sends the failure email, with the same settings as the data pipeline's alerts ([Validation, anomalies and alerts](#validation-anomalies-and-alerts)).
 
 ### Where the model stands
 
-- **The gate.** On seed 7, `registry --check` passes the rich model on all three checks (15.5% below Space Syntax, coverage 0.782, worst slice 1.70) and fails the portable one (13.7%). Over three seeds the rich model is 14.3% to 15.5% below Space Syntax, so whether a retrain clears 15% depends on the seed. [docs/models/accuracy_target.md](docs/models/accuracy_target.md) has the runs and recommends a 10% gate, or gating on the mean of several seeds; that's for the team to decide.
-- **What's registered.** The `stoa-flow` experiment still holds the models of 12 November, trained before the neighbour buffer. The runs above are in the side experiment `stoa-flow-buffer`. Once the team settles the gate, the next step is a `stoa_train` run on buffered folds with the 12 November parameters, then `--promote`.
-- **Next for the model:** the NYC cross-city test with the portable model, the GCP registry push, and training on a push to main.
+- **The gate.** The team set it at 10% below Space Syntax on 16 November 2026, down from the original 15%. On the buffered folds both variants clear it on every seed: rich 14.3% to 15.5%, portable 13.1% to 13.8%. At seed 7 both also pass the other two checks (coverage 0.782 and 0.780; worst slice 1.70 and 1.67, limit 2.25).
+- **What's registered.** The runs above are in the side experiment `stoa-flow-buffer`. The first `stoa_train` run on main, on the GCP VM, trains the same models on buffered folds with the parameters in `configs/models.yaml`, gates them and registers the first champions.
+- **Next for the model:** the NYC cross-city test with the portable model.
 
 ## Tests and lint
 
@@ -655,6 +656,7 @@ src/models/flow/         the flow model: data, baselines, candidates, tune, trai
                          mitigate, bundle, registry, report
 tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Airflow image)
 ops/hpc/                 the cluster job that polls the per-minute feed
+ops/vm/                  the team's GCP VM: setup, deploy, training from CI, idle stop
 ops/mlflow/              the MLflow tracking server image (docker-compose service `mlflow`)
 notebooks/               exploration only; the pipeline doesn't run them (below)
 docs/data_cards/         one card per dataset: schema, coverage, known issues
@@ -667,7 +669,7 @@ docs/analysis/           write-ups of one-off analyses
 docs/data_licenses.md    license register; check it before adding a dataset
 docs/PROJECT_CONTEXT.md  the reasoning behind decisions, scope tiers, validation plan
 docs/scoping/            project scoping document (LaTeX source)
-.github/workflows/       CI: lint, unit tests, DAG tests
+.github/workflows/       CI: lint, unit tests, DAG tests; train.yml starts training on the GCP VM
 requirements.txt         pinned versions generated from pyproject.toml
 CLAUDE.md                project rules and conventions
 ```
@@ -722,9 +724,9 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 
 **Done:**
 - Data: ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
-- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, and the MLflow registry with promotion and rollback (`stoa_train`; local MLflow server).
+- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions on the team's GCP VM (`stoa_train`).
 
-**Planned:** the NYC cross-city test; pushing registered models to GCP and training on a push to main (both wait on the shared MLflow server on a GCP VM); path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, deployment on Cloud Run.
+**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, deployment on Cloud Run.
 
 ## Ground rules
 

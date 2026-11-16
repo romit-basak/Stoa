@@ -16,7 +16,8 @@ For one night at one area:
 5. Counts per 5-minute block and sensor are split into directions with the sensor's
    hourly direction shares, and compared with the observed series (observed.py).
 6. Each walker's route and time at the lead sensor are saved for the microsimulation
-   (microsim.py).
+   (microsim.py), and every walker's route and start time for the animation
+   (animate.py).
 
 Sensors left out of the fit are the real test.
 
@@ -206,7 +207,8 @@ def crossings(
     """One row per walker and sensor passed, with the time it passes.
 
     A walker's time at the first sensor on its route is drawn from the block shares,
-    and it reaches later sensors at `speed` metres per second.
+    and it reaches later sensors at `speed` metres per second. Each row also carries
+    the walker's number on its route and its time at the route's start, `start`.
     """
     rows = []
     for j, n in enumerate(np.round(trips).astype(int)):
@@ -216,12 +218,51 @@ def crossings(
         first = on_route[np.argmin(offset[on_route, j])]
         blocks = rng.choice(len(shares), size=n, p=shares)
         minutes = blocks * block_minutes + rng.random(n) * block_minutes
+        start = hour_start + pd.to_timedelta(
+            minutes - offset[first, j] / speed / 60, unit="min"
+        )
         for i in on_route:
             lag = (offset[i, j] - offset[first, j]) / speed / 60
             times = hour_start + pd.to_timedelta(minutes + lag, unit="min")
-            rows.append(pd.DataFrame({"sensor_index": i, "route": j, "time": times}))
+            rows.append(
+                pd.DataFrame(
+                    {
+                        "sensor_index": i,
+                        "route": j,
+                        "walker": np.arange(n),
+                        "time": times,
+                        "start": start,
+                    }
+                )
+            )
     if not rows:
-        return pd.DataFrame(columns=["sensor_index", "route", "time"])
+        columns = ["sensor_index", "route", "walker", "time", "start"]
+        return pd.DataFrame(columns=columns)
+    return pd.concat(rows, ignore_index=True)
+
+
+def unsensed_starts(
+    trips: np.ndarray,
+    passes: np.ndarray,
+    hour_start: pd.Timestamp,
+    shares: np.ndarray,
+    block_minutes: int,
+    rng: np.random.Generator,
+) -> pd.DataFrame:
+    """Start times for walkers on routes that pass no sensor, drawn from the shares.
+
+    These walkers aren't counted anywhere, so their start is the drawn time itself.
+    """
+    rows = []
+    for j, n in enumerate(np.round(trips).astype(int)):
+        if n == 0 or (passes[:, j] > 0).any():
+            continue
+        blocks = rng.choice(len(shares), size=n, p=shares)
+        minutes = blocks * block_minutes + rng.random(n) * block_minutes
+        start = hour_start + pd.to_timedelta(minutes, unit="min")
+        rows.append(pd.DataFrame({"route": j, "start": start}))
+    if not rows:
+        return pd.DataFrame(columns=["route", "start"])
     return pd.concat(rows, ignore_index=True)
 
 
@@ -343,6 +384,7 @@ def run(
     area = settings["areas"][area_name]
     cfg = area["walkers"]
     rng = np.random.default_rng(cfg["seed"])
+    unsensed_rng = np.random.default_rng(cfg["seed"] + 1)
 
     seg_map = pd.read_parquet(REPO_ROOT / settings["sensor_segment_map"])
     segment_of = dict(zip(seg_map["location_id"], seg_map["segment_id"]))
@@ -396,7 +438,7 @@ def run(
     fit_rows = [sensors.index(s) for s in fitted]
     day = pd.Timestamp(night, tz=TZ)
     day_type = "weekend" if day.day_of_week >= 5 else "weekday"
-    parts, direction_share = [], {}
+    parts, unsensed, direction_share = [], [], {}
     walkers_per_route = np.zeros(len(routes))
     for hour in cfg["hours"]:
         start = day + pd.Timedelta(hours=hour)
@@ -425,6 +467,11 @@ def run(
                 rng,
             )
         )
+        unsensed.append(
+            unsensed_starts(
+                trips, passes, start, shares, area["block_minutes"], unsensed_rng
+            )
+        )
         for s in sensors:
             if counts.get(s, 0) > 0:
                 share_1 = now.loc[s, "direction_1"] / counts[s]
@@ -441,6 +488,13 @@ def run(
     passed = pd.concat(parts, ignore_index=True)
     lead_index = sensors.index(area["lead_sensor"])
     agents = passed[passed["sensor_index"] == lead_index][["route", "time"]]
+    starts = pd.concat(
+        [
+            passed.drop_duplicates(["route", "walker", "start"])[["route", "start"]],
+            *unsensed,
+        ],
+        ignore_index=True,
+    )
     simulated = to_blocks(passed, sensors, area["block_minutes"])
     share = [
         direction_share.get((s, b.hour), 0.5)
@@ -462,6 +516,7 @@ def run(
     table = route_table(routes, walkers_per_route)
     table.to_parquet(out / f"walkers_routes_{night}.parquet", index=False)
     agents.to_parquet(out / f"walkers_agents_{night}.parquet", index=False)
+    starts.to_parquet(out / f"walkers_starts_{night}.parquet", index=False)
     return result
 
 

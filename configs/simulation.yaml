@@ -81,3 +81,21 @@ areas:
       check_s: 0.5
       max_minutes: 240
       seed: 7
+
+    # The animated GIF of the walkers (src/simulation/animate.py).
+    animation:
+      start: "22:30"
+      end: "23:30"
+      # One frame per simulated minute, played at this many frames per second.
+      frame_minutes: 1
+      fps: 10
+      width_px: 800
+      dpi: 100
+      # One walker in this many is drawn, so the dots don't merge into a line.
+      sample_every: 5
+      # Draw each route as a faint line under the dots (the still map shows them).
+      draw_routes: false
+      venue_name: Rod Laver Arena
+      margin_m: 120
+      # Label positions in points from the marker, where sensors sit close together.
+      label_offsets: {124: [6, -14]}

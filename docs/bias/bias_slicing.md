@@ -4,7 +4,7 @@ The data pipeline guidelines ask us to slice the data, check whether some groups
 
 **Summary** (run of 25 October 2026). The committed data version comes from a rerun on 5 November 2026 with eleven more days of counts, and it gives the same picture: overall WAPE 0.53, or 0.37 calibrated; quiet sensors 0.90 to 0.53, Southbank 0.73 to 0.40, low-amenity sensors 0.69 to 0.49.
 - The data is most uneven by place: the CBD has 5 times its share of sensors, and the outer precincts a third of theirs or less.
-- On held-out sensors, a baseline model is clearly worse on quiet sensors, low-amenity sensors, Southbank, Melbourne (Remainder) and Kensington's 2 sensors, at night and late in the evening, on public holidays and in the COVID era.
+- On held-out sensors, a baseline model is clearly worse on quiet sensors, low-amenity sensors, Southbank, Melbourne (Remainder) and Kensington's 2 sensors, at night and late in the evening, on public holidays and in the COVID era. A rerun on spatial folds (15 November) raises the overall WAPE to 0.60 and clears Kensington, whose two sensors no longer train each other's model; the other groups stay worse.
 - Reweighting the training rows raised the average error and moved it between weak groups, so it was rejected. Calibrating each sensor to four weeks of its own counts cut the overall error by about 30% and fixed the quiet, low-amenity, Southbank and Kensington sensors. Night, COVID, Docklands and Melbourne (Remainder) are unchanged by it: their error is in the pattern, which needs changes to the model, not to the weights.
 
 ## What "bias" means here
@@ -150,9 +150,9 @@ Step 1 measures the **data**. Whether a model is actually worse on these groups 
 .venv/bin/python -m src.bias.slice_errors     # ~16 min; the DAG runs it weekly
 ```
 
-Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. The real flow model doesn't exist yet, so a baseline stands in for it (`src/bias/slice_errors.py`):
+Step 1 found where the data is thin. Step 2 checks whether a model is actually worse there. This step was built before the flow model existed, so a baseline stands in for it (`src/bias/slice_errors.py`), and it still runs that way in the daily pipeline as a data check. The flow model's own slicing, mitigation and deployment gate are in [model_bias.md](model_bias.md).
 - **Model:** scikit-learn gradient boosting (`HistGradientBoostingRegressor`, Poisson loss) on time, calendar, weather, slope and OSM segment features. Following core rule 9, it has no sensor or segment IDs, no coordinates and no month or day of year.
-- **Held-out sensors:** 5 folds grouped by sensor (core rule 2), so every one of the 118 sensors gets predictions from a model that never saw it. Each fold trains on 600,000 sampled rows, and the model is seeded (`random_state: 7`), so a rerun on the same data gives the same numbers.
+- **Held-out sensors:** 5 folds (core rule 2), so every one of the 118 sensors gets predictions from a model that never saw it. Since 15 November 2026 the folds keep the flow model's spatial groups together (`errors.fold_groups: spatial` in `configs/bias.yaml`; sensors within 200 m share a group, from `splits.parquet`), so a sensor is never scored by a model that trained on its next-door twin. The findings below come from the earlier folds grouped by sensor; the [spatial-fold rerun](#rerun-on-spatial-folds-15-november-2026) gives the same picture. Each fold trains on 600,000 sampled rows, and the model is seeded (`random_state: 7`), so a rerun on the same data gives the same numbers.
 - **Error:** WAPE, the sum of absolute errors divided by the sum of counts, computed per slice group with Fairlearn's `MetricFrame` (MIT). A relative error keeps busy sensors from drowning out quiet ones, and night (2.8% of pedestrians) from disappearing.
 - **Uncertainty:** a 95% interval for each group, from resampling its sensors 300 times. Hours from one sensor aren't independent, so resampling rows would overstate the certainty.
 - **Worse:** a group is marked worse when its whole interval lies above the overall WAPE.
@@ -201,6 +201,24 @@ The bias column shows two different failures. Quiet sensors are over-predicted (
 - **Flagged and incomplete sensors.** Sensors whose match needs review are at 0.57 (0.48–0.69), against 0.50 for the others. The 10 sensors missing 20% or more of their hours are at 0.72, interval 0.38–2.48.
 
 So being thin in the data, which step 1 measured, doesn't by itself make a group worse for the model. The worse groups share something else: low volume, through-routes the amenity features don't describe, or a pattern the features don't describe (night, holidays, COVID).
+
+### Rerun on spatial folds (15 November 2026)
+
+On the committed data version, with folds grouped by spatial group instead of by sensor (everything else unchanged):
+
+| | Folds by sensor | Spatial folds | Spatial folds, calibrated |
+|---|---|---|---|
+| Overall WAPE | 0.53 | 0.60 | 0.40 |
+| Groups worse than overall | 9 | 8 | 15 |
+| Quiet sensors | 0.83 | 0.92 | 0.52 |
+| Southbank | 0.80 | 0.86 | 0.43 |
+| Melbourne (Remainder) | 0.68 | 0.87 | 0.72 |
+| Kensington (2 sensors) | 1.92 | 0.76 (not worse) | 0.37 |
+| Late evening | 0.58 (not worse) | 0.70 | 0.50 |
+| Night | 0.65 | 0.68 | 0.65 |
+| COVID era | 0.67 | 0.66 | 0.64 |
+
+The overall error rises from 0.53 to 0.60, because sensors next to each other can no longer stand in for each other across folds. Kensington's two sensors, both on Macaulay Rd, now share a group. Before, each was scored by a model that had trained on the other, which likely explains the old 1.92: one Macaulay Rd sensor doesn't predict the other well. The weak groups are otherwise the same, with late evening added. The mitigations come out the same way. Equal sensor weights raise the overall error (0.62), precincts weighted by network barely change it (0.59), and calibration cuts it by a third (0.40) while leaving night and COVID where they were. So the decisions in step 3 stand. The flow model's own results, on folds that also leave out each test sensor's neighbours, are in [model_bias.md](model_bias.md).
 
 ## Step 3: mitigation
 

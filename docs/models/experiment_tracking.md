@@ -63,4 +63,4 @@ with tracking.run("hgb_poisson", params=params):
 
 The server uploads and downloads artifacts itself (`--serve-artifacts`), so a client needs only the server's address, never bucket credentials.
 
-**For now each machine has its own server**, so runs stay on the machine that made them. The plan is one shared server on a small GCP VM with the rest of the stack (CLAUDE.md, "Infrastructure"); teammates then reach it through an SSH tunnel and set `MLFLOW_TRACKING_URI`, and nothing in the training code changes.
+**The team's shared server runs on the GCP VM** with the rest of the stack, and stores model files in `gs://stoa-dvc-data/mlflow-artifacts` ([cloud_vm.md](../pipeline/cloud_vm.md)). Teammates reach it through `ops/vm/vm.sh tunnel`, at the default `MLFLOW_TRACKING_URI` (`http://localhost:5001`), and nothing in the training code changes. A laptop's own `mlflow` service still works for side experiments, whose runs stay on that machine.

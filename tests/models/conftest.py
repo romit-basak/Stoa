@@ -82,6 +82,8 @@ def fcfg() -> dict:
     }
     for family, extra in small.items():
         cfg["candidates"][family]["params"].update(extra)
+        # The searched values are for 600,000-row folds; the synthetic runs use the defaults.
+        cfg["candidates"][family].pop("tuned", None)
     return cfg
 
 

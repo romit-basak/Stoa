@@ -70,11 +70,17 @@ def fold_scores(
 
 
 def plan_tag(
-    n_folds: int, train_rows: int, seed: int, train_start: str | None = None
+    n_folds: int,
+    train_rows: int,
+    seed: int,
+    train_start: str | None = None,
+    buffer_m: float = 0.0,
 ) -> str:
     """Identifies a fold plan, so the gate only compares runs scored on the same rows."""
     tag = f"folds={n_folds};train_rows={train_rows};seed={seed}"
-    return f"{tag};train_start={train_start}" if train_start else tag
+    if train_start:
+        tag += f";train_start={train_start}"
+    return f"{tag};buffer_m={buffer_m:g}" if buffer_m else tag
 
 
 def oof_candidates(
@@ -324,6 +330,7 @@ def train_variant(
         "train_rows": int(fcfg["train_rows_per_fold"]),
         "seed": int(fcfg["seed"]),
         "train_start": fcfg.get("train_start"),
+        "buffer_m": float(data.buffer_m),
         "families": families,
         "tuned": tuned,
         "models": models,
@@ -348,7 +355,7 @@ def run(
     """Train every variant; returns each variant's candidates.json content.
 
     `params_from` ({variant: {family: params}}, from `load_params`) replaces the configured
-    defaults, for example to retrain on other data with an earlier run's tuned values."""
+    parameters, for example to retrain on other data with an earlier run's tuned values."""
     seed, train_rows = fcfg["seed"], fcfg["train_rows_per_fold"]
     baseline_preds: dict[str, np.ndarray] | None = None
     baseline_runs: dict[str, dict[str, Any]] = {}
@@ -359,14 +366,13 @@ def run(
         data = load_data(variant)
         start = fcfg.get("train_start")
         allowed = flow_data.trainable(data, start)
-        plan = flow_data.fold_plan(data.fold, train_rows, seed, n_folds, allowed)
-        plan_id = plan_tag(len(plan), train_rows, seed, start)
+        plan = flow_data.fold_plan(
+            data.fold, train_rows, seed, n_folds, allowed, data.sensors, data.near
+        )
+        plan_id = plan_tag(len(plan), train_rows, seed, start, data.buffer_m)
         params = {
             f: candidates.capped(
-                f,
-                (params_from or {}).get(variant, {}).get(f)
-                or fcfg["candidates"][f]["params"],
-                max_trees,
+                f, family_params(fcfg, f, variant, params_from), max_trees
             )
             for f in families
         }
@@ -445,6 +451,12 @@ def main() -> None:
     ap.add_argument("--folds", type=int, help="use only the first N folds (quick runs)")
     ap.add_argument("--max-trees", type=int, help="cap trees per model (quick runs)")
     ap.add_argument("--train-rows", type=int, help="training rows per fold")
+    ap.add_argument(
+        "--seed",
+        type=int,
+        help="seed for the training samples and the models (default: flow.seed); the "
+        "folds themselves are fixed by splits.parquet",
+    )
     ap.add_argument("--output-dir")
     ap.add_argument(
         "--train-start",
@@ -454,15 +466,11 @@ def main() -> None:
     ap.add_argument(
         "--params-from",
         help="output dir of an earlier train run: reuse each family's parameters from "
-        "its candidates.json instead of the configured defaults",
+        "its candidates.json instead of the configured ones",
     )
     args = ap.parse_args()
 
-    fcfg = flow_data.flow_config()
-    if args.train_rows:
-        fcfg["train_rows_per_fold"] = args.train_rows
-    if args.train_start:
-        fcfg["train_start"] = args.train_start
+    fcfg = apply_args(flow_data.flow_config(), args)
     out = flow_data.output_dir(fcfg, args.output_dir)
     variants = fcfg["variants"] if args.variant == "both" else [args.variant]
     families = args.families or default_families(fcfg)
@@ -481,13 +489,48 @@ def main() -> None:
     )
 
 
+def apply_args(fcfg: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    """The flow config with the command line's overrides applied."""
+    if args.train_rows:
+        fcfg["train_rows_per_fold"] = args.train_rows
+    if args.train_start:
+        fcfg["train_start"] = args.train_start
+    if args.seed is not None:
+        fcfg["seed"] = args.seed
+    return fcfg
+
+
+def family_params(
+    fcfg: dict[str, Any],
+    family: str,
+    variant: str,
+    params_from: dict[str, dict[str, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """An earlier run's parameters (`params_from`), else the searched values checked into
+    configs/models.yaml for this variant (`tuned`), else the family's defaults (`params`)."""
+    spec = fcfg["candidates"][family]
+    return (
+        (params_from or {}).get(variant, {}).get(family)
+        or spec.get("tuned", {}).get(variant)
+        or spec["params"]
+    )
+
+
 def load_params(
     root: str | Path, variants: list[str]
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json."""
+    """{variant: {family: params}} from an earlier run's <root>/<variant>/candidates.json.
+
+    A variant with no earlier run is left out, so it trains with the configured parameters
+    (`family_params`): the first run of the monthly DAG, which passes --params-from every time.
+    """
     out = {}
     for v in variants:
-        summary = json.loads((Path(root) / v / "candidates.json").read_text())
+        path = Path(root) / v / "candidates.json"
+        if not path.is_file():
+            log.warning("%s not found; %s uses the configured parameters", path, v)
+            continue
+        summary = json.loads(path.read_text())
         out[v] = {f: m["params"] for f, m in summary["models"].items()}
     return out
 

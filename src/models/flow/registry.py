@@ -8,7 +8,13 @@ Usage:
 
 Each variant is its own registered model, `stoa-flow-<variant>`. Aliases, not stages (MLflow 3
 deprecates stages): `champion` is the version to serve, `previous` the one it replaced, and
-rollback moves `champion` back to `previous`.
+rollback moves `champion` back to `previous`. Each champion version records the one it
+replaced (tag `stoa.previous_champion`), so rollback can be repeated, one version at a time.
+A rollback of several variants changes none of them unless every one has a `previous`.
+
+What is registered is the selected run's interval bundle (`stoa.bundle_uri`, see
+src/models/flow/bundle.py: predicted, lower and upper per row), or its mean model for runs
+from before the bundle existed (`stoa.model_uri`).
 
 The gate (configs/models.yaml, flow.gates) compares the latest selected run with the latest
 baseline_space_syntax run on the same data version (stoa.dvc.processed) and fold plan
@@ -49,6 +55,7 @@ from src.models.flow import notify
 log = logging.getLogger("stoa.models")
 
 CHAMPION, PREVIOUS, CHALLENGER = "champion", "previous", "challenger"
+PREVIOUS_TAG = "stoa.previous_champion"
 
 
 def model_name(variant: str) -> str:
@@ -183,7 +190,12 @@ def register(
     client: MlflowClient, g: Gate, promote: bool, tolerance: float = 0.0
 ) -> dict[str, Any]:
     run = client.get_run(g.run_id)
-    uri = run.data.tags.get("stoa.model_uri") or f"runs:/{g.run_id}/model"
+    tags = run.data.tags
+    uri = (
+        tags.get("stoa.bundle_uri")
+        or tags.get("stoa.model_uri")
+        or f"runs:/{g.run_id}/model"
+    )
     name = model_name(g.variant)
     new_metric = run.data.metrics.get("log_mae_cv")
     # Read the champion before registering, so the comparison is with the served version.
@@ -209,20 +221,42 @@ def register(
         return {**result, "alias": CHALLENGER, "kept_champion": True}
     if old is not None and old != version:
         client.set_registered_model_alias(name, PREVIOUS, old)
+        client.set_model_version_tag(name, version, PREVIOUS_TAG, old)
     client.set_registered_model_alias(name, CHAMPION, version)
     return {**result, "alias": CHAMPION, "kept_champion": False}
 
 
 def rollback(client: MlflowClient, variant: str) -> dict[str, Any]:
-    """Point champion back at the version it replaced; fails if there is none."""
+    """Point champion back at the version it replaced, and `previous` at the one before that
+    (if recorded); fails if there is no `previous`."""
     name = model_name(variant)
     prev = alias_version(client, name, PREVIOUS)
     if prev is None:
         raise SystemExit(f"{name} has no `{PREVIOUS}` version to roll back to")
     current = alias_version(client, name, CHAMPION)
     client.set_registered_model_alias(name, CHAMPION, prev)
-    client.delete_registered_model_alias(name, PREVIOUS)
-    return {"name": name, "champion": prev, "rolled_back_from": current}
+    before = client.get_model_version(name, prev).tags.get(PREVIOUS_TAG)
+    if before:
+        client.set_registered_model_alias(name, PREVIOUS, before)
+    else:
+        client.delete_registered_model_alias(name, PREVIOUS)
+    return {
+        "name": name,
+        "champion": prev,
+        "rolled_back_from": current,
+        "previous": before,
+    }
+
+
+def rollback_all(client: MlflowClient, variants: list[str]) -> list[dict[str, Any]]:
+    """Roll back every variant, or none: all must have a `previous` before any is changed."""
+    missing = [
+        v for v in variants if alias_version(client, model_name(v), PREVIOUS) is None
+    ]
+    if missing:
+        names = ", ".join(model_name(v) for v in missing)
+        raise SystemExit(f"nothing rolled back: {names} has no `{PREVIOUS}` version")
+    return [rollback(client, v) for v in variants]
 
 
 def main() -> None:
@@ -247,7 +281,7 @@ def main() -> None:
     manifest: dict[str, Any] = {"at": datetime.now(UTC).isoformat(timespec="seconds")}
 
     if args.rollback:
-        manifest["rollback"] = [rollback(client, v) for v in variants]
+        manifest["rollback"] = rollback_all(client, variants)
     else:
         name = tracking.experiment_name(cfg)
         exp = client.get_experiment_by_name(name)

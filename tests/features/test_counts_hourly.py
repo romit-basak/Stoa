@@ -6,6 +6,7 @@ import pytest
 
 from src.features.counts_hourly import (
     covered,
+    drop_listed,
     drop_unplaceable,
     fill_gap,
     flag_outages,
@@ -66,6 +67,29 @@ def test_duplicate_sensor_hours_are_dropped_entirely():
     )
     kept, n = drop_unplaceable(c)
     assert n == 2 and len(kept) == 1
+
+
+def test_listed_sensor_dates_are_dropped_with_both_ends_included():
+    c = pd.concat(
+        [
+            counts_at(
+                "2020-04-30 23:00", "2020-05-01 00:00", "2021-11-30 23:00", sensor=15
+            ),
+            counts_at("2021-12-01 00:00", sensor=15),
+            counts_at("2020-06-01 12:00", sensor=66),
+        ]
+    )
+    drops = [
+        {"location_id": 15, "from": "2020-05-01", "to": "2021-11-30", "reason": "x"}
+    ]
+    kept, n = drop_listed(c, drops)
+    assert n == 2
+    assert kept["ts_local_naive"].astype(str).tolist() == [
+        "2020-04-30 23:00:00",
+        "2021-12-01 00:00:00",
+        "2020-06-01 12:00:00",
+    ]
+    assert drop_listed(c, [])[1] == 0
 
 
 def test_a_day_stamped_all_midnight_gets_its_hours_back_in_id_order():

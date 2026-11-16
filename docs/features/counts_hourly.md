@@ -37,6 +37,10 @@ Before 2025-11-30, set `recent_station_dist_m` to its cap (`post_metro_tunnel` i
 
 The live window had already moved past November 2022 to October 2024 by the time the pipeline started, so those months exist only in the Wayback copy (configured under `melbourne_portal.wayback` in `configs/data.yaml`; `melbourne_portal` downloads it once and keeps it). It's the City's own export, not a different collection: where it overlaps the archive (668,180 sensor-hours) and the live table (427,607), it has the same count on 98.5% of hours. Where it differs, the median difference is 24 people against the archive and 150 against the live table, so it isn't used where either of those has the hour. Taking it only for the gap gives every hour one source and leaves the archive and live rows exactly as published.
 
+### Rows dropped by hand
+
+`counts_hourly.drop_rows` in `configs/features.yaml` lists (sensor, local date range) rows the portal holds that aren't that sensor's own counts. The build drops them right after the unplaceable duplicates and reports the number as `dropped_listed`. The only entry so far is sensor 15 (State Library), 2020-05-01 to 2021-11-30. In those 19 months its counts equal sensor 66's (QV2, 300 Swanston St) in every hour both report, and then sensor 15 stops. Sensor 66 started in April 2020 and still reports, so the copy is 15's, and 66 keeps its series. The validation check "one series under two ids" (`docs/pipeline/validation.md`) catches new cases.
+
 ## Time handling
 
 People follow the local clock, so **hour, weekday and every calendar column use Melbourne local time, daylight saving included.** Physical quantities use the real instant: weather is joined on UTC, and sun elevation is computed from UTC.

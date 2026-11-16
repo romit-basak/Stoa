@@ -220,6 +220,12 @@ counts_hourly:
   covid_period: ["2020-03-16", "2021-10-21"]
   # Metro Tunnel stations opened (structural break; see CLAUDE.md "Generalization").
   metro_tunnel_opened: "2025-11-30"
+  # Rows to drop: location_id, from and to (local dates, both included) and why.
+  drop_rows:
+    # Sensor 15 (State Library) repeats sensor 66's counts (QV2, 300 Swanston St) for every
+    # hour of these 19 months, then stops; 66 started in April 2020 and still runs. So the
+    # copy is 15's, and 66 keeps its series.
+    - {location_id: 15, from: "2020-05-01", to: "2021-11-30", reason: "copy of sensor 66"}
 
 sensor_steepness:
   # Footpath slope and elevation per count sensor (src/features/sensor_steepness.py).

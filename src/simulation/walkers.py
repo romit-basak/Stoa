@@ -15,6 +15,8 @@ For one night at one area:
    event-exit minute profile, and it reaches later sensors at walking speed.
 5. Counts per 5-minute block and sensor are split into directions with the sensor's
    hourly direction shares, and compared with the observed series (observed.py).
+6. Each walker's route and time at the lead sensor are saved for the microsimulation
+   (microsim.py).
 
 Sensors left out of the fit are the real test.
 
@@ -217,9 +219,9 @@ def crossings(
         for i in on_route:
             lag = (offset[i, j] - offset[first, j]) / speed / 60
             times = hour_start + pd.to_timedelta(minutes + lag, unit="min")
-            rows.append(pd.DataFrame({"sensor_index": i, "time": times}))
+            rows.append(pd.DataFrame({"sensor_index": i, "route": j, "time": times}))
     if not rows:
-        return pd.DataFrame(columns=["sensor_index", "time"])
+        return pd.DataFrame(columns=["sensor_index", "route", "time"])
     return pd.concat(rows, ignore_index=True)
 
 
@@ -436,9 +438,10 @@ def run(
             round(trips.sum()),
         )
 
-    simulated = to_blocks(
-        pd.concat(parts, ignore_index=True), sensors, area["block_minutes"]
-    )
+    passed = pd.concat(parts, ignore_index=True)
+    lead_index = sensors.index(area["lead_sensor"])
+    agents = passed[passed["sensor_index"] == lead_index][["route", "time"]]
+    simulated = to_blocks(passed, sensors, area["block_minutes"])
     share = [
         direction_share.get((s, b.hour), 0.5)
         for s, b in simulated[["location_id", "block"]].itertuples(index=False)
@@ -458,6 +461,7 @@ def run(
     result.to_csv(out / f"walkers_compare_{night}.csv", index=False)
     table = route_table(routes, walkers_per_route)
     table.to_parquet(out / f"walkers_routes_{night}.parquet", index=False)
+    agents.to_parquet(out / f"walkers_agents_{night}.parquet", index=False)
     return result
 
 

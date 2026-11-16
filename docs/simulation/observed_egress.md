@@ -105,10 +105,43 @@ Observed (black) and simulated (orange) people per 5 minutes at sensor 161.
 
 ![Observed crowd at the five sensors on 27 October](figures/observed_2026-10-27.png)
 
+## JuPedSim around sensor 161 (27 October)
+
+`src/simulation/microsim.py` follows step 3 of getting_started.md. It takes the walkers on
+the routes past sensor 161, builds a corridor along each route from 150 m before the
+sensor to 150 m after it, 6 m wide, and moves them through it with JuPedSim's Collision
+Free Speed Model. Each walker enters when it would reach 161 at the walkers' time, and a
+line across the path at 161 counts them per 5 minutes. JuPedSim runs in its own
+environment (LGPL-3.0, getting_started.md):
+
+```bash
+jps-env/bin/python -m src.simulation.microsim --area melbourne_park --night 2026-10-27
+```
+
+| Source | Total | Peak block | Peak count | Correlation with observed |
+|---|---|---|---|---|
+| Observed | 1,477 | 23:00 | 452 | |
+| Walkers (fixed speed) | 1,442 | 23:00 | 335 | 0.87 |
+| JuPedSim | 1,442 | 23:00 | 335 | 0.87 |
+
+![Sensor 161 on 27 October: observed, walkers and JuPedSim](figures/microsim_2026-10-27.png)
+
+- JuPedSim matches the walkers block for block. At most 273 people were in the 1,792 m2
+  corridor at once, about 0.15 per m2, well below the densities where walking slows, so
+  crowding moves no one into another 5-minute block.
+- So the lower simulated peak at 161 (335 against 452) doesn't come from crowding on this
+  path. It comes from when people leave, which the departure-spread calibration addresses.
+- The corridor's 6 m width is an assumption (OSM has no width for most of these paths),
+  and buildings aren't cut out yet. JuPedSim should matter more at narrower points such
+  as bridges and station entrances.
+- These results are planning guidance for outdoor approach areas, never a crowd-safety
+  assessment (core rule 7).
+
 ## Next
 
 1. A route cost with path type, slope, shade and crossings, so routes follow the river
    path, then the test at sensor 136.
 2. Calibrate the departure spread per night, fitting on some concert nights and testing
    on others.
-3. The same area in JuPedSim (`microsim.py`), with the walkers as input.
+3. A wider JuPedSim area with real path widths and buildings cut out, including the
+   bridges and station entrances where crowding matters.

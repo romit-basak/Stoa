@@ -45,5 +45,11 @@ def test_the_figures_are_written(tmp_path):
         "2026-10-27",
         tmp_path / "observed.png",
     )
-    for path in (written, nights, seen):
+    blocks = pd.date_range("2026-10-27 22:00", periods=12, freq="5min", tz=figures.TZ)
+    table = pd.DataFrame(
+        {"observed": counts, "walkers": counts * 0.9, "jupedsim": counts * 0.8},
+        index=blocks,
+    )
+    micro = figures.microsim_figure(table, "2026-10-27", 161, tmp_path / "micro.png")
+    for path in (written, nights, seen, micro):
         assert path.exists() and path.stat().st_size > 1000

@@ -10,7 +10,9 @@ Writes PNG files to docs/simulation/figures/:
   and simulated totals;
 - sensor_<id>_nights.png: observed and simulated counts per 5 minutes at the lead
   sensor, one panel per night;
-- observed_<night>.png: observed counts per 5 minutes at every sensor on one night.
+- observed_<night>.png: observed counts per 5 minutes at every sensor on one night;
+- microsim_<night>.png: observed, walkers and JuPedSim at the lead sensor, when
+  microsim.py has run for the map night.
 
 Run observed.py and walkers.py for the nights first.
 """
@@ -217,6 +219,35 @@ def observed_figure(
     return path
 
 
+def microsim_figure(table: pd.DataFrame, night: str, sensor: int, path: Path) -> Path:
+    """Observed, walkers and JuPedSim counts per 5 minutes at the lead sensor."""
+    plt = pyplot()
+    from matplotlib.ticker import FuncFormatter
+
+    colours = {"observed": "black", "walkers": "#e8710a", "jupedsim": "#1f6fb4"}
+    labels = {"observed": "observed", "walkers": "walkers", "jupedsim": "JuPedSim"}
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    minutes = minutes_after_start(pd.Series(table.index), night)
+    for name in [c for c in colours if c in table.columns]:
+        ax.plot(
+            minutes,
+            table[name].to_numpy(),
+            marker="o",
+            markersize=3,
+            color=colours[name],
+            label=labels[name],
+        )
+    ax.xaxis.set_major_formatter(FuncFormatter(clock))
+    ax.set_ylabel("people per 5 minutes")
+    ax.set_title(f"Sensor {sensor}, {night}: observed, walkers and JuPedSim")
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def lines_of(geometry) -> list[np.ndarray]:
     parts = getattr(geometry, "geoms", [geometry])
     return [np.asarray(part.coords) for part in parts]
@@ -333,6 +364,16 @@ def run(area_name: str, map_night: str, nights: list[str]) -> list[Path]:
     if series:
         written.append(
             observed_figure(series, map_night, FIGURES / f"observed_{map_night}.png")
+        )
+    micro = out / f"microsim_{map_night}.parquet"
+    if micro.exists():
+        written.append(
+            microsim_figure(
+                pd.read_parquet(micro),
+                map_night,
+                lead,
+                FIGURES / f"microsim_{map_night}.png",
+            )
         )
     for path in written:
         log.info("wrote %s", path)

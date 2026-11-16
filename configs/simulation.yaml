@@ -59,3 +59,25 @@ areas:
         richmond_station: {lat: -37.8244, lon: 144.9903, weight: 3}
         jolimont_station: {lat: -37.8166, lon: 144.9844, weight: 2}
         parliament_station: {lat: -37.8113, lon: 144.9730, weight: 1}
+
+    # JuPedSim around the lead sensor (src/simulation/microsim.py).
+    microsim:
+      # Each route's corridor runs this far before and after the lead sensor.
+      before_m: 150
+      after_m: 150
+      # Half the corridor's width. OSM has no width for most of these paths, so this is
+      # an assumption to check on satellite imagery.
+      half_width_m: 3.0
+      # Agents start this far inside the corridor, across a few lanes.
+      entry_inset_m: 1.0
+      lateral_offsets_m: [-1.5, -0.75, 0.0, 0.75, 1.5]
+      waypoint_spacing_m: 15.0
+      waypoint_reach_m: 2.0
+      exit_radius_m: 2.5
+      agent_radius_m: 0.2
+      # Simulation time step, how often entries and the counting line are checked, and
+      # the longest run, in seconds and minutes.
+      dt: 0.05
+      check_s: 0.5
+      max_minutes: 240
+      seed: 7

@@ -42,6 +42,17 @@ Rich variant (portable in brackets where it differs):
 - **Calibration does help.** Scaling each sensor to its first 28 days of counts halves the quiet sensors' error (1.08 to 0.57) and cuts the overall WAPE from 0.632 to 0.420.
 - **What's left after calibration is a different problem.** More groups now count as "worse", but only because the overall error they're compared with fell so far: 59 of the 60 groups improve in absolute terms. The exception is Parkville, on one sensor. The worst slices are now the City's "Remainder" precinct (1.69 times), the COVID era and night (0.65, 1.58 times), and Docklands. One scale per sensor can't fix a pattern that's wrong at some hours; those need changes to the model's features, not weights or scales.
 
+**The buffered retrain** (`stoa_train` run `ci__20261116T043438`, registered as v2, `challenger`) gives the same picture, with a lower worst slice: quiet sensors at 1.64 times overall WAPE (rich) and 1.65 (portable), and 5 and 9 groups worse. Its mitigations:
+
+| Mitigation | Rich: log MAE | WAPE | Worst slice | Portable: log MAE | WAPE | Worst slice |
+|---|---|---|---|---|---|---|
+| None (selected model) | 0.877 | 0.639 | 1.64 | 0.888 | 0.645 | 1.65 |
+| Sensor-equal weights | 0.888 | 0.652 | 1.52 | 0.919 | 0.674 | 1.63 |
+| Volume tiers weighted equally | 0.892 | 0.651 | 1.65 | 0.894 | 0.643 | 1.44 |
+| Calibrated to 28 days of local counts | 0.606 | 0.424 | 1.66 | 0.607 | 0.419 | 1.66 |
+
+One result differs from the seed-7 run above. For the portable model, weighting the volume tiers equally lowers the worst slice from 1.65 to 1.44 for 0.7% more log MAE, with WAPE unchanged. That's the cheapest trade any weighting has given, and it's worth testing on more seeds before deciding whether portable should train with it.
+
 ## Decision and trade-offs
 
 - **Keep the selected model unweighted.** Both weightings cost accuracy, and the fairness they buy is small and not consistent across the two variants.

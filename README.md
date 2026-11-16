@@ -447,7 +447,7 @@ The models in the registry come from the first `stoa_train` run on the team's GC
 | Worst slice (quiet sensors), times overall WAPE (gate: 2.25) | 1.99 | 1.87 |
 | WAPE calibrated to 28 days of each sensor's counts | 0.402 | 0.406 |
 
-This run used the code of 16 November before the buffered folds (`607c7b1`): its folds don't leave out each test sensor's neighbours, and its search used two inner folds. That's why its gain over Space Syntax (10.8%) is smaller than in the seed study above (14.8%). The model scores about the same (0.874 against 0.872); without the buffer, Space Syntax gets an easier test (0.980 against 1.023), since its calibration can lean on sensors next to the one it predicts. The next `stoa_train` run on main uses the buffered folds and the parameters in `configs/models.yaml`, and must beat these champions to replace them.
+This run used the code of 16 November before the buffered folds (`607c7b1`): its folds don't leave out each test sensor's neighbours, and its search used two inner folds. That's why its gain over Space Syntax (10.8%) is smaller than in the seed study above (14.8%). The model scores about the same (0.874 against 0.872); without the buffer, Space Syntax gets an easier test (0.980 against 1.023), since its calibration can lean on sensors next to the one it predicts. The next run, on buffered folds, is [below](#the-buffered-retrain).
 
 ![Candidates, baselines and the bias check of the registered rich model](docs/models/figures/registered_2026-11-16/model_comparison_rich.png)
 
@@ -466,6 +466,31 @@ This run used the code of 16 November before the buffered folds (`607c7b1`): its
 *The registered rich model's WAPE in each of the 60 groups of the 18 bias slices (`configs/bias.yaml`), with 95% intervals from resampling sensors; the dashed line is the overall WAPE, 0.617 (scored, like the bias check, on the hours after each sensor's first 28 days). Seven groups are clearly worse, their whole interval above the line. Quiet sensors are furthest (WAPE 1.23, 1.99 times overall, the slice the gate checks against its 2.25 limit), then Southbank (1.33 times), Melbourne (Remainder) (1.26 times), sensors with few amenities nearby (1.22 times) and the COVID era (1.10 times). Carlton and West Melbourne (Residential) are also above, but on 1 and 4 sensors, too few to count (grey). Time of day, weekdays, holidays, weather, AFL days and slope all sit on the overall error. For the portable model (`fairness_by_group_portable.png`), ten groups are worse, led by the same quiet sensors (1.87 times) and night (1.11 times).*
 
 The portable model's charts, the calibration curves and `summary.json` (the run ids, metrics and tuned values behind every number here) are in [`docs/models/figures/registered_2026-11-16/`](docs/models/figures/registered_2026-11-16/).
+
+### The buffered retrain
+
+The second `stoa_train` run on the VM, `ci__20261116T043438` (16 November 2026, code `9396ec0`, the same data version, `tune` off), was the first on main with the buffered folds. It reused the registered run's searched parameters (`--params-from`), passed every gate check, and registered v2 of both models. Neither was promoted. The champion check compares raw log MAE, and v2's is a little higher than v1's (rich 0.8775 against 0.8742, portable 0.8877 against 0.8785), so v2 has the alias `challenger` and `champion` stays on v1.
+
+| | Rich v2 | Portable v2 |
+|---|---|---|
+| Selected | LightGBM | LightGBM |
+| log MAE, location folds (v1) | 0.877 (0.874) | 0.888 (0.878) |
+| Below Space Syntax (1.024) | **14.3%** (gate: 10%) | **13.3%** |
+| Below betweenness (1.090) | 19.5% | 18.6% |
+| WAPE | 0.639 | 0.645 |
+| Sensor rank correlation, uncalibrated / calibrated | 0.52 / 0.95 | 0.57 / 0.95 |
+| 80% interval coverage, location folds (gate: 0.75 to 0.85) | 0.772 | 0.780 |
+| 80% interval coverage, holdout precincts (not gated) | 0.645 | 0.600 |
+| log MAE, holdout precincts | 0.878 | 1.017 |
+| log MAE, event days / other days | 0.902 / 0.873 | 0.913 / 0.886 |
+| log MAE after the Metro Tunnel opened | 0.851 | 0.863 |
+| Worst slice (quiet sensors), times overall WAPE (gate: 2.25) | 1.64 | 1.65 |
+| WAPE calibrated to 28 days of each sensor's counts | 0.424 | 0.419 |
+
+- **v2 is essentially v1, scored on a harder test.** Both final models are fitted on every fold sensor, with the same data and the same parameters (rich LightGBM's are the 12 November values, which v1's search also picked; portable's come from v1's search). Their holdout-precinct scores match to three decimals (0.878 and 1.017). The buffer changes only the folds that score them: dropping each test sensor's neighbours from training raises the model's fold error a little (rich 0.874 to 0.877) and Space Syntax's a lot (0.980 to 1.024). The gain over Space Syntax goes from 10.8% to 14.3% (rich) and from 10.3% to 13.3% (portable). A check on raw log MAE across two fold plans can't see that. Comparing each model's gain over the Space Syntax run scored on its own folds would. Moving `champion` to v2 by hand, or changing the check to use gains, is for the team to decide. Until then v1 serves.
+- **XGBoost was more accurate for rich** (0.868, which would also have beaten v1's 0.874). It was on the shortlist with LightGBM, within 3%, and LightGBM had the smaller worst slice, so selection after the bias check picked LightGBM.
+- **The intervals are too narrow in the holdout precincts.** The margins that widen the final models' intervals are fitted on the location folds. In the holdout precincts, which this code is the first to score for coverage, the intervals hold 64% (rich) and 60% (portable) of hours, not 80%. Intervals for an area unlike the training sensors should be read as too narrow.
+- **Mitigations.** Calibration cuts WAPE from 0.639 to 0.424 (rich). Weighting sensors equally lowers rich's worst slice from 1.64 to 1.52 for 1.2% more log MAE. For portable, weighting the volume tiers equally lowers it from 1.65 to 1.44 for 0.7% more log MAE, with WAPE unchanged (0.643 against 0.645). That's the cheapest trade any weighting has given so far ([docs/bias/model_bias.md](docs/bias/model_bias.md)).
 
 ### Hyperparameter tuning
 
@@ -552,7 +577,7 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 ### Registry, promotion and rollback
 
 `registry.py` uses the MLflow model registry, with one registered model per variant (`stoa-flow-rich`, `stoa-flow-portable`):
-- **What's registered** is the selected run's bundle (`src/models/flow/bundle.py`): the mean model, the two quantile models and the interval margins as one MLflow model. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@champion").predict(features)` returns `predicted`, `lower` and `upper` for each segment-hour, the count and bounds of the Predictions interface in CLAUDE.md.
+- **What's registered** is the selected run's bundle (`src/models/flow/bundle.py`): the mean model, the two quantile models and the interval margins as one MLflow model. `mlflow.pyfunc.load_model("models:/stoa-flow-rich@challenger").predict(features)` returns `predicted`, `lower` and `upper` for each segment-hour, the count and bounds of the Predictions interface in CLAUDE.md. The current champions, v1, were registered by code from before the bundle and hold the mean model only, so they return `predicted` alone; v2 (`challenger`) is a bundle.
 - **Gate.** `--check` compares the latest selected run of each variant with the Space Syntax run on the same data version and fold plan. The rich variant must pass; the portable one is registered only if it passes.
 - **Promotion.** `--promote` registers a model that passed the gate and moves the `champion` alias to it, unless its `log_mae_cv` is worse than the current champion's (`gates.champion_tolerance`, 0). Then it's registered as `challenger`, the champion keeps serving, and the run's email says so. This is the automatic rollback: a worse retrain is kept for inspection but never served. A tie replaces the champion, since the new model saw newer data.
 - **Rollback by hand.** `--rollback --variant rich` moves `champion` back to the version it replaced. Each champion records its predecessor, so rollback can be repeated one version at a time. With `--variant both`, nothing changes unless both variants can roll back.
@@ -570,7 +595,7 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 ### Where the model stands
 
 - **The gate.** The team set it at 10% below Space Syntax on 16 November 2026, down from the original 15%. On the buffered folds both variants clear it on every seed: rich 14.3% to 15.5%, portable 13.1% to 13.8%. At seed 7 both also pass the other two checks (coverage 0.782 and 0.780; worst slice 1.70 and 1.67, limit 2.25).
-- **What's registered.** `stoa-flow-rich` v1 and `stoa-flow-portable` v1 are the champions, from the first `stoa_train` run on the GCP VM (16 November 2026, [The registered model](#the-registered-model)): 10.8% and 10.3% below Space Syntax on unbuffered folds, all gate checks passed. The seed study above is in the side experiment `stoa-flow-buffer`. The next `stoa_train` run on main trains on buffered folds with the parameters in `configs/models.yaml`, and replaces the champions only if it beats them.
+- **What's registered.** `stoa-flow-rich` v1 and `stoa-flow-portable` v1 are the champions, from the first `stoa_train` run on the GCP VM (16 November 2026, [The registered model](#the-registered-model)): 10.8% and 10.3% below Space Syntax on unbuffered folds, all gate checks passed. v2 of each, from the buffered retrain the same night ([The buffered retrain](#the-buffered-retrain)), is 14.3% and 13.3% below Space Syntax and passed every gate check, but is registered as `challenger`: its raw log MAE is slightly higher than v1's, which was scored on the easier unbuffered folds. The seed study above is in the side experiment `stoa-flow-buffer`.
 - **Next for the model:** the NYC cross-city test with the portable model.
 
 ## Tests and lint
@@ -780,7 +805,9 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 - Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions (`stoa_train`).
 - Infrastructure: a shared Airflow and MLflow server on a GCP VM ([docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md)).
 
-**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, and deploying the flow model on Cloud Run.
+- Simulation: observed crowds leaving Melbourne Park after concerts, route-sampling walkers fitted to them, and a JuPedSim microsimulation around one sensor ([docs/simulation/observed_egress.md](docs/simulation/observed_egress.md)).
+
+**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation beyond Melbourne Park, viewshed, the API and web app, and deploying the flow model on Cloud Run.
 
 ## Ground rules
 

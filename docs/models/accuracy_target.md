@@ -83,5 +83,6 @@ The CLAUDE.md checkpoint is to stop investing in the model if it doesn't beat Sp
 ## What changed with the decision
 
 - `flow.gates.log_mae_improvement` is 0.10, and the criterion is updated in `docs/PROJECT_CONTEXT.md`, `docs/models/flow_model.md` and `docs/models/modelling_plan.md`.
-- `stoa-flow` still holds the unbuffered models of 12 November. The next `stoa_train` run on main trains on buffered folds with their parameters (it reuses the last run's, `--params-from`), gates against 10%, and registers and promotes the models that pass.
+- The first `stoa_train` run on the GCP VM (16 November, code from before the buffer, `tune` on) registered v1 of both models as `champion`: 10.8% (rich) and 10.3% (portable) below Space Syntax on unbuffered folds.
+- The run after it, on main with the buffered folds and v1's parameters, scored 14.3% and 13.3% below Space Syntax (1.024) and passed every gate check. It was registered as v2 with the alias `challenger`, not promoted, because the champion check compares raw log MAE (rich 0.8775 against v1's 0.8742) and v1 was scored on the easier unbuffered folds. Both versions' final models are fitted on the same data with the same parameters, and they score the same on the holdout precincts (0.878 rich, 1.017 portable). The details are in the README, "The buffered retrain".
 - The 15% target is reported as missed, with these results, not dropped from the write-up.

@@ -355,3 +355,13 @@ def test_send_goes_through_alerts(monkeypatch):
     )
     assert notify.send("subj", "<p>x</p>")
     assert sent == ["subj"]
+
+
+def test_params_come_from_an_earlier_run_then_the_tuned_values_then_the_defaults():
+    from src.models.flow.train import family_params
+
+    cfg = {"candidates": {"lgbm": {"params": {"n": 1}, "tuned": {"rich": {"n": 2}}}}}
+    assert family_params(cfg, "lgbm", "rich") == {"n": 2}
+    assert family_params(cfg, "lgbm", "portable") == {"n": 1}
+    earlier = {"rich": {"lgbm": {"n": 3}}}
+    assert family_params(cfg, "lgbm", "rich", earlier) == {"n": 3}

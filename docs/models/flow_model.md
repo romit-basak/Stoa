@@ -153,7 +153,7 @@ docker compose up -d mlflow                     # the tracking server (localhost
 
 Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --final-train-rows 300000`. `train --tune` runs the search first, and `--families hgb lgbm` limits the candidates.
 
-`train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
+`train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. Without `--tune`, each family trains with the values of the search of 12 November 2026, per variant (`flow.candidates.<family>.tuned` in `configs/models.yaml`), which every reported result uses; a family without them uses its `params`. `train --params-from data/models` reuses an earlier run's parameters instead, so a later search carries over. The comparison of start years is in [training_periods.md](training_periods.md).
 
 In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
 

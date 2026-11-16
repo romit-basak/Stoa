@@ -7,8 +7,10 @@ For one night at one area:
 2. Several routes per destination come from shortest paths on segment length, each
    with random noise on the costs, so walkers don't all take one path.
 3. Walkers per route and hour are fitted with non-negative least squares so that the
-   number passing each fitted sensor matches its observed hourly count, pulled towards
-   a prior that splits the crowd by destination weight and favours shorter routes.
+   number passing each fitted sensor matches its observed hourly count less the usual
+   count for that hour (a low percentile of the same weekday and hour in the weeks
+   before, skipping listed event days), pulled towards a prior that splits the crowd by
+   destination weight and favours shorter routes.
 4. Each walker's time at the first sensor on its route is drawn at random from the
    event-exit minute profile, and it reaches later sensors at walking speed.
 5. Counts per 5-minute block and sensor are split into directions with the sensor's
@@ -120,6 +122,33 @@ def incidence(
                 passes[i, j] = 1.0
                 offset[i, j] = where[sensor_segments[sensor]]
     return passes, offset
+
+
+def background(
+    hourly: pd.DataFrame,
+    night: str,
+    hours: list[int],
+    weeks: int,
+    event_dates: set,
+    quantile: float = 0.5,
+) -> dict[tuple[int, int], float]:
+    """The usual count per sensor and hour, to subtract from an event night's count.
+
+    It is the `quantile` of the counts at the same hour on the same weekday in the
+    `weeks` weeks before the night, leaving out listed event days. A low quantile keeps
+    it on quiet weeks when earlier events weren't listed. Local dates are shifted before
+    the hour is added, so a daylight saving change in between keeps the same clock hour.
+    """
+    day = pd.Timestamp(night)
+    before = [day - pd.Timedelta(weeks=k) for k in range(1, weeks + 1)]
+    before = [d for d in before if d.date() not in event_dates]
+    usual = {}
+    for hour in hours:
+        starts = [(d + pd.Timedelta(hours=hour)).tz_localize(TZ) for d in before]
+        rows = hourly[hourly["ts_local"].isin(starts)]
+        for sensor, counts in rows.groupby("location_id")["pedestriancount"]:
+            usual[(int(sensor), hour)] = float(counts.quantile(quantile))
+    return usual
 
 
 def route_prior(
@@ -350,6 +379,17 @@ def run(
         & (profiles["hour_type"] == "event_post")
     ]
 
+    event_days = pd.read_parquet(REPO_ROOT / settings["event_days"])
+    event_dates = set(pd.to_datetime(event_days["date_local"]).dt.date)
+    usual = background(
+        hourly,
+        night,
+        cfg["hours"],
+        cfg["baseline_weeks"],
+        event_dates,
+        cfg["baseline_quantile"],
+    )
+
     fitted = [s for s in sensors if s in cfg["fit_sensors"]]
     fit_rows = [sensors.index(s) for s in fitted]
     day = pd.Timestamp(night, tz=TZ)
@@ -360,7 +400,9 @@ def run(
         start = day + pd.Timedelta(hours=hour)
         now = hourly[hourly["ts_local"] == start].set_index("location_id")
         counts = now["pedestriancount"]
-        targets = np.array([counts.get(s, 0.0) for s in fitted], dtype=float)
+        observed_now = np.array([counts.get(s, 0.0) for s in fitted], dtype=float)
+        usual_now = np.array([usual.get((s, hour), 0.0) for s in fitted])
+        targets = np.clip(observed_now - usual_now, 0.0, None)
         crowd = float(targets.max(initial=0.0))
         prior = route_prior(routes, weights, crowd, cfg["length_beta"])
         trips = fit_trips(passes[fit_rows], targets, prior, cfg["prior_weight"])
@@ -386,8 +428,10 @@ def run(
                 share_1 = now.loc[s, "direction_1"] / counts[s]
                 direction_share[(s, start.hour)] = share_1
         log.info(
-            "hour %02d: fitted targets %s, walkers %d",
+            "hour %02d: observed %s, usual %s, fitted %s, walkers %d",
             hour,
+            observed_now.astype(int).tolist(),
+            np.round(usual_now).astype(int).tolist(),
             targets.astype(int).tolist(),
             round(trips.sum()),
         )

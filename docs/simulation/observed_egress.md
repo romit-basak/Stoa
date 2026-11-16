@@ -1,7 +1,10 @@
 # Observed egress at Melbourne Park
 
-The first step of the simulation in [getting_started.md](getting_started.md): the observed
-series that the walkers and JuPedSim are compared with.
+The first steps of the simulation in [getting_started.md](getting_started.md): the
+observed series that the walkers and JuPedSim are compared with, and the walkers
+themselves.
+
+## Observed egress
 
 `src/simulation/observed.py` takes each concert at Rod Laver Arena and builds the counts at
 sensors 161, 136, 123, 124 and 75 in 5-minute blocks and by direction, from 2.5 to 5 hours
@@ -12,8 +15,6 @@ after the advertised start (no end times are published). Settings are in
 ```bash
 .venv/bin/python -m src.simulation.observed --area melbourne_park
 ```
-
-## Results
 
 On the archive to 11 November (8 of the 14 concerts listed):
 
@@ -31,69 +32,83 @@ On the archive to 11 November (8 of the 14 concerts listed):
 - Sensor 161 carries the crowd (1,000 to 1,500 a night); 136 sees about a tenth to a
   quarter of it, peaking in the same block or 5 minutes later. 123 and 75 see 13 to 66
   people and 124 almost none, so most of the crowd leaves the route after 161. 161 is the
-  main validation sensor and 136 the second; peak delays at the others are noise.
+  main sensor to compare with, and 136 the second; peak delays at the others are noise.
 - 27 October matches the 1,417 people at 161 between 22:50 and 23:30 noted in
   getting_started.md.
-- The Daniel Caesar nights show almost no crowd; their entries in `configs/events.yaml`
-  need checking before they're used.
+- The Daniel Caesar shows on 8 and 9 November were cancelled for health reasons (reported
+  in early November), so there was no crowd. Their entries in `configs/events.yaml`
+  should be marked or removed.
 - 25 October and 28 October had another event at Melbourne Park the same night.
 - None of the five sensors are among the eight that skip minutes :00 to :04.
 
-## Walkers on 27 October
+## Walkers
 
 `src/simulation/walkers.py` follows steps 1 and 2 of getting_started.md. Walkers leave
 from the graph nodes within 60 m of Rod Laver Arena, towards Flinders Street, Richmond,
-Jolimont and Parliament stations, on 20 noisy shortest paths per destination. Walkers per
-route are fitted with non-negative least squares to the hourly counts at 22:00 and 23:00
-at sensors 161, 123, 124 and 75; 136 is left out as the test. Each walker's time at its
-first sensor is drawn from sensor 161's event-exit minute profile, and later sensors
-follow at 1.3 m/s. Settings are under `walkers:` in `configs/simulation.yaml`.
+Jolimont and Parliament stations, on 20 noisy shortest paths per destination.
+
+Walkers per route are fitted with non-negative least squares to the hourly counts at
+22:00 and 23:00 at sensors 161, 123, 124 and 75, less the usual count for that hour, so
+that only the concert crowd is fitted. The usual count is the 25th percentile of the same
+weekday and hour over the 8 weeks before, skipping listed event days; Melbourne Park has
+unlisted events most weeks, which pushed a median up to over 500 people. Sensor 136 is
+left out of the fit as the test. Each walker's time at its first sensor is drawn from
+sensor 161's event-exit minute profile, and later sensors follow at 1.3 m/s. Settings are
+under `walkers:` in `configs/simulation.yaml`.
 
 ```bash
 .venv/bin/python -m src.simulation.walkers --area melbourne_park --night 2026-10-27
 ```
 
-| Sensor | In the fit | Observed | Simulated | Observed peak | Simulated peak | Correlation |
+Sensor 161 on the five concert nights:
+
+| Night | Observed | Usual (both hours) | Simulated | Observed peak | Simulated peak | Correlation |
 |---|---|---|---|---|---|---|
-| 161 | Yes | 1,477 | 1,468 | 23:00 (452) | 23:00 (335) | 0.87 |
-| 75 | Yes | 38 | 19 | 23:10 (9) | 23:10 (4) | 0.46 |
-| 123 | Yes | 66 | 0 | 23:00 (28) | none | |
-| 124 | Yes | 0 | 19 | none | 23:00 (4) | |
-| 136 | No (test) | 335 | 0 | 23:00 (91) | none | |
+| 26 Oct | 994 | 30 | 960 | 22:50 | 22:25 | 0.15 |
+| 27 Oct | 1,477 | 22 | 1,442 | 23:00 | 23:00 | 0.87 |
+| 28 Oct | 1,448 | 23 | 1,412 | 22:25 | 22:25 | 0.77 |
+| 29 Oct | 1,271 | 40 | 1,224 | 22:25 | 22:25 | 0.81 |
+| 2 Nov | 1,028 | 39 | 846 | 23:15 | 23:00 | 0.37 |
 
-- At 161 the walkers match the total and the peak block. The simulated peak is flatter,
-  as getting_started.md expects from average profiles.
-- No sampled route passes 136, 123 or most of the riverside paths: shortest paths on
-  distance alone don't follow the river path the crowd uses after 161, so the test sensor
-  can't be checked yet.
-- Walkers on routes that pass no fitted sensor stay at the prior, so the total crowd
-  (about 2,200 in the 23:00 hour) is rough.
-- The minute profile is pooled from the same archive, including this night, so the
-  timing at 161 is not an independent test.
+**These results are not validated.** 161 is in the fit, so matching its totals is
+expected. The test sensor, 136, gets no sampled routes on any night: shortest paths on
+distance alone don't follow the river path the crowd takes after 161. 123 also gets no
+routes, and 75 and 124 get only a few walkers.
 
-### All five concert nights at sensor 161
+- The peak block at 161 matches on 27, 28 and 29 October. On 26 October and 2 November
+  the simulated peak comes 15 to 25 minutes early: the minute profile is pooled across
+  nights, so a show that finishes at an unusual time puts the peak in the wrong part of
+  the hour. 2 November also loses part of its crowd that leaves after midnight, outside
+  the fitted hours.
+- The minute profile comes from the same archive, including these nights, so the timing
+  at 161 is not an independent test either.
+- Walkers on routes that pass no fitted sensor stay at the prior, so the total crowd is
+  rough.
 
-The same settings on the other good nights:
+### Figures
 
-| Night | Observed | Simulated | Observed peak | Simulated peak | Correlation |
-|---|---|---|---|---|---|
-| 26 Oct | 994 | 989 | 22:50 | 22:25 | 0.11 |
-| 27 Oct | 1,477 | 1,468 | 23:00 | 23:00 | 0.87 |
-| 28 Oct | 1,448 | 1,438 | 22:25 | 22:25 | 0.77 |
-| 29 Oct | 1,271 | 1,262 | 22:25 | 22:25 | 0.79 |
-| 2 Nov | 1,028 | 884 | 23:15 | 23:00 | 0.42 |
+Produced by `src/simulation/figures.py`:
 
-- Totals match because 161 is in the fit. 2 November is lower because part of its crowd
-  leaves after midnight, outside the fitted hours.
-- The peak block matches on three nights. On 26 October and 2 November the simulated peak
-  comes 15 to 25 minutes early: the minute profile is pooled across nights, so a show that
-  finishes at an unusual time puts the peak in the wrong part of the hour. Calibrating
-  the departure spread per night (step 4) is the fix.
-- 75 gets about half its observed count each night, and 136 gets no routes on any night.
+```bash
+.venv/bin/python -m src.simulation.figures --area melbourne_park \
+    --map-night 2026-10-27 --nights 2026-10-26 2026-10-27 2026-10-28 2026-10-29 2026-11-02
+```
+
+![Walkers leaving the concert on 27 October](figures/walkers_map_2026-10-27.png)
+
+The walkers' routes from Rod Laver Arena, thicker and darker where more walkers go, with
+the sensors (red) and the stations they head to (blue).
+
+![Sensor 161 on five concert nights](figures/sensor_161_nights.png)
+
+Observed (black) and simulated (orange) people per 5 minutes at sensor 161.
+
+![Observed crowd at the five sensors on 27 October](figures/observed_2026-10-27.png)
 
 ## Next
 
 1. A route cost with path type, slope, shade and crossings, so routes follow the river
-   path, then check sensor 136.
-2. Run the other concert nights, fitting on some and testing on others.
-3. The same area in JuPedSim (microsim.py), with the walkers as input.
+   path, then the test at sensor 136.
+2. Calibrate the departure spread per night, fitting on some concert nights and testing
+   on others.
+3. The same area in JuPedSim (`microsim.py`), with the walkers as input.

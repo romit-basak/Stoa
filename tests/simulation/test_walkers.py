@@ -140,3 +140,37 @@ def test_the_route_table_keeps_walkers_and_segments_in_order():
     assert list(table["destination"]) == ["d", "e"]
     assert list(table["walkers"]) == [12.5, 0.0]
     assert list(table["segments"][0]) == ["oa", "aj", "jd"]
+
+
+def test_the_usual_count_is_the_median_of_earlier_weeks_without_event_days():
+    rows = []
+    for weeks_before, count in [(1, 30), (2, 50), (3, 40), (4, 999)]:
+        day = pd.Timestamp("2026-10-27") - pd.Timedelta(weeks=weeks_before)
+        start = (day + pd.Timedelta(hours=23)).tz_localize(TZ)
+        rows.append({"location_id": 161, "ts_local": start, "pedestriancount": count})
+    hourly = pd.DataFrame(rows)
+    event_day = (pd.Timestamp("2026-10-27") - pd.Timedelta(weeks=4)).date()
+    usual = walkers.background(hourly, "2026-10-27", [23], 4, {event_day})
+    assert usual == {(161, 23): 40.0}
+
+
+def test_the_usual_count_keeps_the_clock_hour_across_daylight_saving():
+    before = (pd.Timestamp("2026-10-06") + pd.Timedelta(hours=22)).tz_localize(TZ)
+    hourly = pd.DataFrame(
+        {"location_id": [161], "ts_local": [before], "pedestriancount": [12]}
+    )
+    usual = walkers.background(hourly, "2026-10-06", [22], 1, set())
+    assert usual == {}
+    later = walkers.background(hourly, "2026-10-13", [22], 1, set())
+    assert later == {(161, 22): 12.0}
+
+
+def test_a_low_quantile_ignores_unlisted_event_weeks():
+    rows = []
+    for weeks_before, count in enumerate([700, 10, 1200, 15, 900, 12, 20, 1100], 1):
+        day = pd.Timestamp("2026-10-27") - pd.Timedelta(weeks=weeks_before)
+        start = (day + pd.Timedelta(hours=22)).tz_localize(TZ)
+        rows.append({"location_id": 161, "ts_local": start, "pedestriancount": count})
+    hourly = pd.DataFrame(rows)
+    usual = walkers.background(hourly, "2026-10-27", [22], 8, set(), quantile=0.25)
+    assert usual[(161, 22)] < 20

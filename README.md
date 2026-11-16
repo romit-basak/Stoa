@@ -277,7 +277,7 @@ Our data has no people in it. The counts are anonymous totals per sensor and hou
 We slice the hourly table 20 ways, including precinct, how busy the sensor is, nearby amenities, slope, time of day, holidays, rain, temperature, era (before, during and after COVID) and AFL match days. The slices are defined in `configs/bias.yaml`.
 
 1. **How much data each group has** (`bias_slices`). Each group's share is compared with a fair reference: hours in the study period for time and weather, walkable network for precincts, and footpath length for slope. Place is the most uneven: the city centre has five times its share of sensors, while Carlton, North Melbourne, Parkville and Kensington have about a third of theirs or less.
-2. **Where a model does worse** (`bias_errors`). A gradient-boosting baseline stands in for the flow model here, so the data stage doesn't depend on it; the flow model's own check is in [Bias in the model](#bias-in-the-model). It's trained in 5 folds with whole sensors held out (since 15 November, whole spatial groups, which raises the overall WAPE to 0.60 and clears Kensington; the rest of the picture holds). We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
+2. **Where a model does worse** (`bias_errors`). A gradient-boosting baseline stands in for the flow model here, so the data stage doesn't depend on it; the flow model's own check, mitigation and gate are in [Bias in the model](#bias-in-the-model) and [docs/bias/model_bias.md](docs/bias/model_bias.md). It's trained in 5 folds with whole sensors held out (since 15 November, whole spatial groups, which raises the overall WAPE to 0.60 and clears Kensington; the rest of the picture holds). We measure its relative error (WAPE) per group with Fairlearn's `MetricFrame`, with 95% intervals from resampling sensors. On the run of 25 October, which the write-up describes, overall WAPE is 0.53. Nine groups are clearly worse, including quiet sensors, sensors with few amenities nearby, Southbank, night and late evening, public holidays and the COVID era. Most thin outer precincts are not, apart from Kensington's 2 sensors.
 3. **Mitigation.** Reweighting the training rows (two ways) didn't lower the overall error and moved error from some weak groups onto others, so we rejected it. Calibrating each sensor to four weeks of its own counts cut the overall error by about 30% (WAPE 0.53 to 0.38) and fixed the quiet, low-amenity, Southbank and Kensington sensors. Night and COVID are still worse: their error is in the shape of the pattern, which needs changes to the model, not the weights. The rerun on 5 November, with eleven more days of counts, gave 0.53 before calibration and 0.37 after.
 4. **The per-minute data** (`minute_coverage`). The same slices showed the per-minute profiles under-cover quiet hours, so quiet hours are pooled by volume tier. On the run of 13 November (18 days of minutes) that raised coverage from 71% to 92% of sensor-hours (quiet sensors from 60% to 97%, night from 33% to 92%). Carlton and Parkville stay the least covered (63% and 65%), because three of their sensors never publish the first 5 minutes of each hour.
 
@@ -326,7 +326,7 @@ A daily run takes about 2 minutes. Once a week, `bias_errors` adds about 16 minu
 
 ## The model pipeline
 
-The flow model predicts the hourly pedestrian count on a path segment, with an 80% interval. It trains on the Melbourne sensors and can predict any segment that has features, so it covers the whole network, not only the sensors. The code is in `src/models/flow/`, the settings in `configs/models.yaml` (`flow`), and the full method in [docs/models/flow_model.md](docs/models/flow_model.md).
+The flow model predicts the hourly pedestrian count on a path segment, with an 80% interval. It trains on the Melbourne sensors and can predict any segment that has features, so it covers the whole network, not only the sensors. It has to work on sensors and precincts it has never seen, so every score comes from whole sensors held out, never from held-out hours of a sensor it trained on. The code is in `src/models/flow/`, the settings in `configs/models.yaml` (`flow`), and the full method in [docs/models/flow_model.md](docs/models/flow_model.md).
 
 A second Airflow DAG, `stoa_train` (`dags/stoa_train.py`), runs it in the same Docker image as the data pipeline, on the training frame that `stoa_pipeline` last built. On the team's GCP VM, GitHub Actions starts it on a push to main that changes the model code and once a month ([CI/CD and notifications](#cicd-and-notifications)); anyone can also trigger it by hand. The daily data pipeline never trains.
 
@@ -336,10 +336,10 @@ train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─
 
 | Task | Module | What it does |
 |---|---|---|
-| `train_candidates` | `train.py` (and `tune.py`) | Loads the training frame, then trains the two baselines and three model families, each in two feature sets, on the location folds. Every model goes to MLflow with its out-of-fold predictions. With `tune` set, an Optuna search per family runs first; otherwise it reuses the parameters of the last run |
+| `train_candidates` | `train.py` (and `tune.py`) | Loads the training frame, then trains the two baselines and three model families, each in two feature sets, on the location folds. Every model goes to MLflow with its out-of-fold predictions. With `tune` set, an Optuna search per family runs first; otherwise it reuses the parameters of the last run, or the first time those in `configs/models.yaml` |
 | `select_model` | `select.py` | Checks the near-best candidates for bias and picks the fairest, fits its 80% interval, fits it on every fold sensor, scores the holdout precincts for the first time, and logs the result with charts, a report and the model bundle |
 | `mitigate_bias` | `mitigate.py` | Retrains the selected model with reweighted rows, and calibrates it, scored on the same slices and hours |
-| `check_gates` | `registry.py --check` | Fails the run if the model doesn't beat Space Syntax by the target, its intervals miss 75 to 85% coverage, or one slice's error is over 2.25 times the overall |
+| `check_gates` | `registry.py --check` | Fails the run, and emails the reasons, if the model doesn't beat Space Syntax by 10%, its intervals miss 75 to 85% coverage, or one slice's error is over 2.25 times the overall |
 | `register_model` | `registry.py --promote` | Registers the model in the MLflow model registry and makes it `champion`, unless the current champion is better |
 | `notify_team` | `notify.py` | Emails the team what was registered, each variant's metrics, and whether the champion changed |
 
@@ -349,7 +349,7 @@ train_candidates ─► select_model ─► mitigate_bias ─► check_gates ─
 docker compose up -d --build        # Airflow (http://localhost:8080) and MLflow (http://localhost:5001)
 ```
 
-In Airflow, trigger `stoa_train` after `stoa_pipeline` has built the training frame (set `tune` to true for the Optuna search). On the team's GCP VM, `ops/vm/vm.sh train` (add `--tune` for the search) does the same as the CI job: deploy main, then trigger the DAG. Or run the steps by hand:
+In Airflow, trigger `stoa_train` after `stoa_pipeline` has built the training frame (set `tune` to true for the Optuna search). On the team's GCP VM, `ops/vm/vm.sh train` (add `--tune` for the search) does the same as the CI job: deploy main, then trigger the DAG. `ops/vm/vm.sh tunnel` opens the VM's Airflow and MLflow at the same local addresses. Or run the steps by hand:
 
 ```bash
 .venv/bin/python -m src.models.flow.train            # --tune for the search, --seed to change the seed
@@ -658,6 +658,7 @@ tests/                   mirrors src/; tests/dags/ checks the DAG (run in the Ai
 ops/hpc/                 the cluster job that polls the per-minute feed
 ops/vm/                  the team's GCP VM: setup, deploy, training from CI, idle stop
 ops/mlflow/              the MLflow tracking server image (docker-compose service `mlflow`)
+ops/vm/                  the team's GCP VM: create, deploy, train, idle stop (docs/pipeline/cloud_vm.md)
 notebooks/               exploration only; the pipeline doesn't run them (below)
 docs/data_cards/         one card per dataset: schema, coverage, known issues
 docs/features/           feature tables: how they're built, column dictionaries, joins
@@ -724,9 +725,10 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 
 **Done:**
 - Data: ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
-- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions on the team's GCP VM (`stoa_train`).
+- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions (`stoa_train`).
+- Infrastructure: a shared Airflow and MLflow server on a GCP VM ([docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md)).
 
-**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, deployment on Cloud Run.
+**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation, viewshed, the API and web app, and deploying the flow model on Cloud Run.
 
 ## Ground rules
 

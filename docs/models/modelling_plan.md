@@ -1,6 +1,6 @@
 # Modelling plan
 
-Decisions from the 5 November 2026 discussion on the model phase, and the order of work from here. The flow-model code is in progress on the `romit/flow-model` branch, so the sections on selection, gates, the registry and the training DAG describe planned work; its implementation details (commands, config keys, search spaces) will be in `docs/models/flow_model.md`. Experiment tracking conventions are in [experiment_tracking.md](experiment_tracking.md).
+Decisions from the 5 November 2026 discussion on the model phase, and the order of work from here. The plan has since been built and is on `main` (`src/models/flow/`, `dags/stoa_train.py`); this page keeps the reasoning, and the implementation details (commands, config keys, search spaces) are in [flow_model.md](flow_model.md). Where the build differs from the plan, `flow_model.md` is right: the gate is 10%, not 15% ([accuracy_target.md](accuracy_target.md)), and selection, bias mitigation, the champion check and the emails are described there. Experiment tracking conventions are in [experiment_tracking.md](experiment_tracking.md).
 
 ## What the course asks for
 

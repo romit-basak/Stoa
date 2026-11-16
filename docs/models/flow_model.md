@@ -153,8 +153,8 @@ Quick runs: `train --folds 2 --max-trees 40 --train-rows 200000` and `select --f
 
 `train --train-start 2022-01-01` trains only on hours from that date (`flow.train_start`). Each fold's rows are all still predicted and scored, and `select` and `mitigate` read the start from `candidates.json`. `train --params-from data/models` reuses each family's parameters from an earlier run instead of the defaults. The comparison of start years is in [training_periods.md](training_periods.md).
 
-In Airflow, the `stoa_train` DAG runs the same four steps monthly or on demand (`tune` param), after a good `stoa_pipeline` run. The daily pipeline never trains.
+In Airflow, the `stoa_train` DAG runs these steps, then the bias mitigation, the gates, the registration and the email (train_candidates, select_model, mitigate_bias, check_gates, register_model, notify_team). The GitHub workflow `.github/workflows/train.yml` starts it on the VM when model code is pushed, on the 2nd of each month, or by hand (`tune` option); see [cloud_vm.md](../pipeline/cloud_vm.md#training-from-ci). The daily pipeline never trains.
 
 ## Not included yet
 
-Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.
+Ladder rung 3 in `docs/PROJECT_CONTEXT.md`, hand-weighted costs, is left out for now, so the ladder runs from betweenness to Space Syntax to the learned candidates. There is no random forest candidate either: one was tried on a side branch (PR #48) but not merged into `main`, so it never ran in `stoa_train`. `report.py` still knows how to label one. The NYC cross-city test is a separate step: it needs the portable model's predictions joined to NYC's count periods.

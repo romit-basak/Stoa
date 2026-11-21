@@ -102,6 +102,8 @@ Every model trained gets a Markdown report (`src/models/flow/report.py`), writte
 
 The reports aren't tracked in git, because writing tracked files during a run would mark the run's later models as trained on uncommitted code. Copy them into `docs/` for a submission.
 
+The reports of the two selected models registered as v2 (`stoa_train` run `ci__20261116T043438`, 16 November 2026) are in [reports/](reports/): [rich](reports/model_report_rich_v2.md) and [portable](reports/model_report_portable_v2.md). Their hyperparameter section says "Defaults from `configs/models.yaml`", but that run took its values from the previous run's search (`--params-from`). For rich LightGBM they match the config. For portable LightGBM they come from that search.
+
 After selection, `src.models.flow.mitigate` retrains the selected model with sensor-equal and volume-tier weights and calibrates it, all scored on the same slices. Results, the trade-offs and the gate's bias limit are in [model_bias.md](../bias/model_bias.md).
 
 ## Gate, registry and rollback

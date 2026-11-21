@@ -35,4 +35,8 @@ if [ -n "$stashed" ] && ! sudo -u stoa git stash pop -q 2>/dev/null; then
   echo "main changed the DVC pointers too: kept main's; the VM's are in git stash" >&2
 fi
 docker compose up -d --build
+# The backup timer came after the VM was set up; installing it here ships unit changes with main.
+install -m 644 ops/vm/stoa-backup.service ops/vm/stoa-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable -q --now stoa-backup.timer
 sudo -u stoa git log --oneline -1

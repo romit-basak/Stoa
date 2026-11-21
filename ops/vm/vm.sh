@@ -9,6 +9,9 @@
 #   ops/vm/vm.sh deploy       # pull main on the VM and restart the stack (refuses during a run)
 #   ops/vm/vm.sh train [--tune]  # deploy main and start stoa_train (what the train workflow runs)
 #   ops/vm/vm.sh resize e2-highmem-4   # change the machine type (stops the VM first)
+#   ops/vm/vm.sh backup       # back up Postgres (MLflow registry, Airflow history) to the bucket now
+#   ops/vm/vm.sh backups      # list the backups in gs://stoa-dvc-data/backups/postgres/
+#   ops/vm/vm.sh restore <stamp>|latest   # replace both databases with a backup (asks first)
 #
 # One-time setup (done once for the team, not per person):
 #   ops/vm/vm.sh create       # firewall rule, NAT, the VM itself
@@ -115,7 +118,7 @@ case "${1:-}" in
   status)
     echo "$VM: $(vm_state)"
     if [ "$(vm_state)" = RUNNING ]; then
-      vm_ssh --command 'cd /srv/stoa && sudo docker compose ps --format "{{.Service}}\t{{.Status}}"; journalctl -t stoa-idle -n 3 --no-pager -q'
+      vm_ssh --command 'cd /srv/stoa && sudo docker compose ps --format "{{.Service}}\t{{.Status}}"; journalctl -t stoa-idle -n 3 --no-pager -q; journalctl -t stoa-backup -n 1 --no-pager -q'
     fi
     ;;
   ssh) start && vm_ssh ;;
@@ -136,11 +139,24 @@ case "${1:-}" in
       sudo -u stoa git show origin/main:ops/vm/train.sh > \$f &&
       sudo bash \$f ${2:-} < /dev/null; rc=\$?; rm -f \$f; exit \$rc"
     ;;
+  backup) start && vm_ssh --command 'sudo bash /srv/stoa/ops/vm/backup.sh' ;;
+  backups)
+    # Read straight from the bucket with your own gcloud login: works while the VM is off.
+    found=$(g storage ls "gs://stoa-dvc-data/backups/postgres/*/COMPLETE" 2>/dev/null) ||
+      { echo "No backups yet (ops/vm/vm.sh backup makes one)." >&2; exit 1; }
+    sed -E 's|/COMPLETE$||; s|.*/||' <<<"$found" | sort -r
+    ;;
+  restore)
+    [[ "${2:-}" =~ ^(latest|[0-9]{8}T[0-9]{6}Z)$ ]] || { echo "usage: $0 restore <stamp>|latest" >&2; exit 1; }
+    read -r -p "Replace the VM's Airflow and MLflow databases with backup $2? [y/N] " ok
+    [ "$ok" = y ] || exit 1
+    start && vm_ssh --command "sudo bash /srv/stoa/ops/vm/restore.sh $2"
+    ;;
   resize)
     [ -n "${2:-}" ] || { echo "usage: $0 resize <machine-type>" >&2; exit 1; }
     g compute instances stop "$VM" --zone "$ZONE" --quiet
     g compute instances set-machine-type "$VM" --zone "$ZONE" --machine-type "$2"
     start
     ;;
-  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

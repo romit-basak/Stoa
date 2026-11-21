@@ -3,7 +3,7 @@
 #
 # Expects .env and stoa-airflow-dvc.json next to this script (vm.sh copies them). Installs Docker,
 # clones the repo to /srv/stoa as the `stoa` user (uid 50000, the containers' user), pulls the
-# committed data version, installs the boot and idle-stop units, and starts the stack.
+# committed data version, installs the boot, idle-stop and backup units, and starts the stack.
 # DAGs stay paused: unpausing stoa_pipeline starts a run that emails the team and pushes data.
 set -euo pipefail
 
@@ -50,8 +50,9 @@ printf 'ClientAliveInterval 30\nClientAliveCountMax 3\n' > /etc/ssh/sshd_config.
 systemctl reload ssh
 
 install -m 644 ops/vm/stoa-compose.service ops/vm/stoa-idle-stop.service \
-  ops/vm/stoa-idle-stop.timer /etc/systemd/system/
+  ops/vm/stoa-idle-stop.timer ops/vm/stoa-backup.service ops/vm/stoa-backup.timer \
+  /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now stoa-compose.service stoa-idle-stop.timer
+systemctl enable --now stoa-compose.service stoa-idle-stop.timer stoa-backup.timer
 
 echo "Stack started. DAGs are paused; see docs/pipeline/cloud_vm.md before unpausing."

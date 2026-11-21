@@ -10,6 +10,7 @@ The same `docker-compose.yaml` stack that runs on laptops (Airflow, its Postgres
 | Repo | `/srv/stoa`, owned by the `stoa` user (uid 50000, the containers' user) |
 | Credentials | The `stoa-airflow-dvc` key, as on laptops; the VM itself has no service account |
 | MLflow artifacts | `gs://stoa-dvc-data/mlflow-artifacts` (outside DVC's paths); runs and the registry in the VM's Postgres |
+| Backups | Postgres (MLflow runs and registry, Airflow history) dumped daily to `gs://stoa-dvc-data/backups/postgres/`, kept 30 days ([Backups](#backups)) |
 | Uptime | On demand: starts at 23:40 UTC each day, and whenever someone runs `vm.sh`; stops itself when idle |
 
 ## Using it
@@ -23,6 +24,7 @@ ops/vm/vm.sh ssh        # a shell on the VM (repo at /srv/stoa; `sudo docker com
 ops/vm/vm.sh deploy     # pull main on the VM and restart the stack
 ops/vm/vm.sh train      # deploy main and start stoa_train (add --tune for the Optuna search)
 ops/vm/vm.sh stop       # stop now instead of waiting for the idle stop
+ops/vm/vm.sh backups    # list the database backups (works while the VM is off)
 ```
 
 Stop your local stack first or use other ports: the tunnel needs local ports 8080 and 5001.
@@ -38,6 +40,26 @@ The `e2-standard-4` is slow for training: its vCPUs are shared cores. On the fir
 - Through IAP, the VM's end of an SSH connection stays open after the laptop disconnects, so sshd sends keepalives (`/etc/ssh/sshd_config.d/stoa-keepalive.conf`, from `setup.sh`) and drops a dead client within about 4 minutes. Without them, one closed tunnel kept the VM up indefinitely. Every `vm.sh` command uses SSH (even `status`), so each one delays the stop by that much.
 - A normal day is about 45 minutes up (a weekly run about an hour). At about $0.13 per hour for `e2-standard-4` plus about $5 per month for the disk, that is roughly $10 per month, billed to the project's billing account.
 - `stoa_minute_feed` stays paused on the VM: the Explorer cluster polls the feed (`ops/hpc/`), and a VM that slept between polls couldn't cover the 02:00 Melbourne reset.
+
+## Backups
+
+The model files are in the bucket already, but MLflow's runs and model registry (which version is `champion`, every logged metric) and Airflow's run history live only in the Postgres volume on the VM's disk. Losing the disk would lose them, so `ops/vm/backup.sh` dumps both databases (`airflow`, `mlflow`) with `pg_dump` and uploads them to `gs://stoa-dvc-data/backups/postgres/<UTC stamp>/`:
+
+- **When:** daily at 23:50 UTC (`stoa-backup.timer`, 10 minutes after the scheduled start, before the 00:00 UTC run), and on demand with `ops/vm/vm.sh backup`. `vm.sh status` shows the last result; `sudo journalctl -t stoa-backup` on the VM shows the history.
+- **What:** one custom-format dump per database (compressed), checked with `pg_restore --list` before upload. A `COMPLETE` marker is written last; a folder without it is an interrupted backup and is ignored.
+- **How long:** backups older than 30 days are deleted after each new one (`STOA_BACKUP_KEEP_DAYS`); the newest is always kept.
+- **How:** the VM has no gcloud and no service account, so the upload runs in the `mlflow` image (`ops/vm/backup_gcs.py`), which has `google-cloud-storage` and the bucket key. `pg_dump` reads a consistent snapshot, so a backup during a DAG run is safe.
+
+To restore (for example onto a rebuilt VM after `vm.sh setup`):
+
+```bash
+ops/vm/vm.sh backups                    # pick a stamp, e.g. 20261122T235002Z
+ops/vm/vm.sh restore 20261122T235002Z   # or: restore latest
+```
+
+`restore` asks for confirmation, refuses during a DAG run, and first takes a fresh backup of the current state, so it can be undone by restoring that one. It stops Airflow and MLflow, recreates both databases from the dumps and starts the stack again; Airflow migrates the restored database if the backup predates the current version. DAGs come back paused or unpaused as they were in the backup.
+
+We chose `pg_dump` over disk snapshots: a dump is consistent without stopping Postgres, restores into any Postgres 16 (a new VM, a laptop stack), and costs a few cents a month, where a snapshot copies the whole 50 GB disk, mostly data DVC already has in the bucket.
 
 ## The VM as the team's pipeline runner
 

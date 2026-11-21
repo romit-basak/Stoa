@@ -1,0 +1,9 @@
+# Back up the ops VM's Postgres to the bucket (ops/vm/backup.sh; run by stoa-backup.timer).
+[Unit]
+Description=Back up the Stoa Postgres (Airflow and MLflow) to Cloud Storage
+Requires=docker.service
+After=docker.service stoa-compose.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /srv/stoa/ops/vm/backup.sh

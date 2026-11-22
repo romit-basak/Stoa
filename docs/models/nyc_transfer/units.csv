@@ -1,0 +1,213 @@
+loc,street,segment_id,kind,weight,distance_m,segment_highway,street_name_matched
+1,Broadway,1376783660-2,both_sidewalks,1.0,10.7,footway,True
+1,Broadway,1353988830-19,both_sidewalks,1.0,13.2,footway,True
+2,East 161st Street,232827903-1,both_sidewalks,1.0,4.4,footway,True
+2,East 161st Street,232827614-1,both_sidewalks,1.0,7.0,footway,True
+3,East Fordham Road,1227471188-1,both_sidewalks,1.0,10.9,footway,True
+3,East Fordham Road,1227471193-1,both_sidewalks,1.0,13.5,footway,True
+4,East Gun Hill Road,1253635978-1,both_sidewalks,1.0,11.6,footway,True
+4,East Gun Hill Road,1253635980-2,both_sidewalks,1.0,12.5,footway,True
+5,East Tremont Avenue,1230914598-1,both_sidewalks,1.0,9.2,footway,True
+5,East Tremont Avenue,1238710844-1,both_sidewalks,1.0,10.4,footway,True
+6,Gra Concourse,1413625874-0,both_sidewalks,1.0,24.0,footway,False
+6,Gra Concourse,1416462720-2,both_sidewalks,1.0,25.1,footway,False
+7,Third Avenue,1299817174-1,both_sidewalks,1.0,9.7,footway,True
+7,Third Avenue,1299817178-1,both_sidewalks,1.0,10.6,footway,True
+8,White Plains Road,1460943418-0,both_sidewalks,1.0,12.2,footway,True
+8,White Plains Road,1453829972-0,both_sidewalks,1.0,12.6,footway,True
+9,5th Avenue,1207897903-0,both_sidewalks,1.0,8.5,footway,True
+9,5th Avenue,1207897935-0,both_sidewalks,1.0,9.7,footway,True
+10,5th Avenue,1079240225-2,both_sidewalks,1.0,7.6,footway,True
+10,5th Avenue,1079240188-5,both_sidewalks,1.0,9.2,footway,True
+11,7th Avenue,1073686870-0,both_sidewalks,1.0,9.5,footway,True
+11,7th Avenue,1073686865-1,both_sidewalks,1.0,10.9,footway,True
+12,86th Street,1271820198-1,both_sidewalks,1.0,11.8,footway,True
+12,86th Street,1271820195-1,both_sidewalks,1.0,13.1,footway,True
+13,Atlantic Avenue,1157179717-2,both_sidewalks,1.0,11.8,footway,True
+13,Atlantic Avenue,1157179709-1,both_sidewalks,1.0,12.3,footway,True
+14,Bedford Avenue,1066712526-3,both_sidewalks,1.0,6.1,footway,True
+14,Bedford Avenue,1066712478-2,both_sidewalks,1.0,7.5,footway,True
+15,Brighton Beach Avenue,1146165629-1,both_sidewalks,1.0,12.6,footway,True
+15,Brighton Beach Avenue,1133573111-1,both_sidewalks,1.0,14.1,footway,True
+16,Church Avenue,1160753906-1,both_sidewalks,1.0,8.8,footway,True
+16,Church Avenue,1160753902-1,both_sidewalks,1.0,10.1,footway,True
+17,Cortelyou Road,1078355502-1,both_sidewalks,1.0,9.4,footway,True
+17,Cortelyou Road,1067039679-1,both_sidewalks,1.0,9.8,footway,True
+18,Court Street,1157179730-1,both_sidewalks,1.0,6.9,footway,True
+18,Court Street,1155421506-1,both_sidewalks,1.0,9.2,footway,True
+19,Eastern Parkway,576483832-3,both_sidewalks,1.0,11.0,footway,True
+19,Eastern Parkway,746763064-1,both_sidewalks,1.0,31.4,footway,True
+20,Flatbush Avenue,1266996147-3,both_sidewalks,1.0,25.7,footway,True
+20,Flatbush Avenue,1270745872-0,both_sidewalks,1.0,34.3,footway,True
+21,Flatbush Avenue,1143196320-5,both_sidewalks,1.0,10.1,footway,True
+21,Flatbush Avenue,1150451117-1,both_sidewalks,1.0,11.0,footway,True
+22,Flatbush Avenue,1473514014-1,both_sidewalks,1.0,12.0,footway,True
+22,Flatbush Avenue,1079462908-1,both_sidewalks,1.0,13.8,footway,True
+23,Fulton Street,1156954307-1,both_sidewalks,1.0,6.4,footway,False
+23,Fulton Street,1156954304-1,both_sidewalks,1.0,7.8,footway,False
+24,Graham Avenue,1049740675-5,both_sidewalks,1.0,8.5,footway,True
+24,Graham Avenue,1061439450-0,both_sidewalks,1.0,9.9,footway,True
+25,Gra Street,955442681-0,both_sidewalks,1.0,9.6,footway,False
+25,Gra Street,955442680-3,both_sidewalks,1.0,9.8,footway,False
+26,Jay Street,1155794635-1,both_sidewalks,1.0,10.6,footway,True
+26,Jay Street,1155794666-7,both_sidewalks,1.0,10.7,footway,True
+27,Kings Highway,1059106207-1,both_sidewalks,1.0,8.6,footway,True
+27,Kings Highway,1059106226-1,both_sidewalks,1.0,11.3,footway,True
+28,Montague Street,1154768230-1,both_sidewalks,1.0,6.3,footway,True
+28,Montague Street,1154385469-1,both_sidewalks,1.0,7.6,footway,True
+29,Myrtle Avenue,1104454495-0,both_sidewalks,1.0,8.3,footway,True
+29,Myrtle Avenue,1072315735-2,both_sidewalks,1.0,9.3,footway,True
+30,Old Fulton Street,1154768373-1,both_sidewalks,1.0,15.1,footway,True
+30,Old Fulton Street,1154768364-1,both_sidewalks,1.0,18.4,footway,True
+31,Pitkin Avenue,1138392913-1,both_sidewalks,1.0,8.1,footway,True
+31,Pitkin Avenue,1138392948-1,both_sidewalks,1.0,10.5,footway,True
+32,Sheepshead Bay Road,1116433703-0,both_sidewalks,1.0,6.7,footway,True
+32,Sheepshead Bay Road,1116433696-1,both_sidewalks,1.0,7.1,footway,True
+33,VanBrunt Street,1153489260-1,both_sidewalks,1.0,7.5,footway,False
+33,VanBrunt Street,1153489255-1,both_sidewalks,1.0,8.4,footway,False
+34,Washington Street,1153282603-1,both_sidewalks,1.0,6.4,footway,True
+34,Washington Street,888758935-1,both_sidewalks,1.0,6.8,footway,True
+35,Broad Street,890490672-2,both_sidewalks,1.0,7.5,footway,True
+35,Broad Street,890490669-1,both_sidewalks,1.0,7.6,footway,True
+36,Broadway,825398021-2,both_sidewalks,1.0,8.8,footway,True
+36,Broadway,891074546-0,both_sidewalks,1.0,9.5,footway,True
+37,Broadway,526253871-1,both_sidewalks,1.0,16.0,footway,True
+37,Broadway,526253866-1,both_sidewalks,1.0,21.9,footway,True
+38,Chambers Street,893536665-1,both_sidewalks,1.0,6.8,footway,True
+38,Chambers Street,1203372433-1,both_sidewalks,1.0,8.3,footway,True
+39,Columbus Avenue,1418233524-1,both_sidewalks,1.0,10.7,footway,True
+39,Columbus Avenue,1053065238-1,both_sidewalks,1.0,12.8,footway,True
+40,Delancey Street,1317731500-1,both_sidewalks,1.0,11.3,footway,True
+40,Delancey Street,1008770656-1,both_sidewalks,1.0,28.1,footway,True
+41,East 14th Street,894118348-0,both_sidewalks,1.0,11.4,footway,True
+41,East 14th Street,894118347-1,both_sidewalks,1.0,12.8,footway,True
+42,East 42 Street,1111692727-1,both_sidewalks,1.0,11.8,footway,True
+42,East 42 Street,1111692728-0,both_sidewalks,1.0,12.5,footway,True
+43,East 8th Street,1261369444-0,both_sidewalks,1.0,6.2,footway,True
+43,East 8th Street,1213167599-0,both_sidewalks,1.0,7.3,footway,True
+44,Eighth Avenue,1346429372-0,both_sidewalks,1.0,12.1,footway,False
+44,Eighth Avenue,1111240023-0,both_sidewalks,1.0,13.7,footway,False
+45,Fifth Avenue,1218922611-0,both_sidewalks,1.0,10.7,footway,False
+45,Fifth Avenue,1218922610-0,both_sidewalks,1.0,12.7,footway,False
+46,Forsyth Street,680268469-4,both_sidewalks,1.0,5.7,footway,True
+46,Forsyth Street,680272473-1,both_sidewalks,1.0,9.7,footway,True
+47,Fulton Street,1226367864-3,both_sidewalks,1.0,6.0,footway,True
+47,Fulton Street,1226367881-0,both_sidewalks,1.0,7.8,footway,True
+48,Fulton Street,1222906814-1,both_sidewalks,1.0,8.5,footway,True
+48,Fulton Street,1123796384-7,both_sidewalks,1.0,14.0,footway,True
+49,Lexington Avenue,1111016472-1,both_sidewalks,1.0,9.4,footway,True
+49,Lexington Avenue,1111016473-1,both_sidewalks,1.0,10.4,footway,True
+50,Madison Avenue,770535587-1,both_sidewalks,1.0,10.3,footway,True
+50,Madison Avenue,770535589-1,both_sidewalks,1.0,11.0,footway,True
+51,Seventh Avenue,1020674697-0,both_sidewalks,1.0,13.0,footway,False
+51,Seventh Avenue,1020674674-0,both_sidewalks,1.0,14.1,footway,False
+52,Trinity Place,888759097-3,both_sidewalks,1.0,8.9,footway,True
+52,Trinity Place,888759098-2,both_sidewalks,1.0,10.2,footway,True
+53,Wall Street,area-1190258173-11051593261-11051773179,single_path,1.0,0.6,pedestrian,True
+54,West 125th Street,1111912392-2,both_sidewalks,1.0,12.6,footway,True
+54,West 125th Street,1111912391-2,both_sidewalks,1.0,13.2,footway,True
+55,West 14th Street,894118365-1,both_sidewalks,1.0,10.2,footway,True
+55,West 14th Street,1121952504-2,both_sidewalks,1.0,11.7,footway,True
+56,West 181st Street,1036683333-1,both_sidewalks,1.0,9.8,footway,True
+56,West 181st Street,1247270459-1,both_sidewalks,1.0,10.5,footway,True
+57,West 34th Street,833665318-0,both_sidewalks,1.0,10.3,footway,True
+57,West 34th Street,1055496974-3,both_sidewalks,1.0,12.9,footway,True
+58,West 40th Street,1112015231-1,both_sidewalks,1.0,6.9,footway,True
+58,West 40th Street,1112015232-2,both_sidewalks,1.0,8.5,footway,True
+59,West 47th Street,1111047011-0,both_sidewalks,1.0,7.2,footway,True
+59,West 47th Street,1111047012-0,both_sidewalks,1.0,7.4,footway,True
+60,Seco Avenue,1111386309-1,both_sidewalks,1.0,12.4,footway,False
+60,Seco Avenue,1111386308-0,both_sidewalks,1.0,13.9,footway,False
+61,Third Avenue,1111684574-1,both_sidewalks,1.0,12.9,footway,False
+61,Third Avenue,1111684573-1,both_sidewalks,1.0,13.6,footway,False
+62,Lexington Avenue,1220054831-0,both_sidewalks,1.0,9.6,footway,True
+62,Lexington Avenue,1220054832-0,both_sidewalks,1.0,10.5,footway,True
+63,Park Avenue,1111970560-0,both_sidewalks,1.0,9.9,footway,True
+63,Park Avenue,1111970561-0,both_sidewalks,1.0,28.8,footway,True
+64,Madison Avenue,1218921984-0,both_sidewalks,1.0,10.1,footway,True
+64,Madison Avenue,1218921983-0,both_sidewalks,1.0,11.2,footway,True
+65,Fifth Avenue,1218921992-1,both_sidewalks,1.0,11.7,footway,False
+65,Fifth Avenue,1218921991-0,both_sidewalks,1.0,12.5,footway,False
+66,Sixth Avenue,1219424207-0,both_sidewalks,1.0,12.7,footway,False
+66,Sixth Avenue,1219424208-0,both_sidewalks,1.0,13.2,footway,False
+67,Seventh Avenue,1208661792-1,both_sidewalks,1.0,11.9,footway,False
+67,Seventh Avenue,1208661790-0,both_sidewalks,1.0,13.1,footway,False
+68,Broadway,1219082386-0,both_sidewalks,1.0,11.1,footway,True
+68,Broadway,1219082387-0,both_sidewalks,1.0,13.3,footway,True
+69,Eighth Avenue,1111240040-0,both_sidewalks,1.0,13.2,footway,False
+69,Eighth Avenue,1100719111-1,both_sidewalks,1.0,14.0,footway,False
+70,Hudson River Greenway,833858453-4,single_path,1.0,14.4,footway,False
+71,165th Street,275038410-1,single_path,1.0,1.3,pedestrian,True
+72,37th Avenue,1160969007-1,both_sidewalks,1.0,7.2,footway,True
+72,37th Avenue,1160969034-1,both_sidewalks,1.0,9.7,footway,True
+73,82 Street,1160968973-1,both_sidewalks,1.0,6.7,footway,True
+73,82 Street,1160968976-1,both_sidewalks,1.0,7.2,footway,True
+74,Austin Street,1197491578-0,both_sidewalks,1.0,6.4,footway,True
+74,Austin Street,1197491603-0,both_sidewalks,1.0,8.5,footway,True
+75,Bell Boulevard,1336359512-1,both_sidewalks,1.0,10.0,footway,True
+75,Bell Boulevard,750322618-3,both_sidewalks,1.0,10.8,footway,True
+76,Fresh Po Road,1063101625-1,both_sidewalks,1.0,8.8,footway,False
+76,Fresh Po Road,1488361214-1,both_sidewalks,1.0,9.4,footway,False
+77,Hillside Avenue,948031533-1,both_sidewalks,1.0,12.5,footway,True
+77,Hillside Avenue,836793698-1,both_sidewalks,1.0,13.3,footway,True
+78,Jackson Avenue,1264390347-2,both_sidewalks,1.0,11.1,footway,True
+78,Jackson Avenue,1016036869-1,both_sidewalks,1.0,13.1,footway,True
+79,Jamaica Avenue,564423212-1,both_sidewalks,1.0,8.0,footway,True
+79,Jamaica Avenue,564423197-0,both_sidewalks,1.0,10.2,footway,True
+80,Jamaica Avenue,1242595534-2,both_sidewalks,1.0,10.1,footway,True
+80,Jamaica Avenue,748650232-1,both_sidewalks,1.0,10.2,footway,True
+81,Jamaica Avenue,1206682843-0,both_sidewalks,1.0,7.7,footway,True
+81,Jamaica Avenue,1206704096-0,both_sidewalks,1.0,8.8,footway,True
+82,Main Street,924822510-0,both_sidewalks,1.0,9.8,footway,True
+82,Main Street,866379198-0,both_sidewalks,1.0,10.4,footway,True
+83,Merrick Boulevard,496565276-2,both_sidewalks,1.0,6.0,footway,True
+83,Merrick Boulevard,912557175-1,both_sidewalks,1.0,20.6,footway,True
+84,Mott Avenue,1215597998-0,both_sidewalks,1.0,7.1,footway,True
+84,Mott Avenue,1215598000-1,both_sidewalks,1.0,8.5,footway,True
+85,Myrtle Avenue,1061891625-7,both_sidewalks,1.0,6.7,footway,True
+85,Myrtle Avenue,1560658124-1,both_sidewalks,1.0,9.1,footway,True
+86,Myrtle Avenue,1062656166-1,both_sidewalks,1.0,6.9,footway,True
+86,Myrtle Avenue,1530739887-1,both_sidewalks,1.0,8.1,footway,True
+87,Northern Boulevard,893099583-8,both_sidewalks,1.0,7.9,footway,True
+87,Northern Boulevard,1159205564-0,both_sidewalks,1.0,16.6,footway,True
+88,Prince Street,884256313-0,both_sidewalks,1.0,0.7,footway,True
+88,Prince Street,926404865-2,both_sidewalks,1.0,11.4,footway,True
+89,Queens Boulevard,809876152-2,both_sidewalks,1.0,13.2,footway,True
+89,Queens Boulevard,995890071-3,both_sidewalks,1.0,26.2,footway,True
+90,Queens Boulevard,711370524-3,single_path,1.0,32.3,footway,True
+91,Queens Plaza North & South,723257725-0,single_path,1.0,13.1,footway,True
+92,Roosevelt Avenue,865682127-2,both_sidewalks,1.0,7.0,footway,True
+92,Roosevelt Avenue,865682132-0,both_sidewalks,1.0,8.7,footway,True
+93,Steinway Street,688187963-2,both_sidewalks,1.0,9.2,footway,True
+93,Steinway Street,688187962-2,both_sidewalks,1.0,9.5,footway,True
+94,Sutphin Boulevard,803044771-2,both_sidewalks,1.0,9.4,footway,True
+94,Sutphin Boulevard,564423265-4,both_sidewalks,1.0,9.5,footway,True
+95,Yellowstone Boulevard,1154294728-1,both_sidewalks,1.0,8.8,footway,True
+95,Yellowstone Boulevard,1060342543-7,both_sidewalks,1.0,12.2,footway,True
+96,Forest Avenue,1189168744-4,both_sidewalks,1.0,7.7,footway,True
+96,Forest Avenue,1189168742-0,both_sidewalks,1.0,7.8,footway,True
+97,New Dorp Lane,1316750182-4,both_sidewalks,1.0,8.0,footway,True
+97,New Dorp Lane,1012630066-3,both_sidewalks,1.0,8.2,footway,True
+98,Pedestrian Walkway from Ferry Terminal,1421980888-0,both_sidewalks,1.0,6.2,footway,False
+98,Pedestrian Walkway from Ferry Terminal,1421980883-0,both_sidewalks,1.0,32.4,footway,False
+99,Richmo Hill Road,1078006664-13,both_sidewalks,1.0,10.1,footway,False
+99,Richmo Hill Road,1078006680-4,both_sidewalks,1.0,11.4,footway,False
+100,Victory Boulevard,1421958244-6,both_sidewalks,1.0,7.9,footway,True
+100,Victory Boulevard,1210616759-0,both_sidewalks,1.0,8.0,footway,True
+101,Brooklyn Bridge,375157261-0,single_path,1.0,0.5,footway,False
+102,Manhattan Bridge  North Path,357260631-0,single_path,1.0,27.0,footway,False
+103,Manhattan Bridge  South Path,357260631-0,single_path,1.0,6.2,footway,False
+104,Williamsburg Bridge,40338793-1,single_path,1.0,4.6,footway,False
+105,Queensboro Bridge,198924628-0,single_path,1.0,7.5,pedestrian,True
+106,Broadway Bridge,1421992527-0,both_sidewalks,1.0,12.7,footway,True
+106,Broadway Bridge,982319752-0,both_sidewalks,1.0,13.8,footway,True
+107,University Heights Bridge,1113518759-0,single_path,1.0,7.7,footway,True
+108,Macombs Dam Bridge,1210850944-0,both_sidewalks,1.0,7.4,footway,True
+108,Macombs Dam Bridge,1256787083-0,both_sidewalks,1.0,8.5,footway,True
+109,145th Street Bridge,799505590-0,both_sidewalks,1.0,8.4,footway,True
+109,145th Street Bridge,799505589-0,both_sidewalks,1.0,11.7,footway,True
+110,Madison Avenue Bridge,799505602-0,single_path,1.0,10.2,cycleway,True
+111,Third Avenue Bridge,799505607-0,single_path,1.0,10.8,cycleway,False
+112,Willis Avenue Bridge,799505595-0,single_path,1.0,17.6,path,False
+113,Triborough Bridge (Manhattan span),801411755-0,single_path,1.0,12.6,cycleway,False
+114,Wards Isla Bridge,1016498838-0,single_path,1.0,13.7,cycleway,False

@@ -42,6 +42,9 @@
 
 ## Using it for the transfer test
 
+The test has been run: [docs/models/nyc_transfer.md](../models/nyc_transfer.md) (`src/models/flow/transfer_nyc.py`).
+
+
 - Build the NYC walking graph from OSM and snap each of the 114 points to its segment (both sides of the street are summed in the count, so snap to the street, not one sidewalk).
 - Only portable features can be computed in NYC (OSM, terrain, land cover, weather, building heights). CoM-only layers (footpath steepness, CLUE, business establishments, canopy polygons) don't exist here, so the cross-city test uses the portable-feature model.
 - Weather: Open-Meteo at an NYC centre point; season from physical quantities, not month.

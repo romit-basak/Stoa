@@ -1,0 +1,154 @@
+{
+  "since_year": 2007,
+  "rounds": [
+    "2007-05",
+    "2007-09",
+    "2008-05",
+    "2008-09",
+    "2009-05",
+    "2009-09",
+    "2010-05",
+    "2010-09",
+    "2011-05",
+    "2011-09",
+    "2012-05",
+    "2012-09",
+    "2013-05",
+    "2013-09",
+    "2014-05",
+    "2014-09",
+    "2015-05",
+    "2015-09",
+    "2016-05",
+    "2016-09",
+    "2017-05",
+    "2017-09",
+    "2018-05",
+    "2018-09",
+    "2019-05",
+    "2020-10",
+    "2021-05",
+    "2021-10",
+    "2022-05",
+    "2022-10",
+    "2023-05",
+    "2023-10",
+    "2024-06",
+    "2024-10",
+    "2025-05",
+    "2025-10",
+    "2026-05"
+  ],
+  "rounds_available": 37,
+  "locations_snapped": {
+    "both_sidewalks": 98,
+    "single_path": 16
+  },
+  "uni_teaching": "unknown",
+  "school_term": true,
+  "subsets": {
+    "both_sidewalks": {
+      "model": {
+        "n_obs": 10654,
+        "n_locations": 98,
+        "log_mae": 0.9307146183256472,
+        "median_log_ratio": -0.5338648843466003,
+        "log_mae_offset_removed": 0.8311652718792648,
+        "spearman_by_period": {
+          "am": 0.3147804576376005,
+          "md": 0.2976684581986496,
+          "pm": 0.36327295679283894
+        },
+        "spearman_mean": 0.32524062420969635,
+        "spearman_per_round_median": 0.3263891856866238,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8648556915050879,
+        "interval_coverage_summed": 0.8489769100807208
+      },
+      "space_syntax": {
+        "n_obs": 10654,
+        "n_locations": 98,
+        "log_mae": 0.9179536853629197,
+        "median_log_ratio": -0.46656669357143343,
+        "log_mae_offset_removed": 0.8401377108786016,
+        "spearman_by_period": {
+          "am": 0.18586666156621973,
+          "md": 0.17529598531071283,
+          "pm": 0.20143577580985533
+        },
+        "spearman_mean": 0.18753280756226265,
+        "spearman_per_round_median": 0.19163680594779572,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8784497868572376
+      },
+      "betweenness": {
+        "n_obs": 10654,
+        "n_locations": 98,
+        "log_mae": 0.8638269780860254,
+        "median_log_ratio": -0.3517470726686711,
+        "log_mae_offset_removed": 0.8137522828129475,
+        "spearman_by_period": {
+          "am": -0.12630619258012482,
+          "md": -0.09101109984762414,
+          "pm": -0.11896154900573162
+        },
+        "spearman_mean": -0.11209294714449353,
+        "spearman_per_round_median": -0.11443490235831913,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8579298942549578
+      }
+    },
+    "all": {
+      "model": {
+        "n_obs": 12300,
+        "n_locations": 114,
+        "log_mae": 0.9626519142764149,
+        "median_log_ratio": -0.49560653901775975,
+        "log_mae_offset_removed": 0.8791636988809449,
+        "spearman_by_period": {
+          "am": 0.49529576152771315,
+          "md": 0.4357991940219923,
+          "pm": 0.5009254571596363
+        },
+        "spearman_mean": 0.4773401375697806,
+        "spearman_per_round_median": 0.46511086315194183,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.9140019709177235,
+        "interval_coverage_summed": 0.8329268292682926
+      },
+      "space_syntax": {
+        "n_obs": 12300,
+        "n_locations": 114,
+        "log_mae": 1.037238239109173,
+        "median_log_ratio": -0.5387484929604747,
+        "log_mae_offset_removed": 0.9305070082235375,
+        "spearman_by_period": {
+          "am": 0.41974443611915524,
+          "md": 0.3811384945626861,
+          "pm": 0.4158482007249753
+        },
+        "spearman_mean": 0.4055770438022723,
+        "spearman_per_round_median": 0.3945091272555139,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.9794470882478379
+      },
+      "betweenness": {
+        "n_obs": 12300,
+        "n_locations": 114,
+        "log_mae": 0.934630142107244,
+        "median_log_ratio": -0.2700230428021233,
+        "log_mae_offset_removed": 0.9083305361876827,
+        "spearman_by_period": {
+          "am": 0.16058403029505275,
+          "md": 0.16646922190597693,
+          "pm": 0.15441971608513397
+        },
+        "spearman_mean": 0.1604909894287212,
+        "spearman_per_round_median": 0.14571117266055753,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.9532046683114388
+      }
+    }
+  },
+  "model_uri": "stoa-flow-portable v2 (MLflow model m-eaa0f48c00034b5fbefa4a87bea83acc, run 1cc72fe60e38489ab0d4ed3fbfa65f0d)"
+}

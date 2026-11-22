@@ -428,6 +428,20 @@ What this shows:
 
 The charts, tables and a training report (data, loss and cost, learned parameters, hyperparameters) are logged with each selected run in MLflow and written to `data/models/<variant>/selected/`. `python -m src.models.flow.figures` copies the latest selected run's charts, and the tuning and mitigation charts of the same training, into `docs/models/figures/` with a `summary.json` of the run ids and metrics behind them; the charts here came from the seed-7 run above.
 
+### In New York: the cross-city test
+
+The portable model, trained only on Melbourne, was scored on NYC DOT's bi-annual counts (evaluation only, never training) on 21 November 2026: `stoa-flow-portable` v2, the 97 street locations with counts since 2022, each count window's total against the sum of predicted hours. The full write-up is [docs/models/nyc_transfer.md](docs/models/nyc_transfer.md).
+
+| | Portable model | Space Syntax | Betweenness |
+|---|---|---|---|
+| Rank correlation across locations (goal: 0.6) | **0.36** | 0.21 | -0.12 |
+| MAE on log totals, uncalibrated | 0.865 | 0.852 | 0.796 |
+| After one city-wide scale from 5 locations (goal: half the uncalibrated error) | 0.823 | 0.831 | 0.812 |
+
+- **Both goals are missed.** The model ranks New York's streets better than network structure alone, but well short of 0.6, and 5 local counts cut its error by about 5%, not half.
+- **It compresses New York's range.** Midtown's busiest blocks come out 6 to 11 times too low and quiet outer-borough streets 3 to 5 times too high. Midtown's volumes per sidewalk are close to Melbourne's busiest sensors, so the model isn't extrapolating; its features don't pick out those blocks as busy. One city-wide scale can't fix that spread.
+- **So the write-up can't claim the model works in other cities as it stands** (CLAUDE.md, core rule 10). What it supports: a learned model transfers its ranking of streets better than Space Syntax, and absolute volumes in a new city need more than a few counts.
+
 ### The registered model
 
 The models in the registry come from the first `stoa_train` run on the team's GCP VM, on 16 November 2026: run `ci__20261116T005046`, data version `961075e6`, code `607c7b1`, with `tune` on. All six gate checks passed, and both variants were registered as `stoa-flow-rich` v1 and `stoa-flow-portable` v1, alias `champion`. The team got the "model registered" email at 03:58 UTC.
@@ -596,7 +610,8 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 
 - **The gate.** The team set it at 10% below Space Syntax on 16 November 2026, down from the original 15%. On the buffered folds both variants clear it on every seed: rich 14.3% to 15.5%, portable 13.1% to 13.8%. At seed 7 both also pass the other two checks (coverage 0.782 and 0.780; worst slice 1.70 and 1.67, limit 2.25).
 - **What's registered.** `stoa-flow-rich` v1 and `stoa-flow-portable` v1 are the champions, from the first `stoa_train` run on the GCP VM (16 November 2026, [The registered model](#the-registered-model)): 10.8% and 10.3% below Space Syntax on unbuffered folds, all gate checks passed. v2 of each, from the buffered retrain the same night ([The buffered retrain](#the-buffered-retrain)), is 14.3% and 13.3% below Space Syntax and passed every gate check, but is registered as `challenger`: its raw log MAE is slightly higher than v1's, which was scored on the easier unbuffered folds. The seed study above is in the side experiment `stoa-flow-buffer`.
-- **Next for the model:** the NYC cross-city test with the portable model.
+- **Outside Melbourne.** On NYC's counts the portable model ranks streets at 0.36 (goal 0.6), better than Space Syntax (0.21), and 5 local counts barely help ([In New York](#in-new-york-the-cross-city-test)).
+- **Next for the model:** features that carry scale between cities (residential and job density, transit ridership), and calibration finer than one city-wide scale.
 
 ## Tests and lint
 
@@ -802,12 +817,12 @@ Details and caveats are in [`docs/data_cards/`](docs/data_cards/) and [`docs/dat
 
 **Done:**
 - Data: ingestion for all three sites; the walking graph with plazas, entrances and inferred crossings; street, shade, event and surroundings features; the hourly table and the training frame for Melbourne; graph and features for NEU Boston and NYC; the Airflow pipelines with validation, drift, alerts, bias slicing and DVC versioning; the per-minute archive; CI. The state of each gap from the pipeline review is in [docs/pipeline/gaps_and_changes.md](docs/pipeline/gaps_and_changes.md).
-- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions (`stoa_train`).
+- Model: the flow model with its baseline ladder, tuning, selection on accuracy and bias, holdout precincts, the NYC cross-city test, the calibration curve, bias mitigation, gates, the MLflow registry with promotion and rollback, result emails, and training from GitHub Actions (`stoa_train`).
 - Infrastructure: a shared Airflow and MLflow server on a GCP VM ([docs/pipeline/cloud_vm.md](docs/pipeline/cloud_vm.md)).
 
 - Simulation: observed crowds leaving Melbourne Park after concerts, route-sampling walkers fitted to them, and a JuPedSim microsimulation around one sensor ([docs/simulation/observed_egress.md](docs/simulation/observed_egress.md)).
 
-**Planned:** the NYC cross-city test; path segmentation for the NEU campus, an LLM intake agent, crowd simulation beyond Melbourne Park, viewshed, the API and web app, and deploying the flow model on Cloud Run.
+**Planned:** path segmentation for the NEU campus, an LLM intake agent, crowd simulation beyond Melbourne Park, viewshed, the API and web app, and deploying the flow model on Cloud Run.
 
 ## Ground rules
 

@@ -1,0 +1,126 @@
+{
+  "since_year": 2022,
+  "rounds": [
+    "2022-05",
+    "2022-10",
+    "2023-05",
+    "2023-10",
+    "2024-06",
+    "2024-10",
+    "2025-05",
+    "2025-10",
+    "2026-05"
+  ],
+  "rounds_available": 37,
+  "locations_snapped": {
+    "both_sidewalks": 98,
+    "single_path": 16
+  },
+  "uni_teaching": "teaching",
+  "school_term": true,
+  "subsets": {
+    "both_sidewalks": {
+      "model": {
+        "n_obs": 2615,
+        "n_locations": 97,
+        "log_mae": 0.8411969108255145,
+        "median_log_ratio": -0.40649465640584914,
+        "log_mae_offset_removed": 0.778031461603577,
+        "spearman_by_period": {
+          "am": 0.32689880075741634,
+          "md": 0.3944613928045444,
+          "pm": 0.4189459288870187
+        },
+        "spearman_mean": 0.3801020408163265,
+        "spearman_per_round_median": 0.36975331369661263,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.812278817898819,
+        "interval_coverage_summed": 0.8734225621414914
+      },
+      "space_syntax": {
+        "n_obs": 2615,
+        "n_locations": 97,
+        "log_mae": 0.8519161051365187,
+        "median_log_ratio": -0.3865187877966356,
+        "log_mae_offset_removed": 0.7962519733128831,
+        "spearman_by_period": {
+          "am": 0.18514622343782874,
+          "md": 0.23330002103934355,
+          "pm": 0.20748737639385648
+        },
+        "spearman_mean": 0.20864454029034293,
+        "spearman_per_round_median": 0.20718157608461155,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8313476169183376
+      },
+      "betweenness": {
+        "n_obs": 2615,
+        "n_locations": 97,
+        "log_mae": 0.7959668291365463,
+        "median_log_ratio": -0.25940259886999595,
+        "log_mae_offset_removed": 0.7677354790944543,
+        "spearman_by_period": {
+          "am": -0.12041079318325267,
+          "md": -0.11808331580054701,
+          "pm": -0.13116715758468336
+        },
+        "spearman_mean": -0.12322042218949436,
+        "spearman_per_round_median": -0.12214076728624562,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8115036731281088
+      }
+    },
+    "all": {
+      "model": {
+        "n_obs": 3020,
+        "n_locations": 113,
+        "log_mae": 0.8746137464570631,
+        "median_log_ratio": -0.3756761956361876,
+        "log_mae_offset_removed": 0.823485972454882,
+        "spearman_by_period": {
+          "am": 0.5092207341249907,
+          "md": 0.5134292730508659,
+          "pm": 0.5626467218529735
+        },
+        "spearman_mean": 0.5284322430096101,
+        "spearman_per_round_median": 0.498111171073934,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8589700113298464,
+        "interval_coverage_summed": 0.8589403973509934
+      },
+      "space_syntax": {
+        "n_obs": 3020,
+        "n_locations": 113,
+        "log_mae": 0.9814121931974553,
+        "median_log_ratio": -0.4516990770425,
+        "log_mae_offset_removed": 0.90447855827692,
+        "spearman_by_period": {
+          "am": 0.41448702193977655,
+          "md": 0.42198088275442786,
+          "pm": 0.4241142626644812
+        },
+        "spearman_mean": 0.42019405578622854,
+        "spearman_per_round_median": 0.3945091272555139,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.9532109201821062
+      },
+      "betweenness": {
+        "n_obs": 3020,
+        "n_locations": 113,
+        "log_mae": 0.8489272990404003,
+        "median_log_ratio": -0.1754601483292486,
+        "log_mae_offset_removed": 0.8362716785478513,
+        "spearman_by_period": {
+          "am": 0.1620162727402879,
+          "md": 0.1543810183253602,
+          "pm": 0.16438253622726712
+        },
+        "spearman_mean": 0.16025994243097172,
+        "spearman_per_round_median": 0.13382421717369405,
+        "log_mae_calibrated_k": 5,
+        "log_mae_calibrated": 0.8780749408183885
+      }
+    }
+  },
+  "model_uri": "stoa-flow-portable v2 (MLflow model m-eaa0f48c00034b5fbefa4a87bea83acc, run 1cc72fe60e38489ab0d4ed3fbfa65f0d)"
+}

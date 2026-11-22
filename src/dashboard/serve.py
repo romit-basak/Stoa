@@ -16,8 +16,12 @@ DEFAULT_DIR = REPO_ROOT / "data" / "dashboard"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Serve the STOA monitoring & simulation dashboard.")
-    parser.add_argument("--dir", type=Path, default=DEFAULT_DIR, help="Built dashboard directory")
+    parser = argparse.ArgumentParser(
+        description="Serve the STOA monitoring & simulation dashboard."
+    )
+    parser.add_argument(
+        "--dir", type=Path, default=DEFAULT_DIR, help="Built dashboard directory"
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8501)
     args = parser.parse_args()
@@ -30,7 +34,10 @@ def main() -> None:
 
     handler = partial(SimpleHTTPRequestHandler, directory=str(serve_dir))
     server = ThreadingHTTPServer((args.host, args.port), handler)
-    print(f"STOA dashboard serving {serve_dir} at http://{args.host}:{args.port}", flush=True)
+    print(
+        f"STOA dashboard serving {serve_dir} at http://{args.host}:{args.port}",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

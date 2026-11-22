@@ -138,7 +138,9 @@ def main() -> None:
         REPO_ROOT / "data/interim/osm/melbourne/graph/edges.parquet",
         columns=["segment_id", "geometry"],
     ).set_index("segment_id")
-    s_mid = all_edges.geometry.loc[steep["segment_id"]].interpolate(0.5, normalized=True)
+    s_mid = all_edges.geometry.loc[steep["segment_id"]].interpolate(
+        0.5, normalized=True
+    )
     tree = cKDTree(np.c_[s_mid.x, s_mid.y])
     near = tree.query(xy)[1]
     dem = osm["dem_slope_mean_pct"].astype("float32").to_numpy()
@@ -186,7 +188,9 @@ def main() -> None:
     for c in ev.columns:
         frame[c] = ev[c].to_numpy().astype("float32")
 
-    seg_part = seg_mat.drop(columns=["slope_pct", "slope_pct_local_mean", "elevation_m"])
+    seg_part = seg_mat.drop(
+        columns=["slope_pct", "slope_pct_local_mean", "elevation_m"]
+    )
     if "recent_station_dist_m" in seg_part.columns and not bool(
         per_hour["post_metro_tunnel"].iloc[0]
     ):
@@ -239,7 +243,8 @@ def main() -> None:
                 "x": float(xy[i, 0]),
                 "y": float(xy[i, 1]),
                 "observed": [
-                    None if pd.isna(obs.get(h, pd.Series()).get(r["location_id"]))
+                    None
+                    if pd.isna(obs.get(h, pd.Series()).get(r["location_id"]))
                     else float(obs[h][r["location_id"]])
                     for h in range(24)
                 ],
@@ -251,12 +256,16 @@ def main() -> None:
     segs.to_parquet(out / "segments.parquet")
     pred.to_parquet(out / "predictions.parquet", index=False)
     sensors.to_json(out / "sensors.json", orient="records", indent=1)
-    both = sensors.apply(
-        lambda r: [
-            (o, p) for o, p in zip(r["observed"], r["predicted"]) if o is not None
-        ],
-        axis=1,
-    ).explode().dropna()
+    both = (
+        sensors.apply(
+            lambda r: [
+                (o, p) for o, p in zip(r["observed"], r["predicted"]) if o is not None
+            ],
+            axis=1,
+        )
+        .explode()
+        .dropna()
+    )
     o = np.array([v[0] for v in both])
     p = np.array([v[1] for v in both])
     meta = {
@@ -264,8 +273,8 @@ def main() -> None:
         "model": "stoa-flow-rich v1 (champion), LightGBM Poisson mean",
         "run_id": RUN_ID,
         "segments": int(n_seg),
-        "sensors": int(len(sensors)),
-        "sensor_hours_compared": int(len(o)),
+        "sensors": len(sensors),
+        "sensor_hours_compared": len(o),
         "sensor_wape": float(np.abs(o - p).sum() / max(o.sum(), 1.0)),
         "sensor_log_mae": float(np.abs(np.log1p(o) - np.log1p(p)).mean()),
         "assumptions": [

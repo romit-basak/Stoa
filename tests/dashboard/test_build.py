@@ -107,7 +107,9 @@ def test_multi_city_dashboard_discovery_and_build(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    (melb / "sensors.json").write_text(json.dumps(_melbourne_sensors()), encoding="utf-8")
+    (melb / "sensors.json").write_text(
+        json.dumps(_melbourne_sensors()), encoding="utf-8"
+    )
 
     (boston / "meta.json").write_text(
         json.dumps(
@@ -127,7 +129,16 @@ def test_multi_city_dashboard_discovery_and_build(tmp_path: Path) -> None:
         json.dumps(_boston_forecast_only_sensors()), encoding="utf-8"
     )
     (boston / "landmarks.json").write_text(
-        json.dumps([{"name": "Krentzman Quad", "category": "park", "lat": 42.3398, "lon": -71.0892}]),
+        json.dumps(
+            [
+                {
+                    "name": "Krentzman Quad",
+                    "category": "park",
+                    "lat": 42.3398,
+                    "lon": -71.0892,
+                }
+            ]
+        ),
         encoding="utf-8",
     )
 

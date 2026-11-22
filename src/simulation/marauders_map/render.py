@@ -30,15 +30,15 @@ import geopandas as gpd
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.patheffects as pe  # noqa: E402
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import shapely  # noqa: E402
-from matplotlib.collections import EllipseCollection, LineCollection  # noqa: E402
-from scipy.ndimage import gaussian_filter  # noqa: E402
+import matplotlib.patheffects as pe
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import shapely
+from matplotlib.collections import EllipseCollection, LineCollection
+from scipy.ndimage import gaussian_filter
 
-from src.ingest.common import REPO_ROOT  # noqa: E402
+from src.ingest.common import REPO_ROOT
 
 DIR = REPO_ROOT / "data" / "simulation" / "marauders_map"
 INTERIM = REPO_ROOT / "data" / "interim" / "osm" / "melbourne"
@@ -73,7 +73,9 @@ def find_landmarks() -> list[dict]:
     out = []
     for label, layer, pattern, mode in LANDMARKS:
         g = gpd.read_parquet(INTERIM / f"{layer}.parquet")
-        hit = g[g["name"].astype(str).str.contains(pattern, flags=re.I, regex=True)]
+        hit = g[
+            g["name"].astype(str).str.contains(pattern, flags=re.IGNORECASE, regex=True)
+        ]
         if mode and "mode" in hit.columns:
             hit = hit[hit["mode"].eq(mode)]
         if hit.empty:
@@ -134,7 +136,10 @@ def ink_layer(
 
     ax.add_collection(
         PolyCollection(
-            buildings, facecolors=[(*INK, 0.075)], edgecolors=[(*INK, 0.30)], linewidths=0.35
+            buildings,
+            facecolors=[(*INK, 0.075)],
+            edgecolors=[(*INK, 0.30)],
+            linewidths=0.35,
         )
     )
     lines = [np.asarray(g.coords) for g in segs.geometry]
@@ -151,8 +156,14 @@ def ink_layer(
     # Double-ruled border with a small notch at each corner.
     m1, m2 = 26, 36
     for m, lw in ((m1, 1.6), (m2, 0.6)):
-        x0, x1 = VIEW[0] + m * (VIEW[2] - VIEW[0]) / W, VIEW[2] - m * (VIEW[2] - VIEW[0]) / W
-        y0, y1 = VIEW[1] + m * (VIEW[3] - VIEW[1]) / H, VIEW[3] - m * (VIEW[3] - VIEW[1]) / H
+        x0, x1 = (
+            VIEW[0] + m * (VIEW[2] - VIEW[0]) / W,
+            VIEW[2] - m * (VIEW[2] - VIEW[0]) / W,
+        )
+        y0, y1 = (
+            VIEW[1] + m * (VIEW[3] - VIEW[1]) / H,
+            VIEW[3] - m * (VIEW[3] - VIEW[1]) / H,
+        )
         ax.plot([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], color=(*INK, 0.85), lw=lw)
     fig.canvas.draw()
     img = np.asarray(fig.canvas.buffer_rgba()).copy()
@@ -188,11 +199,18 @@ class Walkers:
         self.flow = flow[self.idx]  # (n, 24)
         pts0 = shapely.get_point(self.geoms, 0)
         pts1 = shapely.get_point(self.geoms, -1)
-        key = lambda p: list(zip(np.round(shapely.get_x(p), 1), np.round(shapely.get_y(p), 1)))  # noqa: E731
-        self.k0, self.k1 = key(pts0), key(pts1)
+
+        def _key(p):
+            return list(
+                zip(np.round(shapely.get_x(p), 1), np.round(shapely.get_y(p), 1))
+            )
+
+        self.k0, self.k1 = _key(pts0), _key(pts1)
         self.at: dict[tuple, list[tuple[int, int]]] = {}
         for i, (a, b) in enumerate(zip(self.k0, self.k1)):
-            self.at.setdefault(a, []).append((i, 1))  # leave from the start, walking forward
+            self.at.setdefault(a, []).append(
+                (i, 1)
+            )  # leave from the start, walking forward
             self.at.setdefault(b, []).append((i, -1))
         self.seg = np.empty(0, int)
         self.dist = np.empty(0)
@@ -207,7 +225,9 @@ class Walkers:
         self.q = self.flow[:, 0]
 
     def _heading(self, seg: np.ndarray, dist: np.ndarray, d: np.ndarray) -> np.ndarray:
-        a = shapely.line_interpolate_point(self.geoms[seg], np.clip(dist, 0, self.len[seg]))
+        a = shapely.line_interpolate_point(
+            self.geoms[seg], np.clip(dist, 0, self.len[seg])
+        )
         b = shapely.line_interpolate_point(
             self.geoms[seg], np.clip(dist + d * 1.5, 0, self.len[seg])
         )
@@ -216,7 +236,7 @@ class Walkers:
         return np.arctan2(dy * d, dx * d)
 
     def step(self, t_hours: float, spawn_per_frame: float) -> None:
-        h0 = int(math.floor(t_hours)) % 24
+        h0 = math.floor(t_hours) % 24
         h1 = (h0 + 1) % 24
         f = t_hours - math.floor(t_hours)
         self.q = (1 - f) * self.flow[:, h0] + f * self.flow[:, h1]
@@ -254,7 +274,9 @@ class Walkers:
             starts = np.where(es == 1, 0.0, self.len[js])
             h1_ = self._heading(js, starts, es)
             straight = np.cos(h1_ - heading0)
-            weight = np.maximum(self.q[js], 1.0) * (0.15 + 0.85 * np.clip(straight, 0, 1) ** 2)
+            weight = np.maximum(self.q[js], 1.0) * (
+                0.15 + 0.85 * np.clip(straight, 0, 1) ** 2
+            )
             c = self.rng.choice(len(js), p=weight / weight.sum())
             self.seg[k], self.dir[k], self.dist[k] = js[c], es[c], starts[c]
         alive = self.age < self.WALK
@@ -272,7 +294,9 @@ class Walkers:
         st = self.since >= self.STRIDE
         if st.any():
             s, dd, d = self.seg[st], self.dist[st], self.dir[st]
-            p = shapely.line_interpolate_point(self.geoms[s], np.clip(dd, 0, self.len[s]))
+            p = shapely.line_interpolate_point(
+                self.geoms[s], np.clip(dd, 0, self.len[s])
+            )
             ang = self._heading(s, dd, d)
             side = self.side[st]
             self.fx = np.r_[self.fx, shapely.get_x(p) - np.sin(ang) * 1.8 * side]
@@ -296,7 +320,9 @@ def smooth(x: float) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fps", type=int, default=20)
-    ap.add_argument("--still", type=float, default=None, help="render one frame at this hour")
+    ap.add_argument(
+        "--still", type=float, default=None, help="render one frame at this hour"
+    )
     ap.add_argument("--hold", type=int, default=20, help="frames per hour")
     ap.add_argument("--out", default=str(DIR))
     args = ap.parse_args()
@@ -311,7 +337,9 @@ def main() -> None:
         .to_numpy(dtype=float)
     )
     sensors = json.loads((DIR / "sensors.json").read_text())
-    sensors = [s for s in sensors if VIEW[0] < s["x"] < VIEW[2] and VIEW[1] < s["y"] < VIEW[3]]
+    sensors = [
+        s for s in sensors if VIEW[0] < s["x"] < VIEW[2] and VIEW[1] < s["y"] < VIEW[3]
+    ]
     marks = find_landmarks()
 
     rng = np.random.default_rng(3)
@@ -338,8 +366,26 @@ def main() -> None:
     halo = [pe.withStroke(linewidth=3.2, foreground=(*PARCHMENT, 0.95))]
     # Prominent places: a small ink diamond and a label.
     for m in marks:
-        ax.plot(m["x"], m["y"], marker="D", ms=5.5, mfc=(*INK, 0.9), mec=(*INK, 1), mew=0.6, zorder=6)
-        ax.plot(m["x"], m["y"], marker="o", ms=17, mfc="none", mec=(*INK, 0.65), mew=0.7, zorder=6)
+        ax.plot(
+            m["x"],
+            m["y"],
+            marker="D",
+            ms=5.5,
+            mfc=(*INK, 0.9),
+            mec=(*INK, 1),
+            mew=0.6,
+            zorder=6,
+        )
+        ax.plot(
+            m["x"],
+            m["y"],
+            marker="o",
+            ms=17,
+            mfc="none",
+            mec=(*INK, 0.65),
+            mew=0.7,
+            zorder=6,
+        )
         ax.text(
             m["x"] + 38,
             m["y"] + 24,
@@ -352,19 +398,36 @@ def main() -> None:
         )
     mark_xy = np.array([[m["x"], m["y"]] for m in marks])
     # Sensors: a dot, a solid ring for the prediction and a dashed one for the count.
-    px_per_m = W / (VIEW[2] - VIEW[0])
     sx = np.array([s["x"] for s in sensors])
     sy = np.array([s["y"] for s in sensors])
     ax.plot(sx, sy, "o", ms=3.0, mfc=(*INK, 1), mec="none", zorder=8)
     peak = max(np.nanmax(s["predicted"]) for s in sensors)
-    ring_pred = ax.scatter(sx, sy, s=1, facecolors="none", edgecolors=[(*INK, 0.95)], linewidths=1.1, zorder=8)
+    ring_pred = ax.scatter(
+        sx,
+        sy,
+        s=1,
+        facecolors="none",
+        edgecolors=[(*INK, 0.95)],
+        linewidths=1.1,
+        zorder=8,
+    )
     ring_obs = ax.scatter(
-        sx, sy, s=1, facecolors="none", edgecolors=[(*INK, 0.8)], linewidths=0.9, linestyles=(0, (2, 2)), zorder=8
+        sx,
+        sy,
+        s=1,
+        facecolors="none",
+        edgecolors=[(*INK, 0.8)],
+        linewidths=0.9,
+        linestyles=(0, (2, 2)),
+        zorder=8,
     )
     top = sorted(sensors, key=lambda s: -max(v for v in s["predicted"]))[:12]
     labelled = []
     for s in top:
-        if len(mark_xy) and np.min(np.hypot(mark_xy[:, 0] - s["x"], mark_xy[:, 1] - s["y"])) < 140:
+        if (
+            len(mark_xy)
+            and np.min(np.hypot(mark_xy[:, 0] - s["x"], mark_xy[:, 1] - s["y"])) < 140
+        ):
             continue
         labelled.append(s)
     lab_txt = {}
@@ -381,45 +444,95 @@ def main() -> None:
         )
     # Footprints.
     foot_w = EllipseCollection(
-        widths=[1], heights=[1], angles=[0], units="xy", offsets=np.zeros((1, 2)), offset_transform=ax.transData,
-        facecolors=[(*INK, 0)], edgecolors="none", zorder=4,
+        widths=[1],
+        heights=[1],
+        angles=[0],
+        units="xy",
+        offsets=np.zeros((1, 2)),
+        offset_transform=ax.transData,
+        facecolors=[(*INK, 0)],
+        edgecolors="none",
+        zorder=4,
     )
     heel_w = EllipseCollection(
-        widths=[1], heights=[1], angles=[0], units="xy", offsets=np.zeros((1, 2)), offset_transform=ax.transData,
-        facecolors=[(*INK, 0)], edgecolors="none", zorder=4,
+        widths=[1],
+        heights=[1],
+        angles=[0],
+        units="xy",
+        offsets=np.zeros((1, 2)),
+        offset_transform=ax.transData,
+        facecolors=[(*INK, 0)],
+        edgecolors="none",
+        zorder=4,
     )
     ax.add_collection(foot_w)
     ax.add_collection(heel_w)
     # Title, clock, timeline, legend.
     title = ax.text(
-        0.5, 0.5, "I solemnly swear that I am up to no good.", transform=ax.transAxes, ha="center", va="center",
-        fontname=FONT, fontsize=40, color=(*INK, 0), zorder=20,
+        0.5,
+        0.5,
+        "I solemnly swear that I am up to no good.",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontname=FONT,
+        fontsize=40,
+        color=(*INK, 0),
+        zorder=20,
     )
     clock = ax.text(
-        VIEW[0] + 100, VIEW[3] - 150, "", fontname=FONT, fontsize=36, color=(*INK, 0.95), zorder=12,
+        VIEW[0] + 100,
+        VIEW[3] - 150,
+        "",
+        fontname=FONT,
+        fontsize=36,
+        color=(*INK, 0.95),
+        zorder=12,
         path_effects=[pe.withStroke(linewidth=4, foreground=(*PARCHMENT, 0.9))],
     )
     sub = ax.text(
-        VIEW[0] + 100, VIEW[3] - 232,
+        VIEW[0] + 100,
+        VIEW[3] - 232,
         "Melbourne CBD  ·  predicted foot traffic  ·  Friday 6 November 2026",
-        fontname=FONT, fontsize=15, color=(*INK, 0.85), zorder=12,
+        fontname=FONT,
+        fontsize=15,
+        color=(*INK, 0.85),
+        zorder=12,
         path_effects=[pe.withStroke(linewidth=3, foreground=(*PARCHMENT, 0.9))],
     )
     legend = ax.text(
-        VIEW[0] + 100, VIEW[1] + 215,
+        VIEW[0] + 100,
+        VIEW[1] + 215,
         "more footprints, more people\n●  sensor    ○  predicted    ┈  counted",
-        fontname=FONT, fontsize=13.5, color=(*INK, 0.85), zorder=12, linespacing=1.5,
+        fontname=FONT,
+        fontsize=13.5,
+        color=(*INK, 0.85),
+        zorder=12,
+        linespacing=1.5,
         path_effects=[pe.withStroke(linewidth=3, foreground=(*PARCHMENT, 0.9))],
     )
     foot = ax.text(
-        (VIEW[0] + VIEW[2]) / 2, VIEW[1] + 95,
+        (VIEW[0] + VIEW[2]) / 2,
+        VIEW[1] + 95,
         "Stoa flow model  ·  planning guidance, not a crowd-safety assessment",
-        fontname=FONT, fontsize=12, color=(*INK, 0.75), ha="center", zorder=12,
+        fontname=FONT,
+        fontsize=12,
+        color=(*INK, 0.75),
+        ha="center",
+        zorder=12,
         path_effects=[pe.withStroke(linewidth=3, foreground=(*PARCHMENT, 0.9))],
     )
     end_title = ax.text(
-        0.5, 0.5, "Mischief managed.", transform=ax.transAxes, ha="center", va="center",
-        fontname=FONT, fontsize=52, color=(*INK, 0), zorder=20,
+        0.5,
+        0.5,
+        "Mischief managed.",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontname=FONT,
+        fontsize=52,
+        color=(*INK, 0),
+        zorder=20,
     )
     tl_x0, tl_x1 = VIEW[0] + 360, VIEW[2] - 360
     tl_y = VIEW[1] + 150
@@ -427,8 +540,19 @@ def main() -> None:
     for h in range(0, 25, 3):
         x = tl_x0 + (tl_x1 - tl_x0) * h / 24
         ax.plot([x, x], [tl_y - 9, tl_y + 9], color=(*INK, 0.7), lw=0.8, zorder=12)
-        ax.text(x, tl_y - 52, f"{h % 24:02d}", ha="center", fontname=FONT, fontsize=11, color=(*INK, 0.75), zorder=12)
-    (cursor,) = ax.plot([tl_x0], [tl_y], marker="v", ms=9, mfc=(*INK, 1), mec="none", zorder=13)
+        ax.text(
+            x,
+            tl_y - 52,
+            f"{h % 24:02d}",
+            ha="center",
+            fontname=FONT,
+            fontsize=11,
+            color=(*INK, 0.75),
+            zorder=12,
+        )
+    (cursor,) = ax.plot(
+        [tl_x0], [tl_y], marker="v", ms=9, mfc=(*INK, 1), mec="none", zorder=13
+    )
 
     walkers = Walkers(segs, np.nan_to_num(flow, nan=1.0))
     totals = np.nansum(flow, axis=0)
@@ -465,7 +589,9 @@ def main() -> None:
             hud = 1 - smooth(k / 22)
         if intro <= i < intro + n_main or i >= intro + n_main:
             hh = min(int(t), 23)
-            share = (totals[hh] * (1 - (t - hh)) + totals[(hh + 1) % 24] * (t - hh)) / totals.max()
+            share = (
+                totals[hh] * (1 - (t - hh)) + totals[(hh + 1) % 24] * (t - hh)
+            ) / totals.max()
             spawn = spawn_max * share**0.9 * (map_a if i >= intro + n_main else 1.0)
         walkers.step(t, spawn)
         # Ink reveal.
@@ -503,14 +629,18 @@ def main() -> None:
         hh = min(int(t), 23)
         f = t - hh
         h2 = (hh + 1) % 24
-        sp = np.array([(1 - f) * s["predicted"][hh] + f * s["predicted"][h2] for s in sensors])
+        sp = np.array(
+            [(1 - f) * s["predicted"][hh] + f * s["predicted"][h2] for s in sensors]
+        )
         so = np.array(
             [
-                np.nan if s["observed"][hh] is None or s["observed"][h2] is None
+                np.nan
+                if s["observed"][hh] is None or s["observed"][h2] is None
                 else (1 - f) * s["observed"][hh] + f * s["observed"][h2]
                 for s in sensors
             ]
         )
+
         # Ring area is in points squared: radius ~ sqrt(count), capped by the peak.
         def area(v: np.ndarray) -> np.ndarray:
             r_pts = 3.0 + 17.0 * np.sqrt(np.nan_to_num(v) / peak)
@@ -527,7 +657,9 @@ def main() -> None:
             if np.isnan(so[j]):
                 txt.set_text(f"{s['name']}\n{sp[j]:,.0f} predicted")
             else:
-                txt.set_text(f"{s['name']}\n{sp[j]:,.0f} predicted · {so[j]:,.0f} counted")
+                txt.set_text(
+                    f"{s['name']}\n{sp[j]:,.0f} predicted · {so[j]:,.0f} counted"
+                )
             txt.set_alpha(sa * map_a)
         # HUD.
         hour = int(t) % 24
@@ -559,20 +691,32 @@ def main() -> None:
     from PIL import Image
 
     mp4 = out / "marauders_map.mp4"
-    writer = imageio.get_writer(str(mp4), fps=args.fps, codec="libx264", quality=8, macro_block_size=2)
+    writer = imageio.get_writer(
+        str(mp4), fps=args.fps, codec="libx264", quality=8, macro_block_size=2
+    )
     gif_frames = []
     for i in range(total):
         img = frame(i)
         writer.append_data(img)
         if i % 2 == 0:
-            gif_frames.append(Image.fromarray(img).resize((W // 2, H // 2), Image.LANCZOS))
+            gif_frames.append(
+                Image.fromarray(img).resize((W // 2, H // 2), Image.LANCZOS)
+            )
         if i % 60 == 0:
             print(f"frame {i}/{total}", flush=True)
     writer.close()
-    pal = [f.quantize(colors=40, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for f in gif_frames]
+    pal = [
+        f.quantize(colors=40, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        for f in gif_frames
+    ]
     pal[0].save(
-        out / "marauders_map.gif", save_all=True, append_images=pal[1:], duration=int(2000 / args.fps), loop=0,
-        optimize=True, disposal=1,
+        out / "marauders_map.gif",
+        save_all=True,
+        append_images=pal[1:],
+        duration=int(2000 / args.fps),
+        loop=0,
+        optimize=True,
+        disposal=1,
     )
     print("wrote", mp4, out / "marauders_map.gif")
     del meta

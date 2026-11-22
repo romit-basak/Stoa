@@ -36,16 +36,16 @@ import geopandas as gpd
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.font_manager as fm  # noqa: E402
-import matplotlib.patches as mpatches  # noqa: E402
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import shapely  # noqa: E402
-from matplotlib.collections import LineCollection, PolyCollection  # noqa: E402
-from scipy.ndimage import gaussian_filter  # noqa: E402
+import matplotlib.font_manager as fm
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import shapely
+from matplotlib.collections import LineCollection, PolyCollection
+from scipy.ndimage import gaussian_filter
 
-from src.ingest.common import REPO_ROOT  # noqa: E402
+from src.ingest.common import REPO_ROOT
 
 DATA_DIR = REPO_ROOT / "data" / "simulation" / "marauders_map"
 OUT_DIR = REPO_ROOT / "data" / "simulation" / "marauders_chronicle"
@@ -64,8 +64,12 @@ CARD_BG = np.array([0.992, 0.976, 0.935])  # Crisp label fill
 INK = np.array([0.135, 0.145, 0.210])  # Deep ink-indigo (#222536) for footprints
 INK_SEPIA = np.array([0.235, 0.170, 0.125])  # Warm sepia for street lines
 INK_MUTED = np.array([0.440, 0.375, 0.315])  # Soft warm slate-sepia
-CRIMSON = np.array([0.785, 0.180, 0.200])  # Vibrant crimson-ruby (#C82E33) for predictions
-TEAL = np.array([0.115, 0.455, 0.485])  # Rich atlas teal (#1D747C) for transit & observed
+CRIMSON = np.array(
+    [0.785, 0.180, 0.200]
+)  # Vibrant crimson-ruby (#C82E33) for predictions
+TEAL = np.array(
+    [0.115, 0.455, 0.485]
+)  # Rich atlas teal (#1D747C) for transit & observed
 FOREST = np.array([0.245, 0.465, 0.295])  # Lush botanical green (#3F774B) for park pins
 PARK_FILL = np.array([0.755, 0.855, 0.690])  # Vibrant sage-emerald parks (#C1DAB0)
 PARK_EDGE = np.array([0.465, 0.615, 0.415])  # Crisp park outline
@@ -77,14 +81,77 @@ GOLD_RULE = np.array([0.725, 0.595, 0.395])  # Burnished gold hairline rule
 
 # Prominent CBD landmarks: (display_name, osm_layer, regex, mode, category, dx_m, dy_m, ha)
 LANDMARKS: list[tuple[str, str, str, str | None, str, float, float, str]] = [
-    ("Flinders Street Station", "transit", r"^Flinders Street$", "rail_station", "transit", 70, -84, "left"),
-    ("Southern Cross Station", "transit", r"^Southern Cross Station$", "bus_stop", "transit", 68, 56, "left"),
-    ("Melbourne Central", "transit", r"Melbourne Central and State Library", None, "transit", 78, 62, "left"),
-    ("Parliament Station", "transit", r"Parliament Station", None, "transit", 70, 48, "left"),
-    ("Bourke Street Mall", "ped_areas", r"^Bourke Street Mall$", None, "civic", -78, 56, "right"),
-    ("Queen Victoria Market", "transit", r"Stop 7: Queen Victoria Market", None, "civic", 65, -24, "left"),
+    (
+        "Flinders Street Station",
+        "transit",
+        r"^Flinders Street$",
+        "rail_station",
+        "transit",
+        70,
+        -84,
+        "left",
+    ),
+    (
+        "Southern Cross Station",
+        "transit",
+        r"^Southern Cross Station$",
+        "bus_stop",
+        "transit",
+        68,
+        56,
+        "left",
+    ),
+    (
+        "Melbourne Central",
+        "transit",
+        r"Melbourne Central and State Library",
+        None,
+        "transit",
+        78,
+        62,
+        "left",
+    ),
+    (
+        "Parliament Station",
+        "transit",
+        r"Parliament Station",
+        None,
+        "transit",
+        70,
+        48,
+        "left",
+    ),
+    (
+        "Bourke Street Mall",
+        "ped_areas",
+        r"^Bourke Street Mall$",
+        None,
+        "civic",
+        -78,
+        56,
+        "right",
+    ),
+    (
+        "Queen Victoria Market",
+        "transit",
+        r"Stop 7: Queen Victoria Market",
+        None,
+        "civic",
+        65,
+        -24,
+        "left",
+    ),
     ("Town Hall", "transit", r"Stop 6: Town Hall", None, "civic", 74, 12, "left"),
-    ("Flagstaff Gardens", "green", r"^Flagstaff Gardens$", None, "park", 0, -102, "center"),
+    (
+        "Flagstaff Gardens",
+        "green",
+        r"^Flagstaff Gardens$",
+        None,
+        "park",
+        0,
+        -102,
+        "center",
+    ),
     ("Treasury Gardens", "green", r"^Treasury Gardens$", None, "park", 58, -68, "left"),
     ("Birrarung Marr", "green", r"^Birrarung Marr$", None, "park", 0, -86, "center"),
     ("Southbank", "green", r"^Southbank Garden$", None, "park", -68, 54, "right"),
@@ -185,7 +252,9 @@ def deduplicate_sensors(
 
     def priority(s: dict[str, Any]) -> tuple[int, float]:
         obs_count = sum(1 for v in s.get("observed", []) if v is not None)
-        peak_pred = max((v for v in s.get("predicted", []) if v is not None), default=0.0)
+        peak_pred = max(
+            (v for v in s.get("predicted", []) if v is not None), default=0.0
+        )
         return (1 if obs_count > 0 else 0, peak_pred)
 
     ordered = sorted(in_view, key=priority, reverse=True)
@@ -212,7 +281,9 @@ def find_landmarks(
                 continue
             cache[layer] = gpd.read_parquet(path)
         g = cache[layer]
-        hit = g[g["name"].astype(str).str.contains(pattern, flags=re.I, regex=True)]
+        hit = g[
+            g["name"].astype(str).str.contains(pattern, flags=re.IGNORECASE, regex=True)
+        ]
         if mode and "mode" in hit.columns:
             hit = hit[hit["mode"].eq(mode)]
         if hit.empty:
@@ -272,7 +343,9 @@ def make_parchment(width: int, height: int, rng: np.random.Generator) -> np.ndar
 
     img = np.empty((height, width, 3), dtype=np.float32)
     for k in range(3):
-        base = PARCHMENT[k] * (1.0 - vignette * 0.34) + PARCHMENT_EDGE[k] * (vignette * 0.34)
+        base = PARCHMENT[k] * (1.0 - vignette * 0.34) + PARCHMENT_EDGE[k] * (
+            vignette * 0.34
+        )
         img[..., k] = base + 0.0085 * grain
     return np.clip(img, 0.0, 1.0)
 
@@ -344,7 +417,13 @@ def render_base_ink(
         dy = inset * (VIEW[3] - VIEW[1]) / map_h
         x0, x1 = VIEW[0] + dx, VIEW[2] - dx
         y0, y1 = VIEW[1] + dy, VIEW[3] - dy
-        ax.plot([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], color=(*GOLD_RULE, alpha), lw=lw, zorder=5)
+        ax.plot(
+            [x0, x1, x1, x0, x0],
+            [y0, y0, y1, y1, y0],
+            color=(*GOLD_RULE, alpha),
+            lw=lw,
+            zorder=5,
+        )
 
     # Minimalist teal-and-gold compass rose in top-right corner
     cx = VIEW[2] - 125.0
@@ -373,10 +452,18 @@ def render_base_ink(
         )
     )
     ax.plot(
-        [cx, cx], [cy - r_outer * 0.85, cy + r_outer * 1.05], color=(*TEAL, 0.72), lw=0.65, zorder=6
+        [cx, cx],
+        [cy - r_outer * 0.85, cy + r_outer * 1.05],
+        color=(*TEAL, 0.72),
+        lw=0.65,
+        zorder=6,
     )
     ax.plot(
-        [cx - r_outer * 0.85, cx + r_outer * 0.85], [cy, cy], color=(*TEAL, 0.72), lw=0.65, zorder=6
+        [cx - r_outer * 0.85, cx + r_outer * 0.85],
+        [cy, cy],
+        color=(*TEAL, 0.72),
+        lw=0.65,
+        zorder=6,
     )
     ax.text(
         cx,
@@ -404,7 +491,9 @@ class MarauderWalkers:
     LIFE_FRAMES = 18
     WALK_FRAMES = 110
 
-    def __init__(self, segs: gpd.GeoDataFrame, flow: np.ndarray, seed: int = 19) -> None:
+    def __init__(
+        self, segs: gpd.GeoDataFrame, flow: np.ndarray, seed: int = 19
+    ) -> None:
         self.rng = np.random.default_rng(seed)
         keep = np.array(
             [
@@ -420,8 +509,12 @@ class MarauderWalkers:
 
         pts0 = shapely.get_point(self.geoms, 0)
         pts1 = shapely.get_point(self.geoms, -1)
-        self.k0 = list(zip(np.round(shapely.get_x(pts0), 1), np.round(shapely.get_y(pts0), 1)))
-        self.k1 = list(zip(np.round(shapely.get_x(pts1), 1), np.round(shapely.get_y(pts1), 1)))
+        self.k0 = list(
+            zip(np.round(shapely.get_x(pts0), 1), np.round(shapely.get_y(pts0), 1))
+        )
+        self.k1 = list(
+            zip(np.round(shapely.get_x(pts1), 1), np.round(shapely.get_y(pts1), 1))
+        )
         self.adj: dict[tuple[float, float], list[tuple[int, int]]] = {}
         for i, (a, b) in enumerate(zip(self.k0, self.k1)):
             self.adj.setdefault(a, []).append((i, 1))
@@ -440,8 +533,12 @@ class MarauderWalkers:
         self.fage = np.empty(0, dtype=int)
         self.q = self.flow[:, 0]
 
-    def _heading(self, seg: np.ndarray, dist: np.ndarray, direction: np.ndarray) -> np.ndarray:
-        a = shapely.line_interpolate_point(self.geoms[seg], np.clip(dist, 0.0, self.lengths[seg]))
+    def _heading(
+        self, seg: np.ndarray, dist: np.ndarray, direction: np.ndarray
+    ) -> np.ndarray:
+        a = shapely.line_interpolate_point(
+            self.geoms[seg], np.clip(dist, 0.0, self.lengths[seg])
+        )
         b = shapely.line_interpolate_point(
             self.geoms[seg], np.clip(dist + direction * 2.0, 0.0, self.lengths[seg])
         )
@@ -450,7 +547,7 @@ class MarauderWalkers:
         return np.arctan2(dy * direction, dx * direction)
 
     def step(self, t_hours: float, spawn_per_frame: float) -> None:
-        h0 = int(math.floor(t_hours)) % 24
+        h0 = math.floor(t_hours) % 24
         h1 = (h0 + 1) % 24
         frac = t_hours - math.floor(t_hours)
         self.q = (1.0 - frac) * self.flow[:, h0] + frac * self.flow[:, h1]
@@ -467,7 +564,9 @@ class MarauderWalkers:
                 self.dist = np.r_[self.dist, start]
                 self.dir = np.r_[self.dir, d]
                 self.age = np.r_[self.age, np.zeros(n_new, dtype=int)]
-                self.since = np.r_[self.since, self.rng.uniform(0.0, self.STRIDE_M, n_new)]
+                self.since = np.r_[
+                    self.since, self.rng.uniform(0.0, self.STRIDE_M, n_new)
+                ]
                 self.side = np.r_[self.side, self.rng.choice([-1, 1], size=n_new)]
 
         self.dist = self.dist + self.dir * self.SPEED_M
@@ -485,14 +584,20 @@ class MarauderWalkers:
             js = np.array([j for j, _ in opts], dtype=int)
             es = np.array([e for _, e in opts], dtype=int)
             h_in = self._heading(
-                np.array([i]), np.array([self.lengths[i] if d == 1 else 0.0]), np.array([d])
+                np.array([i]),
+                np.array([self.lengths[i] if d == 1 else 0.0]),
+                np.array([d]),
             )[0]
             starts = np.where(es == 1, 0.0, self.lengths[js])
             h_out = self._heading(js, starts, es)
             straight = np.clip(np.cos(h_out - h_in), 0.0, 1.0)
             weights = np.maximum(self.q[js], 1.0) * (0.15 + 0.85 * straight**2)
             choice = int(self.rng.choice(len(js), p=weights / weights.sum()))
-            self.seg[k], self.dir[k], self.dist[k] = js[choice], es[choice], starts[choice]
+            self.seg[k], self.dir[k], self.dist[k] = (
+                js[choice],
+                es[choice],
+                starts[choice],
+            )
 
         alive = self.age < self.WALK_FRAMES
         self.seg = self.seg[alive]
@@ -514,7 +619,9 @@ class MarauderWalkers:
             s = self.seg[stepped]
             dd = self.dist[stepped]
             d = self.dir[stepped]
-            pts = shapely.line_interpolate_point(self.geoms[s], np.clip(dd, 0.0, self.lengths[s]))
+            pts = shapely.line_interpolate_point(
+                self.geoms[s], np.clip(dd, 0.0, self.lengths[s])
+            )
             ang = self._heading(s, dd, d)
             side = self.side[stepped]
             lateral = 4.5
@@ -539,9 +646,18 @@ def draw_scroll_ribbon(
 ) -> None:
     """Draw a vibrant, category-colored pin + scroll banner for a prominent location."""
     accent = CATEGORY_COLORS.get(category, TEAL)
-    ax.plot([x, x + dx * 0.78], [y, y + dy * 0.78], color=(*accent, 0.55), lw=0.85, zorder=7)
     ax.plot(
-        x, y, marker="D", ms=6.8, mfc=(*CARD_BG, 0.98), mec=(*accent, 0.95), mew=1.2, zorder=8
+        [x, x + dx * 0.78], [y, y + dy * 0.78], color=(*accent, 0.55), lw=0.85, zorder=7
+    )
+    ax.plot(
+        x,
+        y,
+        marker="D",
+        ms=6.8,
+        mfc=(*CARD_BG, 0.98),
+        mec=(*accent, 0.95),
+        mew=1.2,
+        zorder=8,
     )
     ax.plot(x, y, marker="D", ms=2.6, mfc=(*accent, 0.98), mec="none", zorder=9)
     ax.text(
@@ -615,7 +731,9 @@ def render(
     vein_thresh = float(np.quantile(mean_flow_in, 0.86)) if len(mean_flow_in) else 0.0
     vein_mask = mean_flow_in >= vein_thresh
     vein_indices = in_view.index.to_numpy()[vein_mask]
-    vein_lines = [np.asarray(g.coords) for g in in_view.geometry.iloc[np.flatnonzero(vein_mask)]]
+    vein_lines = [
+        np.asarray(g.coords) for g in in_view.geometry.iloc[np.flatnonzero(vein_mask)]
+    ]
     vein_flow = np.nan_to_num(flow[vein_indices], nan=0.0)
     vein_peak = float(np.percentile(vein_flow, 98)) if vein_flow.size else 1.0
 
@@ -647,7 +765,16 @@ def render(
     sx = np.array([s["x"] for s in sensors], dtype=float)
     sy = np.array([s["y"] for s in sensors], dtype=float)
     sensor_peak = max((max(s["predicted"]) for s in sensors), default=1.0)
-    ax.plot(sx, sy, "o", ms=3.8, mfc=(*CRIMSON, 0.95), mec=(*CARD_BG, 0.95), mew=0.6, zorder=6)
+    ax.plot(
+        sx,
+        sy,
+        "o",
+        ms=3.8,
+        mfc=(*CRIMSON, 0.95),
+        mec=(*CARD_BG, 0.95),
+        mew=0.6,
+        zorder=6,
+    )
     ring_pred = ax.scatter(
         sx,
         sy,
@@ -717,7 +844,11 @@ def render(
     ax.text(
         0.5,
         0.026,
-        "Footprints & amber–ruby veins: predicted flow   ·   Crimson ring: predicted   ·   Teal dashed: observed   ·   Planning guidance, not a crowd-safety assessment",
+        (
+            "Footprints & amber–ruby veins: predicted flow   ·   "
+            "Crimson ring: predicted   ·   Teal dashed: observed   ·   "
+            "Planning guidance, not a crowd-safety assessment"
+        ),
         transform=ax.transAxes,
         fontfamily=font_serif,
         fontsize=8.2,
@@ -768,7 +899,9 @@ def render(
         if n_fp > 0:
             age_norm = walkers.fage / walkers.LIFE_FRAMES
             fp_alpha = 0.92 * (1.0 - age_norm) ** 1.5
-            sole_v, heel_v = footprint_polygons(walkers.fx, walkers.fy, walkers.fa, scale=17.5)
+            sole_v, heel_v = footprint_polygons(
+                walkers.fx, walkers.fy, walkers.fa, scale=17.5
+            )
             fp_col = np.c_[np.tile(INK, (n_fp, 1)), fp_alpha]
             sole_pc.set_verts(sole_v)
             heel_pc.set_verts(heel_v)
@@ -779,7 +912,10 @@ def render(
             heel_pc.set_verts([])
 
         sp = np.array(
-            [(1.0 - frac) * s["predicted"][h0] + frac * s["predicted"][h1] for s in sensors]
+            [
+                (1.0 - frac) * s["predicted"][h0] + frac * s["predicted"][h1]
+                for s in sensors
+            ]
         )
         so = np.array(
             [
@@ -791,7 +927,9 @@ def render(
         )
 
         def ring_area(vals: np.ndarray) -> np.ndarray:
-            r_pts = 3.5 + 14.0 * np.sqrt(np.clip(np.nan_to_num(vals), 0.0, None) / sensor_peak)
+            r_pts = 3.5 + 14.0 * np.sqrt(
+                np.clip(np.nan_to_num(vals), 0.0, None) / sensor_peak
+            )
             return np.pi * r_pts**2
 
         ring_pred.set_sizes(ring_area(sp))
@@ -851,8 +989,12 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
     parser.add_argument("--out", type=Path, default=OUT_DIR)
     parser.add_argument("--fps", type=int, default=20)
-    parser.add_argument("--hold", type=int, default=18, help="Frames per simulated hour")
-    parser.add_argument("--still", type=float, default=None, help="Render a single frame at hour")
+    parser.add_argument(
+        "--hold", type=int, default=18, help="Frames per simulated hour"
+    )
+    parser.add_argument(
+        "--still", type=float, default=None, help="Render a single frame at hour"
+    )
     args = parser.parse_args()
     render(
         data_dir=args.data_dir,

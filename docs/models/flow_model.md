@@ -126,6 +126,8 @@ Each variant is its own registered model, `stoa-flow-rich` and `stoa-flow-portab
 
 **A retrain never replaces a better model.** Passing the gate isn't enough to be served: with `--promote`, the new version's `log_mae_cv` is compared with the current champion's (read from the run the champion was registered from). If it is worse by more than `gates.champion_tolerance` (0, so any worse score), the new version is registered as `challenger`, `champion` stays where it is, and the email says so. This is the automatic rollback: a worse model is kept in the registry for inspection but never served. A tie replaces the champion, since it was trained on newer data. `--rollback` is still there to undo a promotion by hand.
 
+Scores are compared only on the same test. When the champion was scored on another fold plan or data version (the buffered folds, for example, are harder: Space Syntax scores 1.024 on them against 0.980 on the unbuffered ones), each model's `log_mae_cv` is divided by that of the Space Syntax run on its own data version and fold plan, and those ratios are compared instead. The registry manifest records which was used (`champion_check_basis`). If either baseline run is missing, the raw scores are compared, as before.
+
 Each command writes what it did to `data/models/registry.json`, including the champion comparison.
 
 ## Notifications

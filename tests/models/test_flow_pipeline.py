@@ -184,6 +184,62 @@ def test_worse_retrain_does_not_replace_champion(tmp_path, fcfg, mlflow_store):
     assert registry.alias_version(client, name, "previous") == first["version"]
 
 
+def test_champion_check_on_another_fold_plan_uses_baseline_ratio(
+    tmp_path, fcfg, mlflow_store
+):
+    """A retrain scored on a harder fold plan (its Space Syntax baseline scores 10% worse)
+    is compared by log_mae_cv / baseline, not raw log_mae_cv: 5% worse raw but relatively
+    better is promoted; 15% worse raw is relatively worse too and is kept as challenger."""
+    run_all(fcfg, tmp_path / "models", families=["hgb"])
+    mlflow.set_tracking_uri(mlflow_store)
+    client = MlflowClient()
+    exp = client.get_experiment_by_name(
+        tracking.load_models_config()["tracking"]["experiment"]
+    )
+    g = registry.gate(client, exp.experiment_id, "rich", fcfg["gates"])
+    first = registry.register(client, g, promote=True)
+    name = registry.model_name("rich")
+    champ = client.get_run(g.run_id)
+    champ_base = client.get_run(g.baseline_run_id).data.metrics["log_mae_cv"]
+    data_version = champ.data.tags["stoa.dvc.processed"]
+    plan = champ.data.tags["stoa.plan"] + ";buffer=harder"
+    assert champ.data.tags["stoa.plan"] != plan
+
+    with mlflow.start_run(experiment_id=exp.experiment_id):
+        mlflow.set_tags(
+            {
+                "stoa.family": "baseline_space_syntax",
+                "stoa.plan": plan,
+                "stoa.dvc.processed": data_version,
+            }
+        )
+        mlflow.log_metric("log_mae_cv", champ_base * 1.10)
+
+    def retrain(scale: float) -> registry.Gate:
+        with mlflow.start_run(experiment_id=exp.experiment_id) as r:
+            mlflow.log_metric("log_mae_cv", champ.data.metrics["log_mae_cv"] * scale)
+            uri = champ.data.tags.get("stoa.model_uri") or f"runs:/{g.run_id}/model"
+            mlflow.set_tags(
+                {
+                    "stoa.model_uri": uri,
+                    "stoa.plan": plan,
+                    "stoa.dvc.processed": data_version,
+                }
+            )
+        return registry.Gate("rich", True, [], r.info.run_id)
+
+    worse = registry.register(client, retrain(1.15), promote=True)
+    assert worse["kept_champion"]
+    assert worse["champion_check_basis"] == "log_mae_cv / Space Syntax"
+    assert registry.alias_version(client, name, "champion") == first["version"]
+
+    better = registry.register(client, retrain(1.05), promote=True)
+    assert not better["kept_champion"], better["champion_check"]
+    assert better["champion_check_basis"] == "log_mae_cv / Space Syntax"
+    assert registry.alias_version(client, name, "champion") == better["version"]
+    assert registry.alias_version(client, name, "previous") == first["version"]
+
+
 def test_rollback_walks_back_one_version_at_a_time(tmp_path, fcfg, mlflow_store):
     import pytest
 

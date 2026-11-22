@@ -1,4 +1,4 @@
-"""Build the universal STOA bluish Liquid Glass monitoring, real-map, and simulation dashboard.
+"""Build the universal STOA purple & orange Liquid Glass monitoring, real-map, and simulation dashboard.
 
 Usage:
     python -m src.dashboard.build [--sim-root data/simulation] [--out data/dashboard]
@@ -486,7 +486,7 @@ def discover_scenario_dirs(sim_root: Path) -> list[Path]:
 
 
 def render_html(bundle: dict[str, Any]) -> str:
-    """Render the multi-scenario, multi-city bluish Apple Liquid Glass STOA dashboard."""
+    """Render the multi-scenario, multi-city purple & orange Apple Liquid Glass STOA dashboard."""
     data_json = json.dumps(bundle, separators=(",", ":"))
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -498,21 +498,21 @@ def render_html(bundle: dict[str, Any]) -> str:
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <style>
     :root {{
-      --ink: #0D1B36;
-      --ink-soft: #475A7B;
-      --blue: #2563EB;
-      --sky: #0EA5E9;
-      --cyan: #0891B2;
-      --indigo: #4F46E5;
+      --ink: #1E1338;
+      --ink-soft: #5E4E7A;
+      --blue: #7C3AED;
+      --sky: #F97316;
+      --cyan: #EA580C;
+      --indigo: #9333EA;
       --emerald: #059669;
       --rose: #E11D48;
       --amber: #D97706;
-      --glass-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.72) 0%, rgba(235, 244, 255, 0.44) 100%);
-      --glass-bg-strong: linear-gradient(145deg, rgba(255, 255, 255, 0.86) 0%, rgba(238, 246, 255, 0.62) 100%);
-      --glass-border: rgba(255, 255, 255, 0.82);
-      --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.96), inset 0 -1px 0 rgba(37, 99, 235, 0.10);
-      --glass-shadow: 0 22px 54px rgba(15, 36, 84, 0.10), 0 2px 10px rgba(15, 36, 84, 0.04);
-      --hairline: rgba(37, 99, 235, 0.13);
+      --glass-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.74) 0%, rgba(248, 240, 255, 0.46) 56%, rgba(255, 243, 232, 0.46) 100%);
+      --glass-bg-strong: linear-gradient(145deg, rgba(255, 255, 255, 0.88) 0%, rgba(250, 243, 255, 0.66) 100%);
+      --glass-border: rgba(255, 255, 255, 0.84);
+      --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.96), inset 0 -1px 0 rgba(124, 58, 237, 0.12);
+      --glass-shadow: 0 22px 54px rgba(49, 20, 96, 0.11), 0 2px 10px rgba(49, 20, 96, 0.05);
+      --hairline: rgba(124, 58, 237, 0.14);
     }}
     * {{ box-sizing: border-box; }}
     html {{ scroll-behavior: smooth; }}
@@ -522,11 +522,11 @@ def render_html(bundle: dict[str, Any]) -> str:
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(60% 52% at 8% 6%, rgba(147, 197, 253, 0.56) 0%, rgba(147, 197, 253, 0) 70%),
-        radial-gradient(54% 48% at 90% 10%, rgba(125, 211, 252, 0.52) 0%, rgba(125, 211, 252, 0) 72%),
-        radial-gradient(52% 52% at 80% 88%, rgba(165, 180, 252, 0.46) 0%, rgba(165, 180, 252, 0) 72%),
-        radial-gradient(55% 48% at 16% 84%, rgba(186, 230, 253, 0.48) 0%, rgba(186, 230, 253, 0) 72%),
-        #EDF4FF;
+        radial-gradient(60% 52% at 8% 6%, rgba(196, 181, 253, 0.58) 0%, rgba(196, 181, 253, 0) 70%),
+        radial-gradient(54% 48% at 90% 10%, rgba(253, 186, 116, 0.54) 0%, rgba(253, 186, 116, 0) 72%),
+        radial-gradient(52% 52% at 82% 88%, rgba(216, 180, 254, 0.48) 0%, rgba(216, 180, 254, 0) 72%),
+        radial-gradient(55% 48% at 14% 84%, rgba(254, 215, 170, 0.52) 0%, rgba(254, 215, 170, 0) 72%),
+        #FBF7FF;
       background-attachment: fixed;
       -webkit-font-smoothing: antialiased;
       line-height: 1.5;
@@ -549,7 +549,7 @@ def render_html(bundle: dict[str, Any]) -> str:
       -webkit-backdrop-filter: blur(20px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.88);
       border-radius: 999px;
-      box-shadow: 0 4px 16px rgba(15, 36, 84, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.96);
+      box-shadow: 0 4px 16px rgba(49, 20, 96, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.96);
     }}
     header.glass {{
       padding: 22px 28px; display: flex; flex-wrap: wrap; align-items: center;
@@ -558,7 +558,7 @@ def render_html(bundle: dict[str, Any]) -> str:
     .brand-row {{ display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }}
     .brand-title {{
       font-size: 32px; font-weight: 800; letter-spacing: 0.10em; margin: 0; line-height: 1;
-      background: linear-gradient(135deg, #0D1B36 0%, #2563EB 65%, #0EA5E9 100%);
+      background: linear-gradient(135deg, #2E1065 0%, #7C3AED 54%, #F97316 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }}
     .brand-tag {{ font-size: 13px; font-weight: 600; color: var(--blue); letter-spacing: 0.03em; }}
@@ -571,7 +571,7 @@ def render_html(bundle: dict[str, Any]) -> str:
     @media (max-width: 1240px) {{ .kpi-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }} }}
     @media (max-width: 680px) {{ .kpi-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
     .kpi {{ padding: 18px 20px; display: flex; flex-direction: column; gap: 5px; transition: transform 0.22s ease, box-shadow 0.22s ease; }}
-    .kpi:hover {{ transform: translateY(-2px); box-shadow: 0 26px 56px rgba(37, 99, 235, 0.13), var(--glass-rim); }}
+    .kpi:hover {{ transform: translateY(-2px); box-shadow: 0 26px 56px rgba(124, 58, 237, 0.14), var(--glass-rim); }}
     .kpi-head {{ display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }}
     .kpi-val {{ font-size: 25px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }}
     .kpi-sub {{ font-size: 11.8px; color: var(--ink-soft); }}
@@ -579,9 +579,9 @@ def render_html(bundle: dict[str, Any]) -> str:
     .stage-panel {{ padding: 26px 28px; display: flex; flex-direction: column; gap: 20px; }}
     .section-head {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }}
     .section-title {{ font-size: 12.5px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-soft); }}
-    .segmented {{ display: inline-flex; flex-wrap: wrap; gap: 5px; padding: 5px; border-radius: 999px; background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(255, 255, 255, 0.78); }}
+    .segmented {{ display: inline-flex; flex-wrap: wrap; gap: 5px; padding: 5px; border-radius: 999px; background: rgba(124, 58, 237, 0.09); border: 1px solid rgba(255, 255, 255, 0.78); }}
     .seg-btn {{ font-family: inherit; font-size: 12.5px; font-weight: 600; border: none; background: transparent; color: var(--ink-soft); padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: all 0.18s ease; }}
-    .seg-btn.active {{ background: rgba(255, 255, 255, 0.94); color: var(--blue); box-shadow: 0 4px 14px rgba(37, 99, 235, 0.14); }}
+    .seg-btn.active {{ background: rgba(255, 255, 255, 0.94); color: var(--blue); box-shadow: 0 4px 14px rgba(124, 58, 237, 0.16); }}
 
     .stage-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: stretch; }}
     .stage-grid.only-map, .stage-grid.only-video {{ grid-template-columns: 1fr; }}
@@ -596,13 +596,13 @@ def render_html(bundle: dict[str, Any]) -> str:
     }}
     .card-bar {{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }}
     .card-label {{ font-size: 13px; font-weight: 700; color: var(--ink); }}
-    .map-box {{ width: 100%; height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(37, 99, 235, 0.18); position: relative; z-index: 1; background: #E6F0FA; }}
+    .map-box {{ width: 100%; height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(124, 58, 237, 0.20); position: relative; z-index: 1; background: #F3ECFA; }}
     .map-box.map-light .leaflet-tile-pane {{ filter: saturate(0.45) brightness(1.06) contrast(0.94); }}
-    .map-box.map-dark .leaflet-tile-pane {{ filter: invert(100%) hue-rotate(185deg) brightness(92%) contrast(94%) saturate(0.85); }}
+    .map-box.map-dark .leaflet-tile-pane {{ filter: invert(100%) hue-rotate(225deg) brightness(90%) contrast(94%) saturate(0.90); }}
     .stage-grid.only-map .map-box {{ height: 540px; }}
     .video-box {{
       width: 100%; height: 440px; border-radius: 16px; overflow: hidden;
-      border: 1px solid rgba(37, 99, 235, 0.16); background: #F4ECD8;
+      border: 1px solid rgba(249, 115, 22, 0.22); background: #F4ECD8;
       position: relative; display: flex; align-items: center; justify-content: center;
     }}
     .stage-grid.only-video .video-box {{ height: 540px; }}
@@ -618,32 +618,32 @@ def render_html(bundle: dict[str, Any]) -> str:
       font-family: inherit; font-size: 12.5px; font-weight: 600;
       border: 1px solid rgba(255, 255, 255, 0.9); background: rgba(255, 255, 255, 0.78);
       color: var(--ink); padding: 8px 15px; border-radius: 999px; cursor: pointer;
-      transition: all 0.18s ease; box-shadow: 0 2px 8px rgba(15, 36, 84, 0.06);
+      transition: all 0.18s ease; box-shadow: 0 2px 8px rgba(49, 20, 96, 0.06);
     }}
     .btn:hover {{ background: #fff; transform: translateY(-1px); color: var(--blue); }}
-    .btn-primary {{ background: linear-gradient(135deg, #2563EB, #0EA5E9); color: #fff; border-color: transparent; }}
+    .btn-primary {{ background: linear-gradient(135deg, #7C3AED, #F97316); color: #fff; border-color: transparent; }}
     .btn-primary:hover {{ color: #fff; filter: brightness(1.06); }}
     .chip-btn {{
       font-family: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 11px;
-      border-radius: 999px; cursor: pointer; border: 1px solid rgba(37, 99, 235, 0.22);
-      background: rgba(239, 246, 255, 0.85); color: var(--blue); transition: all 0.16s ease;
+      border-radius: 999px; cursor: pointer; border: 1px solid rgba(124, 58, 237, 0.24);
+      background: rgba(245, 240, 255, 0.88); color: var(--blue); transition: all 0.16s ease;
     }}
-    .chip-btn:hover, .chip-btn.active {{ background: var(--blue); color: #fff; border-color: var(--blue); }}
+    .chip-btn:hover, .chip-btn.active {{ background: linear-gradient(135deg, #7C3AED, #F97316); color: #fff; border-color: transparent; }}
     select, input[type="search"] {{
       font-family: inherit; font-size: 12.5px; color: var(--ink);
       background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(255, 255, 255, 0.92);
       border-radius: 999px; padding: 7px 13px; outline: none;
-      box-shadow: 0 2px 8px rgba(15, 36, 84, 0.05);
+      box-shadow: 0 2px 8px rgba(49, 20, 96, 0.05);
     }}
-    #scenarioSel {{ font-weight: 600; color: var(--blue); border-color: rgba(37, 99, 235, 0.28); }}
+    #scenarioSel {{ font-weight: 600; color: var(--blue); border-color: rgba(124, 58, 237, 0.28); }}
     .scrub-wrap {{ flex: 1; min-width: 180px; display: flex; align-items: center; gap: 10px; }}
-    .scrub-wrap input[type="range"] {{ flex: 1; accent-color: var(--blue); cursor: pointer; }}
+    .scrub-wrap input[type="range"] {{ flex: 1; accent-color: var(--sky); cursor: pointer; }}
     .sync-clock {{ font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 60px; color: var(--blue); }}
     .quick-jumps {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
 
     .inspector {{
       display: none; padding: 20px 24px; border-radius: 20px;
-      background: rgba(255, 255, 255, 0.68); border: 1px solid rgba(37, 99, 235, 0.24);
+      background: rgba(255, 255, 255, 0.68); border: 1px solid rgba(249, 115, 22, 0.28);
       gap: 20px; align-items: center;
     }}
     .inspector.open {{ display: grid; grid-template-columns: 1fr 1.6fr; }}
@@ -662,10 +662,10 @@ def render_html(bundle: dict[str, Any]) -> str:
     .subcard-note {{ font-size: 12px; font-weight: 500; color: var(--ink-soft); }}
 
     .bar-row {{ margin-bottom: 12px; padding: 6px 8px; border-radius: 10px; cursor: pointer; transition: background 0.15s ease; }}
-    .bar-row:hover {{ background: rgba(37, 99, 235, 0.08); }}
+    .bar-row:hover {{ background: rgba(124, 58, 237, 0.08); }}
     .bar-head {{ display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }}
-    .bar-track {{ position: relative; height: 8px; border-radius: 999px; background: rgba(15, 36, 84, 0.09); }}
-    .bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, #0EA5E9, #2563EB, #4F46E5); }}
+    .bar-track {{ position: relative; height: 8px; border-radius: 999px; background: rgba(49, 20, 96, 0.09); }}
+    .bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7C3AED, #C026D3, #F97316); }}
     .bar-obs {{ position: absolute; top: -3px; width: 3px; height: 14px; border-radius: 2px; background: var(--emerald); }}
 
     .table-tools {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }}
@@ -675,21 +675,21 @@ def render_html(bundle: dict[str, Any]) -> str:
     th {{
       font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
       color: var(--ink-soft); position: sticky; top: 0; cursor: pointer; user-select: none;
-      background: rgba(240, 247, 255, 0.94); backdrop-filter: blur(12px);
+      background: rgba(248, 243, 255, 0.94); backdrop-filter: blur(12px);
     }}
     tbody tr {{ cursor: pointer; transition: background 0.14s ease; }}
-    tbody tr:hover {{ background: rgba(37, 99, 235, 0.07); }}
+    tbody tr:hover {{ background: rgba(249, 115, 22, 0.08); }}
     .badge {{ display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }}
     .b-ok {{ background: rgba(5, 150, 105, 0.14); color: var(--emerald); }}
-    .b-blue {{ background: rgba(37, 99, 235, 0.14); color: var(--blue); }}
-    .b-warn {{ background: rgba(217, 119, 6, 0.18); color: var(--amber); }}
+    .b-blue {{ background: rgba(124, 58, 237, 0.14); color: var(--blue); }}
+    .b-warn {{ background: rgba(249, 115, 22, 0.18); color: var(--cyan); }}
     .b-err {{ background: rgba(225, 29, 72, 0.14); color: var(--rose); }}
-    .b-off {{ background: rgba(15, 36, 84, 0.10); color: var(--ink-soft); }}
+    .b-off {{ background: rgba(49, 20, 96, 0.10); color: var(--ink-soft); }}
     .meta-list {{ margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; font-size: 13px; }}
     footer {{ padding: 4px 8px; font-size: 12.5px; color: var(--ink-soft); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }}
     .leaflet-popup-content-wrapper {{
       background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(16px);
-      border-radius: 14px; box-shadow: 0 12px 30px rgba(15, 36, 84, 0.18); color: var(--ink);
+      border-radius: 14px; box-shadow: 0 12px 30px rgba(49, 20, 96, 0.18); color: var(--ink);
     }}
   </style>
 </head>
@@ -785,7 +785,7 @@ def render_html(bundle: dict[str, Any]) -> str:
       </div>
       <div>
         <div class="subcard-title" style="margin-bottom:6px;">
-          <span>24-Hour Sensor Profile (Blue: Predicted · Green dashed: Observed)</span>
+          <span>24-Hour Sensor Profile (Purple: Predicted · Green dashed: Observed)</span>
         </div>
         <svg id="inspSvg" viewBox="0 0 540 120" style="width:100%;height:auto;"></svg>
       </div>
@@ -808,7 +808,7 @@ def render_html(bundle: dict[str, Any]) -> str:
         <div class="subcard">
           <div class="subcard-title">
             <span>24-Hour City Pulse</span>
-            <span class="subcard-note">Blue: predicted · Green dashed: observed</span>
+            <span class="subcard-note">Purple: predicted · Green dashed: observed</span>
           </div>
           <svg id="pulseSvg" viewBox="0 0 560 210" style="width:100%;height:auto;"></svg>
         </div>
@@ -1024,9 +1024,9 @@ function populateMapLayers() {{
   obsCircles = [];
   peakSensorAll = Math.max(...DATA.sensors.map(s => s.peak_pred), 1);
 
-  const catCol = {{ transit: "#2563EB", civic: "#0EA5E9", park: "#059669" }};
+  const catCol = {{ transit: "#7C3AED", civic: "#F97316", park: "#059669" }};
   (DATA.landmarks || []).forEach(lm => {{
-    const col = catCol[lm.category] || "#2563EB";
+    const col = catCol[lm.category] || "#7C3AED";
     L.circleMarker([lm.lat, lm.lon], {{
       radius: 6, color: "#fff", weight: 2, fillColor: col, fillOpacity: 0.95
     }}).bindTooltip(`<b>${{lm.name}}</b> (${{lm.category}})`, {{ direction: "top", offset: [0, -6] }}).addTo(landmarkLayer);
@@ -1039,7 +1039,7 @@ function populateMapLayers() {{
     obsCircles.push(obsC);
 
     const predC = L.circleMarker([s.lat, s.lon], {{
-      radius: 7, color: "#1D4ED8", weight: 1.8, fillColor: "#3B82F6", fillOpacity: 0.34
+      radius: 7, color: "#6D28D9", weight: 1.8, fillColor: "#8B5CF6", fillOpacity: 0.36
     }}).addTo(predLayer);
     predC.on("click", () => openSensorInspector(idx, false));
     predCircles.push(predC);
@@ -1056,12 +1056,12 @@ function updateMapForHour(simHour) {{
     const p = curPred[i], o = curObs[i];
     const ratio = Math.min(1, p / peakSensorAll);
     const rp = 5 + 18 * Math.sqrt(ratio);
-    const fill = ratio > 0.65 ? "#2563EB" : ratio > 0.35 ? "#0EA5E9" : "#60A5FA";
+    const fill = ratio > 0.65 ? "#F97316" : ratio > 0.35 ? "#7C3AED" : "#A78BFA";
     predCircles[i].setRadius(rp);
-    predCircles[i].setStyle({{ fillColor: fill, color: s.status === "High Drift" ? "#E11D48" : "#1D4ED8" }});
+    predCircles[i].setStyle({{ fillColor: fill, color: s.status === "High Drift" ? "#E11D48" : (ratio > 0.65 ? "#EA580C" : "#6D28D9") }});
     predCircles[i].bindPopup(
       `<strong>${{s.name}}</strong><br>`
-      + `Predicted: <b style="color:#2563EB;">${{fmt(p)}} / hr</b><br>`
+      + `Predicted: <b style="color:#7C3AED;">${{fmt(p)}} / hr</b><br>`
       + `Observed: <b style="color:#059669;">${{o != null ? fmt(o) + " / hr" : "Forecast-only"}}</b><br>`
       + `Status: <b>${{s.status}}</b>` + (s.wape != null ? ` · Daily WAPE: ${{fmtPct(s.wape)}}` : "")
     );
@@ -1087,14 +1087,14 @@ function openSensorInspector(idx, flyTo = true) {{
   const ptsP = s.predicted.map((v, h) => `${{(26 + 494 * h / 23).toFixed(1)}},${{(96 - 78 * v / maxV).toFixed(1)}}`).join(" ");
   const obsPairs = s.observed.map((v, h) => v != null ? `${{(26 + 494 * h / 23).toFixed(1)}},${{(96 - 78 * v / maxV).toFixed(1)}}` : null).filter(Boolean).join(" ");
   document.getElementById("inspSvg").innerHTML = `
-    <line x1="26" y1="96" x2="520" y2="96" stroke="rgba(37,99,235,0.28)" />
+    <line x1="26" y1="96" x2="520" y2="96" stroke="rgba(124,58,237,0.28)" />
     ${{obsPairs ? `<polyline fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="4 3" points="${{obsPairs}}" />` : ""}}
-    <polyline fill="none" stroke="#2563EB" stroke-width="2.6" points="${{ptsP}}" />
-    <text x="26" y="112" font-size="10" fill="#475A7B">00h</text>
-    <text x="150" y="112" font-size="10" fill="#475A7B">06h</text>
-    <text x="273" y="112" font-size="10" fill="#475A7B">12h</text>
-    <text x="396" y="112" font-size="10" fill="#475A7B">18h</text>
-    <text x="506" y="112" font-size="10" fill="#475A7B">23h</text>`;
+    <polyline fill="none" stroke="#7C3AED" stroke-width="2.6" points="${{ptsP}}" />
+    <text x="26" y="112" font-size="10" fill="#5E4E7A">00h</text>
+    <text x="150" y="112" font-size="10" fill="#5E4E7A">06h</text>
+    <text x="273" y="112" font-size="10" fill="#5E4E7A">12h</text>
+    <text x="396" y="112" font-size="10" fill="#5E4E7A">18h</text>
+    <text x="506" y="112" font-size="10" fill="#5E4E7A">23h</text>`;
 
   if (flyTo && map && predCircles[idx]) {{
     map.flyTo([s.lat, s.lon], 17, {{ duration: 0.65 }});
@@ -1198,28 +1198,28 @@ function buildPulseChart() {{
   document.getElementById("pulseSvg").innerHTML = `
     <defs>
       <linearGradient id="pulseFill" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.32" />
-        <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.02" />
+        <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.34" />
+        <stop offset="100%" stop-color="#F97316" stop-opacity="0.04" />
       </linearGradient>
     </defs>
-    <line x1="42" y1="176" x2="540" y2="176" stroke="rgba(37,99,235,0.28)" />
+    <line x1="42" y1="176" x2="540" y2="176" stroke="rgba(124,58,237,0.28)" />
     <polygon points="42,176 ${{ptsP}} 540,176" fill="url(#pulseFill)" />
     ${{usePaired ? `<polyline fill="none" stroke="#059669" stroke-width="2" stroke-dasharray="5 4" points="${{ptsO}}" />` : ""}}
-    <polyline fill="none" stroke="#2563EB" stroke-width="2.6" points="${{ptsP}}" />
-    <line id="pulseCursor" x1="42" y1="22" x2="42" y2="176" stroke="#4F46E5" stroke-width="1.8" />
-    <text x="42" y="196" font-size="11" fill="#475A7B">00h</text>
-    <text x="166" y="196" font-size="11" fill="#475A7B">06h</text>
-    <text x="291" y="196" font-size="11" fill="#475A7B">12h</text>
-    <text x="415" y="196" font-size="11" fill="#475A7B">18h</text>
-    <text x="524" y="196" font-size="11" fill="#475A7B">23h</text>`;
+    <polyline fill="none" stroke="#7C3AED" stroke-width="2.6" points="${{ptsP}}" />
+    <line id="pulseCursor" x1="42" y1="22" x2="42" y2="176" stroke="#F97316" stroke-width="1.8" />
+    <text x="42" y="196" font-size="11" fill="#5E4E7A">00h</text>
+    <text x="166" y="196" font-size="11" fill="#5E4E7A">06h</text>
+    <text x="291" y="196" font-size="11" fill="#5E4E7A">12h</text>
+    <text x="415" y="196" font-size="11" fill="#5E4E7A">18h</text>
+    <text x="524" y="196" font-size="11" fill="#5E4E7A">23h</text>`;
 }}
 
 function buildAccuracyCharts() {{
   if (!DATA.has_observed) {{
     document.getElementById("wapeSvg").innerHTML =
-      '<text x="280" y="105" text-anchor="middle" font-size="13" fill="#475A7B">Forecast-only scenario (no local observed counts)</text>';
+      '<text x="280" y="105" text-anchor="middle" font-size="13" fill="#5E4E7A">Forecast-only scenario (no local observed counts)</text>';
     document.getElementById("scatterSvg").innerHTML =
-      '<text x="480" y="110" text-anchor="middle" font-size="13" fill="#475A7B">Forecast-only scenario — observed comparison unavailable</text>';
+      '<text x="480" y="110" text-anchor="middle" font-size="13" fill="#5E4E7A">Forecast-only scenario — observed comparison unavailable</text>';
     return;
   }}
   const wapes = DATA.hourly.map(r => r.wape || 0);
@@ -1227,14 +1227,14 @@ function buildAccuracyCharts() {{
   const bars = DATA.hourly.map(r => {{
     const x = 42 + r.hour * 20.8;
     const h = ((r.wape || 0) / maxW) * 148;
-    const col = (r.wape || 0) > 0.35 ? "#E11D48" : "#2563EB";
-    return `<rect style="cursor:pointer;" onclick="jumpToHour(${{r.hour}})" x="${{x.toFixed(1)}}" y="${{(176 - h).toFixed(1)}}" width="14" height="${{h.toFixed(1)}}" rx="4" fill="${{col}}" opacity="0.86"><title>${{String(r.hour).padStart(2,"0")}}:00 WAPE ${{fmtPct(r.wape)}} (click to jump)</title></rect>`
-      + (r.hour % 3 === 0 ? `<text x="${{(x+7).toFixed(1)}}" y="196" text-anchor="middle" font-size="10.5" fill="#475A7B">${{String(r.hour).padStart(2,"0")}}h</text>` : "");
+    const col = (r.wape || 0) > 0.35 ? "#F97316" : "#7C3AED";
+    return `<rect style="cursor:pointer;" onclick="jumpToHour(${{r.hour}})" x="${{x.toFixed(1)}}" y="${{(176 - h).toFixed(1)}}" width="14" height="${{h.toFixed(1)}}" rx="4" fill="${{col}}" opacity="0.88"><title>${{String(r.hour).padStart(2,"0")}}:00 WAPE ${{fmtPct(r.wape)}} (click to jump)</title></rect>`
+      + (r.hour % 3 === 0 ? `<text x="${{(x+7).toFixed(1)}}" y="196" text-anchor="middle" font-size="10.5" fill="#5E4E7A">${{String(r.hour).padStart(2,"0")}}h</text>` : "");
   }}).join("");
   document.getElementById("wapeSvg").innerHTML = `
-    <line x1="40" y1="176" x2="544" y2="176" stroke="rgba(37,99,235,0.28)" />
-    <text x="4" y="34" font-size="10.5" fill="#475A7B">${{(maxW*100).toFixed(0)}}%</text>
-    <text x="4" y="176" font-size="10.5" fill="#475A7B">0%</text>
+    <line x1="40" y1="176" x2="544" y2="176" stroke="rgba(124,58,237,0.28)" />
+    <text x="4" y="34" font-size="10.5" fill="#5E4E7A">${{(maxW*100).toFixed(0)}}%</text>
+    <text x="4" y="176" font-size="10.5" fill="#5E4E7A">0%</text>
     ${{bars}}`;
 
   const paired = DATA.sensors.map((s, idx) => [s, idx]).filter(([s]) => s.daily_obs != null);
@@ -1242,16 +1242,16 @@ function buildAccuracyCharts() {{
   const dots = paired.map(([s, idx]) => {{
     const x = 52 + (s.daily_obs / maxD) * 880;
     const y = 184 - (s.daily_pred / maxD) * 158;
-    const col = s.status === "High Drift" ? "#E11D48" : "#2563EB";
-    return `<circle style="cursor:pointer;" onclick="openSensorInspector(${{idx}}, true)" cx="${{x.toFixed(1)}}" cy="${{y.toFixed(1)}}" r="5.2" fill="${{col}}" opacity="0.82"><title>${{s.name}}: Pred ${{fmt(s.daily_pred)}} vs Obs ${{fmt(s.daily_obs)}}</title></circle>`;
+    const col = s.status === "High Drift" ? "#F97316" : "#7C3AED";
+    return `<circle style="cursor:pointer;" onclick="openSensorInspector(${{idx}}, true)" cx="${{x.toFixed(1)}}" cy="${{y.toFixed(1)}}" r="5.2" fill="${{col}}" opacity="0.85"><title>${{s.name}}: Pred ${{fmt(s.daily_pred)}} vs Obs ${{fmt(s.daily_obs)}}</title></circle>`;
   }}).join("");
   document.getElementById("scatterSvg").innerHTML = `
-    <line x1="52" y1="184" x2="932" y2="184" stroke="rgba(37,99,235,0.28)" />
-    <line x1="52" y1="22" x2="52" y2="184" stroke="rgba(37,99,235,0.28)" />
-    <line x1="52" y1="184" x2="932" y2="22" stroke="#0EA5E9" stroke-dasharray="5 4" stroke-width="1.5" />
+    <line x1="52" y1="184" x2="932" y2="184" stroke="rgba(124,58,237,0.28)" />
+    <line x1="52" y1="22" x2="52" y2="184" stroke="rgba(124,58,237,0.28)" />
+    <line x1="52" y1="184" x2="932" y2="22" stroke="#F97316" stroke-dasharray="5 4" stroke-width="1.5" />
     ${{dots}}
-    <text x="492" y="208" text-anchor="middle" font-size="11.5" fill="#475A7B">Observed Daily Count →</text>
-    <text x="16" y="106" transform="rotate(-90 16 106)" text-anchor="middle" font-size="11.5" fill="#475A7B">Predicted →</text>`;
+    <text x="492" y="208" text-anchor="middle" font-size="11.5" fill="#5E4E7A">Observed Daily Count →</text>
+    <text x="16" y="106" transform="rotate(-90 16 106)" text-anchor="middle" font-size="11.5" fill="#5E4E7A">Predicted →</text>`;
 }}
 
 let sortKey = "daily_pred", sortAsc = false;
@@ -1509,7 +1509,7 @@ def build_dashboard(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build the universal STOA bluish Liquid Glass monitoring & real-map dashboard."
+        description="Build the universal STOA purple & orange Liquid Glass monitoring & real-map dashboard."
     )
     parser.add_argument("--sim-dir", type=Path, default=None, help="Optional single scenario directory")
     parser.add_argument("--sim-root", type=Path, default=DEFAULT_SIM_ROOT)

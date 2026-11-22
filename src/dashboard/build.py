@@ -38,17 +38,22 @@ DEFAULT_VIDEO = (
     / "marauders_chronicle"
     / "marauders_chronicle.mp4"
 )
-DEFAULT_COUNTS_META = (
-    REPO_ROOT
-    / "data"
-    / "processed"
-    / "features"
-    / "melbourne"
-    / "counts_hourly_meta.json"
-)
-DEFAULT_BIAS_CSV = (
-    REPO_ROOT / "data" / "processed" / "bias" / "melbourne" / "slice_errors.csv"
-)
+
+
+def _default_counts_meta() -> Path:
+    base = REPO_ROOT / "data" / "processed" / "features"
+    matches = sorted(base.glob("*/counts_hourly_meta.json"))
+    return matches[0] if matches else (base / "counts_hourly_meta.json")
+
+
+def _default_bias_csv() -> Path:
+    base = REPO_ROOT / "data" / "processed" / "bias"
+    matches = sorted(base.glob("*/slice_errors.csv"))
+    return matches[0] if matches else (base / "slice_errors.csv")
+
+
+DEFAULT_COUNTS_META = _default_counts_meta()
+DEFAULT_BIAS_CSV = _default_bias_csv()
 DEFAULT_OUT = REPO_ROOT / "data" / "dashboard"
 
 # Fallback Melbourne CBD landmarks when a Melbourne scenario lacks landmarks.json

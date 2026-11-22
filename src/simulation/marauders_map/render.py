@@ -38,10 +38,20 @@ import shapely
 from matplotlib.collections import EllipseCollection, LineCollection
 from scipy.ndimage import gaussian_filter
 
-from src.ingest.common import REPO_ROOT
+from src.features.common import site_settings
+from src.ingest.common import REPO_ROOT, load_config
+
+
+def _default_site() -> str:
+    sites = load_config()["sites"]
+    return next(
+        (name for name, cfg in sites.items() if cfg.get("count_sensors")),
+        next(iter(sites)),
+    )
+
 
 DIR = REPO_ROOT / "data" / "simulation" / "marauders_map"
-INTERIM = REPO_ROOT / "data" / "interim" / "osm" / "melbourne"
+INTERIM = site_settings(_default_site()).interim
 
 # The view: the Hoddle grid and its edges, in the site CRS (EPSG:28355).
 VIEW = (319650.0, 5811550.0, 322400.0, 5813850.0)

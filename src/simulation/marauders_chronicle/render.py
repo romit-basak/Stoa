@@ -45,11 +45,21 @@ import shapely
 from matplotlib.collections import LineCollection, PolyCollection
 from scipy.ndimage import gaussian_filter
 
-from src.ingest.common import REPO_ROOT
+from src.features.common import site_settings
+from src.ingest.common import REPO_ROOT, load_config
+
+
+def _default_site() -> str:
+    sites = load_config()["sites"]
+    return next(
+        (name for name, cfg in sites.items() if cfg.get("count_sensors")),
+        next(iter(sites)),
+    )
+
 
 DATA_DIR = REPO_ROOT / "data" / "simulation" / "marauders_map"
 OUT_DIR = REPO_ROOT / "data" / "simulation" / "marauders_chronicle"
-INTERIM = REPO_ROOT / "data" / "interim" / "osm" / "melbourne"
+INTERIM = site_settings(_default_site()).interim
 
 # Full-bleed 16:9 framing of the Hoddle Grid, Yarra Riverfront & Southbank (EPSG:28355).
 # Width = 3360 m, Height = 1890 m -> exact 16:9 aspect ratio matching 1600 x 900 px.

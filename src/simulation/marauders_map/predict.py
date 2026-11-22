@@ -42,7 +42,16 @@ from src.features import training_frame as tf
 from src.features.common import load_features_config, site_settings
 from src.ingest.common import REPO_ROOT, load_config, setup_logging
 
-SITE = "melbourne"
+
+def _default_site() -> str:
+    sites = load_config()["sites"]
+    return next(
+        (name for name, cfg in sites.items() if cfg.get("count_sensors")),
+        next(iter(sites)),
+    )
+
+
+SITE = _default_site()
 OUT = REPO_ROOT / "data" / "simulation" / "marauders_map"
 MODELS = REPO_ROOT / "data" / "models" / "registered_rich"
 RUN_ID = "2b730d3086a14685ba53467982389672"
@@ -61,13 +70,13 @@ def _load_model(name: str):
     return sio.load(path, trusted=sio.get_untrusted_types(file=path))
 
 
-def cbd_segments(crs: str) -> gpd.GeoDataFrame:
+def cbd_segments(site_cfg) -> gpd.GeoDataFrame:
     """Segments whose midpoint lies inside the CBD box."""
     edges = gpd.read_parquet(
-        REPO_ROOT / "data/interim/osm/melbourne/graph/edges.parquet",
+        site_cfg.graph_dir / "edges.parquet",
         columns=["segment_id", "highway", "geometry"],
     )
-    t = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    t = Transformer.from_crs("EPSG:4326", site_cfg.crs, always_xy=True)
     x0, y0 = t.transform(BBOX_LONLAT[0], BBOX_LONLAT[1])
     x1, y1 = t.transform(BBOX_LONLAT[2], BBOX_LONLAT[3])
     mid = edges.geometry.interpolate(0.5, normalized=True)
@@ -75,9 +84,9 @@ def cbd_segments(crs: str) -> gpd.GeoDataFrame:
     return edges[keep].reset_index(drop=True)
 
 
-def hour_rows(date: str, row_cols: list[str]) -> pd.DataFrame:
+def hour_rows(date: str, row_cols: list[str], feats_dir: Path) -> pd.DataFrame:
     """One row per hour of `date` with the hour-level columns, from the hourly table."""
-    feats = REPO_ROOT / "data/processed/features/melbourne/counts_hourly.parquet"
+    feats = feats_dir / "counts_hourly.parquet"
     keep = list(
         dict.fromkeys(
             ["location_id", "ts_local", "date_local", "pedestriancount"]
@@ -107,7 +116,7 @@ def main() -> None:
     names = json.loads((MODELS / "features.json").read_text())
 
     row_cols = tf.row_features("rich")
-    hourly = hour_rows(args.date, row_cols)
+    hourly = hour_rows(args.date, row_cols, feats_dir)
     per_hour = (
         hourly.sort_values("location_id")
         .groupby("hour_local")
@@ -118,7 +127,7 @@ def main() -> None:
     if per_hour["ts_local"].isna().any():
         raise SystemExit(f"{args.date} lacks some hours in the hourly table")
 
-    segs = cbd_segments(site.crs)
+    segs = cbd_segments(site)
     seg_cols = tf.segment_features("rich")
     osm = pd.read_parquet(feats_dir / "osm_segment_features.parquet").set_index(
         "segment_id"
@@ -135,7 +144,7 @@ def main() -> None:
     mid = segs.geometry.interpolate(0.5, normalized=True)
     xy = np.c_[mid.x, mid.y]
     all_edges = gpd.read_parquet(
-        REPO_ROOT / "data/interim/osm/melbourne/graph/edges.parquet",
+        site.graph_dir / "edges.parquet",
         columns=["segment_id", "geometry"],
     ).set_index("segment_id")
     s_mid = all_edges.geometry.loc[steep["segment_id"]].interpolate(

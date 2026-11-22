@@ -1,32 +1,32 @@
 # Cross-city transfer test (src/models/flow/transfer_nyc.py; docs/models/nyc_transfer.md).
 # NYC DOT's bi-annual counts are evaluation only: nothing here trains a model.
-nyc:
-  counts: nyc/bi_annual_pedestrian_counts.geojson   # under the raw data dir
-  # Count windows (NYC DOT readme): weekday 07-09 and 16-19, Saturday 12-14, local time.
-  period_hours:
-    am: [7, 8]
-    pm: [16, 17, 18]
-    md: [12, 13]
-  # The exact count dates aren't published: one weekday and the adjacent Saturday in the month.
-  # Every Tuesday to Thursday (ITE's recommended weekdays) that isn't a public holiday stands in
-  # for the weekday, and every Saturday for the Saturday; predictions are averaged over them.
-  weekdays: [1, 2, 3]   # Monday = 0
-  # Rounds scored in the headline result. Earlier rounds include COVID-era counts (no rounds
-  # between May 2019 and October 2020) and are further from the 2026 OSM snapshot.
-  since_year: 2022
-  snap:
-    search_radius_m: 60      # streets and paths considered around a count point
-    sidewalk_radius_m: 35    # sidewalks considered on either side of the street
-    sidewalk_angle_deg: 30   # a sidewalk must run within this of the street's direction
-  # Calendar inputs Melbourne has and NYC doesn't, set as labelled assumptions:
-  # - school_term: every count month (May, June, September, October) is inside the New York
-  #   City public school year, so it's set true;
-  # - uni_teaching, uni_exams: no university calendar, so they're missing, as in Melbourne's
-  #   years before its university calendar starts (2009-2014). `--uni-teaching` sets them
-  #   instead, for the sensitivity check.
-  school_term: true
-  calibration:
-    k: [1, 2, 3, 5, 10, 20]
-    headline_k: 5
-    draws: 500
-    seed: 7
+site: nyc   # the site in configs/data.yaml whose graph and features are scored
+counts: nyc/bi_annual_pedestrian_counts.geojson   # under the raw data dir
+# Count windows (NYC DOT readme): weekday 07-09 and 16-19, Saturday 12-14, local time.
+period_hours:
+  am: [7, 8]
+  pm: [16, 17, 18]
+  md: [12, 13]
+# The exact count dates aren't published: one weekday and the adjacent Saturday in the month.
+# Every Tuesday to Thursday (ITE's recommended weekdays) that isn't a public holiday stands in
+# for the weekday, and every Saturday for the Saturday; predictions are averaged over them.
+weekdays: [1, 2, 3]   # Monday = 0
+# Rounds scored in the headline result. Earlier rounds include COVID-era counts (no rounds
+# between May 2019 and October 2020) and are further from the 2026 OSM snapshot.
+since_year: 2022
+snap:
+  search_radius_m: 60      # streets and paths considered around a count point
+  sidewalk_radius_m: 35    # sidewalks considered on either side of the street
+  sidewalk_angle_deg: 30   # a sidewalk must run within this of the street's direction
+# Calendar inputs Melbourne has and NYC doesn't, set as labelled assumptions:
+# - school_term: every count month (May, June, September, October) is inside the New York
+#   City public school year, so it's set true;
+# - uni_teaching, uni_exams: no university calendar, so they're missing, as in Melbourne's
+#   years before its university calendar starts (2009-2014). `--uni-teaching` sets them
+#   instead, for the sensitivity check.
+school_term: true
+calibration:
+  k: [1, 2, 3, 5, 10, 20]
+  headline_k: 5
+  draws: 500
+  seed: 7

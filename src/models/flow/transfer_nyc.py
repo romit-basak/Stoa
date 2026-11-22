@@ -50,7 +50,6 @@ from src.ingest.common import REPO_ROOT, load_config, setup_logging
 from src.models.flow import baselines
 from src.models.flow import data as flow_data
 
-SITE = "nyc"
 MONTHS = {"may": 5, "june": 6, "sep": 9, "sept": 9, "oct": 10}
 COLUMN = re.compile(r"(may|june|sept|sep|oct)_?(\d{2})_(am|pm|md|p_m)")
 ROADS = {
@@ -73,7 +72,7 @@ KEYS = ["loc", "year", "month", "period"]
 
 def load_transfer_config(path: Path | None = None) -> dict[str, Any]:
     with open(path or REPO_ROOT / "configs" / "transfer.yaml") as f:
-        return yaml.safe_load(f)[SITE]
+        return yaml.safe_load(f)
 
 
 # --------------------------------------------------------------------------------------------
@@ -449,10 +448,11 @@ def run(
 ) -> dict[str, Any]:
     cfg = cfg or load_transfer_config()
     data_cfg, fcfg = load_config(), load_features_config()
-    site = data_cfg["sites"][SITE]
+    name = cfg["site"]
+    site = data_cfg["sites"][name]
     since = cfg["since_year"] if since is None else since
     raw = REPO_ROOT / data_cfg["raw_dir"]
-    feats = REPO_ROOT / fcfg["processed_dir"] / "features" / SITE
+    feats = REPO_ROOT / fcfg["processed_dir"] / "features" / name
 
     points = gpd.read_file(raw / cfg["counts"])
     counts = parse_counts(points)
@@ -469,10 +469,10 @@ def run(
         units.groupby("kind")["loc"].nunique().to_dict(),
     )
 
-    hol = pd.read_csv(raw / "calendars" / f"{SITE}_public_holidays.csv")["date"]
+    hol = pd.read_csv(raw / "calendars" / f"{name}_public_holidays.csv")["date"]
     holidays = pd.to_datetime(hol)
     rows = hourly_rows(counts, cfg, set(holidays.dt.date), site["timezone"])
-    weather = ch.read_weather(weather_dir, SITE)
+    weather = ch.read_weather(weather_dir, name)
     times = row_features(
         rows, holidays, weather, tuple(site["center"]), cfg, fcfg, uni_teaching
     )
@@ -490,7 +490,7 @@ def run(
     events = tf.event_columns(
         rows["ts_local"],
         pd.Series(index=rows.index, dtype=object),
-        SITE,
+        name,
         data_cfg,
         fcfg,
     )
@@ -531,6 +531,7 @@ def run(
 
     rng_seed = cfg["calibration"]["seed"]
     summary: dict[str, Any] = {
+        "site": name,
         "since_year": since,
         "rounds": sorted(
             f"{y}-{m:02d}"
@@ -614,7 +615,11 @@ def main() -> None:
     model = load_model(args.model_uri)
     out = run(model, weather_dir, args.since, args.uni_teaching)
     fcfg = flow_data.flow_config()
-    dest = flow_data.output_dir(fcfg, args.output_dir) / "transfer" / SITE
+    dest = (
+        flow_data.output_dir(fcfg, args.output_dir)
+        / "transfer"
+        / out["summary"]["site"]
+    )
     if args.uni_teaching:
         dest = dest / "uni_teaching"
     dest.mkdir(parents=True, exist_ok=True)

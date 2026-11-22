@@ -598,6 +598,10 @@ The full write-up, with every group and the trade-offs: [docs/bias/model_bias.md
 - **What's registered.** `stoa-flow-rich` v1 and `stoa-flow-portable` v1 are the champions, from the first `stoa_train` run on the GCP VM (16 November 2026, [The registered model](#the-registered-model)): 10.8% and 10.3% below Space Syntax on unbuffered folds, all gate checks passed. v2 of each, from the buffered retrain the same night ([The buffered retrain](#the-buffered-retrain)), is 14.3% and 13.3% below Space Syntax and passed every gate check, but is registered as `challenger`: its raw log MAE is slightly higher than v1's, which was scored on the easier unbuffered folds. The seed study above is in the side experiment `stoa-flow-buffer`.
 - **Next for the model:** the NYC cross-city test with the portable model.
 
+## Serving predictions
+
+`src/api/` serves the registered model over HTTP (FastAPI). `POST /predict` takes segments and local hours and returns the predicted pedestrians per hour with an 80% range; `GET /health` and `GET /model` say whether it's up and which version serves. The model's 163 inputs are built from the segment and hour with the training code itself, and `tests/api/test_parity.py` checks on 3,000 real training rows that every column matches what training built. Weather is Open-Meteo's forecast instead of the archive, the one known difference. Details, the example request and how to run it locally: [docs/api/serving.md](docs/api/serving.md). It runs locally for now; the Cloud Run deployment is next.
+
 ## Tests and lint
 
 ```bash

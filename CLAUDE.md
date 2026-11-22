@@ -151,6 +151,7 @@ Full reasoning in `docs/PROJECT_CONTEXT.md` section 7.1.
   - Bias slicing: `.venv/bin/python -m src.bias.representation` (data per slice), then `.venv/bin/python -m src.bias.slice_errors` (baseline error per slice on held-out sensors, and mitigations; ~16 min). Slices in `configs/bias.yaml`; method and findings in `docs/bias/bias_slicing.md`.
   - Train the flow model: `.venv/bin/python -m src.models.flow.train`, then `.venv/bin/python -m src.models.flow.select` and `.venv/bin/python -m src.models.flow.registry --check` (or trigger `stoa_train`). Needs the MLflow service (`docker compose up -d mlflow`); see `docs/models/flow_model.md`.
   - Run pipeline: `docker compose up -d --build`, then trigger `stoa_pipeline` at http://localhost:8080 (see README, "Quickstart"). The OSM extract is pinned; trigger with `refresh_osm=true` to replace it, then re-check sensor overrides.
+  - Run the prediction API: `uv pip install --python .venv/bin/python -e ".[api]"`, then `.venv/bin/uvicorn src.api.app:app --port 8000` with `MLFLOW_TRACKING_URI` pointing at MLflow (`docs/api/serving.md`). Needs `python -m src.features.segment_steepness` once.
   - Run app locally: **TBD**
 
 ## Scope guardrails

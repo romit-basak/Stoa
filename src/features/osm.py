@@ -55,6 +55,7 @@ DOWNSTREAM_SECTIONS = {
 DOWNSTREAM_CODE = {
     "counts_hourly.py",
     "sensor_steepness.py",
+    "segment_steepness.py",
     "training_frame.py",
     "minute_profiles.py",
     "schema.py",

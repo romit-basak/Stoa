@@ -48,6 +48,7 @@ def test_has_every_stage(dag):
         "osm_segment_features",
         "osm_sensor_match",
         "sensor_steepness",
+        "segment_steepness",
         "join_all",
         "bias_slices",
         "bias_errors",
@@ -83,6 +84,7 @@ def test_wiring(dag):
     assert upstream("osm_segment_features") == {"osm_graph"}
     assert upstream("osm_sensor_match") == {"osm_segment_features", "pull_counts"}
     assert upstream("sensor_steepness") == {"pull_static_layers", "pull_counts"}
+    assert upstream("segment_steepness") == {"osm_sensor_match", "sensor_steepness"}
     assert upstream("join_all") == {
         "osm_sensor_match",
         "sensor_steepness",
@@ -102,7 +104,12 @@ def test_wiring(dag):
     }
     assert upstream("bias_errors") == {"bias_slices"}
     assert upstream("minute_coverage") == {"minute_profiles", "bias_slices"}
-    assert upstream("dvc_push") == {"validate", "bias_errors", "minute_coverage"}
+    assert upstream("dvc_push") == {
+        "validate",
+        "bias_errors",
+        "minute_coverage",
+        "segment_steepness",
+    }
 
 
 def test_every_task_retries(dag):

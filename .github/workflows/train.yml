@@ -21,6 +21,7 @@ on:
     paths:
       - "src/models/**"
       - "!src/models/flow/figures.py" # only copies results into the docs
+      - "!src/models/flow/transfer_nyc.py" # scores a trained model; trains nothing
       - "src/features/training_frame.py"
       - "src/features/schema.py"
       - "configs/models.yaml"

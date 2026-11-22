@@ -6,6 +6,7 @@ FROM python:3.11-slim
 WORKDIR /opt/stoa
 RUN pip install --no-cache-dir google-cloud-storage>=2.18
 
+COPY src/__init__.py src/__init__.py
 COPY src/dashboard/__init__.py src/dashboard/serve.py src/dashboard/
 
 ENV PORT=8080

@@ -2,7 +2,7 @@
 
 Stoa uses a language model in two places: an intake interface that turns a planner's description into structured inputs and narrates finished results (Tier 1), and a planning assistant that runs scenarios by calling deterministic tools (Tier 2). Neither exists in code yet. This document is the design to build against; schemas marked "proposed" need the team's sign-off before they're frozen in `src/agents/`.
 
-For how the agents fit with the models, see [modelling_plan.md](../models/modelling_plan.md). Background is in `docs/PROJECT_CONTEXT.md` sections 6.3 and 9.
+For how the agents fit with the models, see [modelling_plan.md](../models/modelling_plan.md). The build plan, with the recommended model and its costs, is in [build_plan.md](build_plan.md), and how the evaluation set is built is in [eval_set_plan.md](eval_set_plan.md). Background is in `docs/PROJECT_CONTEXT.md` sections 6.3 and 9.
 
 ## Rules every LLM call follows
 
@@ -138,7 +138,7 @@ The evaluation set lives in `tests/agent_eval/`, one JSON line per case:
  "expected_questions": ["expected_crowd"], "expected_places": ["marvel"]}
 ```
 
-Good sources for cases are past AFL games at Marvel Stadium and the events in `configs/events.yaml`, written the way a planner would describe them, plus cases with missing fields, ambiguous places and contradictions. The cases need writing by a person; they're due in week 6 of the schedule.
+Good sources for cases are past AFL games at Marvel Stadium and the events in `configs/events.yaml`, written the way a planner would describe them, plus cases with missing fields, ambiguous places and contradictions. They're due in week 6 of the schedule. Most can come from data with known answers (real events, and cases generated from the site's places), leaving 20 to 30 hard cases for people to write; see [eval_set_plan.md](eval_set_plan.md).
 
 | Measure | Target (team criteria, October 2026) |
 |---|---|
@@ -161,7 +161,7 @@ Per the MLOps plan: how often users correct intake fields, grounding blocks per 
 | `src/agents/event_spec.py` | Event spec schema and validation (the CLAUDE.md interface) |
 | `src/agents/adjustment_spec.py` | Adjustment spec schema and the strength-to-effect lookup |
 | `src/agents/intake.py` | The intake conversation |
-| `src/agents/places.py` | Candidate lookup for place mentions |
+| `src/agents/places.py` | The site gazetteer and `resolve_place`, the candidate lookup for place mentions |
 | `src/agents/grounding.py` | The grounding checker |
 | `src/agents/narrate.py` | Results bundle, LLM narration and template narration |
 | `src/agents/tools.py` | Planning-assistant tools (Tier 2) |
@@ -169,7 +169,7 @@ Per the MLOps plan: how often users correct intake fields, grounding blocks per 
 
 ## Open decisions
 
-- Which LLM provider and model, and how prompts and responses are logged without storing customer data beyond its site.
+- Which LLM provider and model (recommended: the Gemini API, with the model chosen on the evaluation set; [build_plan.md](build_plan.md)), and how prompts and responses are logged without storing customer data beyond its site.
 - Freezing the event spec and adjustment spec fields above.
 - The effect-size table behind slight, moderate and strong.
 - Whether document upload (event plans, traffic management PDFs) stays Tier 2.

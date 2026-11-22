@@ -29,6 +29,12 @@ A model that passes must also beat the current champion before it replaces it. W
 `gates.champion_tolerance`) is registered as `challenger` and `champion` stays where it is, so
 a worse retrain is never served. `--rollback` undoes a promotion by hand.
 
+Scores are only comparable on the same test: a fold plan that holds out a buffer around each
+test sensor is harder, and the same Space Syntax baseline scores worse on it. So when the
+champion was scored on another fold plan or data version, each model's log_mae_cv is divided
+by its own Space Syntax baseline's (the ratio the gate uses) and those ratios are compared. If
+either baseline is missing, the raw scores are compared, as before.
+
 Writes <output_dir>/registry.json: what was registered or promoted. Building and pushing the
 serving image is the deploy step's job, not this one.
 """
@@ -116,16 +122,9 @@ def latest_run(
     return runs[0] if runs else None
 
 
-def gate(client: MlflowClient, experiment_id: str, variant: str, gates: dict) -> Gate:
-    sel = latest_run(
-        client,
-        experiment_id,
-        ["tags.`stoa.role` = 'selected'", f"tags.`stoa.variant` = '{variant}'"],
-    )
-    if sel is None:
-        return Gate(variant, False, ["no selected run; run src.models.flow.select"])
-    tags = sel.data.tags
-    base = latest_run(
+def baseline_run(client: MlflowClient, experiment_id: str, tags: dict) -> Any | None:
+    """The Space Syntax run scored on the same data version and fold plan as `tags`' run."""
+    return latest_run(
         client,
         experiment_id,
         [
@@ -134,6 +133,17 @@ def gate(client: MlflowClient, experiment_id: str, variant: str, gates: dict) ->
             f"tags.`stoa.plan` = '{tags.get('stoa.plan', '')}'",
         ],
     )
+
+
+def gate(client: MlflowClient, experiment_id: str, variant: str, gates: dict) -> Gate:
+    sel = latest_run(
+        client,
+        experiment_id,
+        ["tags.`stoa.role` = 'selected'", f"tags.`stoa.variant` = '{variant}'"],
+    )
+    if sel is None:
+        return Gate(variant, False, ["no selected run; run src.models.flow.select"])
+    base = baseline_run(client, experiment_id, sel.data.tags)
     passed, reasons, improvement = evaluate_gate(
         sel.data.metrics, base.data.metrics if base else None, gates
     )
@@ -157,7 +167,10 @@ def alias_version(client: MlflowClient, name: str, alias: str) -> str | None:
 
 
 def beats_champion(
-    new: float | None, champion: float | None, tolerance: float = 0.0
+    new: float | None,
+    champion: float | None,
+    tolerance: float = 0.0,
+    metric: str = "log_mae_cv",
 ) -> tuple[bool, str]:
     """(may replace the champion, why) from the two models' log_mae_cv (lower is better).
 
@@ -168,22 +181,51 @@ def beats_champion(
     if new is None:
         return False, "the new model has no log_mae_cv"
     if new <= champion * (1 + tolerance):
-        return True, f"log_mae_cv {new:.4f} vs champion {champion:.4f}"
+        return True, f"{metric} {new:.4f} vs champion {champion:.4f}"
     return False, (
-        f"log_mae_cv {new:.4f} is worse than the champion's {champion:.4f}"
+        f"{metric} {new:.4f} is worse than the champion's {champion:.4f}"
         + (f" (tolerance {tolerance:.0%})" if tolerance else "")
     )
 
 
-def champion_metric(client: MlflowClient, name: str) -> tuple[str | None, float | None]:
-    """(champion version, its log_mae_cv) from the run it was registered from."""
+def champion_run(client: MlflowClient, name: str) -> tuple[str | None, Any | None]:
+    """(champion version, the run it was registered from)."""
     version = alias_version(client, name, CHAMPION)
     if version is None:
         return None, None
     run_id = client.get_model_version(name, version).run_id
-    if not run_id:
-        return version, None
-    return version, client.get_run(run_id).data.metrics.get("log_mae_cv")
+    return version, client.get_run(run_id) if run_id else None
+
+
+COMPARE_KEYS = ("stoa.plan", "stoa.dvc.processed")
+
+
+def comparable_scores(
+    client: MlflowClient, new_run: Any, old_run: Any | None
+) -> tuple[float | None, float | None, str]:
+    """(new score, champion score, what they are), on a footing where lower is better.
+
+    Same fold plan and data version: raw log_mae_cv. Otherwise each divided by its own Space
+    Syntax baseline's, so a harder test doesn't count against the model scored on it.
+    """
+    new = new_run.data.metrics.get("log_mae_cv")
+    if old_run is None:
+        return new, None, "log_mae_cv"
+    old = old_run.data.metrics.get("log_mae_cv")
+    new_tags, old_tags = new_run.data.tags, old_run.data.tags
+    if all(new_tags.get(k) == old_tags.get(k) for k in COMPARE_KEYS):
+        return new, old, "log_mae_cv"
+    new_base = baseline_run(client, new_run.info.experiment_id, new_tags)
+    old_base = baseline_run(client, old_run.info.experiment_id, old_tags)
+    nb = new_base.data.metrics.get("log_mae_cv") if new_base else None
+    ob = old_base.data.metrics.get("log_mae_cv") if old_base else None
+    if new is None or old is None or not nb or not ob:
+        log.warning(
+            "champion scored on another fold plan or data version, and a Space Syntax "
+            "baseline is missing: comparing raw log_mae_cv"
+        )
+        return new, old, "log_mae_cv"
+    return new / nb, old / ob, "log_mae_cv / Space Syntax"
 
 
 def register(
@@ -199,18 +241,21 @@ def register(
     name = model_name(g.variant)
     new_metric = run.data.metrics.get("log_mae_cv")
     # Read the champion before registering, so the comparison is with the served version.
-    old, old_metric = champion_metric(client, name)
+    old, old_run = champion_run(client, name)
+    old_metric = old_run.data.metrics.get("log_mae_cv") if old_run else None
     version = mlflow.register_model(uri, name).version
     result = {"name": name, "version": version, "run_id": g.run_id}
     if not promote:
         client.set_registered_model_alias(name, CHALLENGER, version)
         return {**result, "alias": CHALLENGER}
-    better, why = beats_champion(new_metric, old_metric, tolerance)
+    new_score, old_score, basis = comparable_scores(client, run, old_run)
+    better, why = beats_champion(new_score, old_score, tolerance, basis)
     result |= {
         "log_mae_cv": new_metric,
         "champion_before": old,
         "champion_log_mae_cv": old_metric,
         "champion_check": why,
+        "champion_check_basis": basis,
     }
     if not better:
         # Automatic rollback guard: the worse model is kept for inspection, never served.

@@ -50,5 +50,7 @@ def test_wiring(dag):
         "site_pull_calendars",
         "site_pull_extras",
     }
+    assert upstream(dag, "site_build_dashboard") == {"site_dvc_push"}
+    assert dag.get_task("site_build_dashboard").trigger_rule == "none_failed"
     assert dag.get_task("site_validate_segments").retries == 0
     assert 99 in dag.get_task("site_dvc_push").skip_on_exit_code

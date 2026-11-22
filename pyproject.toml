@@ -1,7 +1,7 @@
 [project]
 name = "stoa"
 version = "0.1.0"
-description = "Pedestrian flow prediction and scenario planning (IE7374)"
+description = "STOA — Pedestrian flow prediction, simulation, and monitoring (IE7374)"
 requires-python = ">=3.11"
 dependencies = [
     "dvc[gs]>=3.50",  # data versioning; gs = Google Cloud Storage remote

@@ -241,6 +241,19 @@ def stoa_pipeline():
         # uploads the data; committing the updated data/*.dvc pointers is left to a person.
         return f"{STOA} src.pipeline.dvc_push"
 
+    # Merged simulation + web dashboard: runs after dvc_push with none_failed so a skipped
+    # dvc_push (missing bucket credentials) still refreshes predictions, video, and dashboard.
+    @task.bash(trigger_rule="none_failed")
+    def run_simulation():
+        return (
+            f"{STOA} src.simulation.marauders_map.predict && "
+            f"{STOA} src.simulation.marauders_chronicle.render"
+        )
+
+    @task.bash(trigger_rule="none_failed")
+    def build_dashboard():
+        return f"{STOA} src.dashboard.build --sim-root data/simulation"
+
     # --- Wiring ---
 
     counts = pull_counts()
@@ -285,7 +298,9 @@ def stoa_pipeline():
     [checked, sensors, events] >> profiles
     covered = minute_coverage()
     [profiles, slices] >> covered
-    [checked, errors, covered] >> dvc_push()
+    pushed = dvc_push()
+    [checked, errors, covered] >> pushed
+    pushed >> run_simulation() >> build_dashboard()
 
 
 stoa_pipeline()

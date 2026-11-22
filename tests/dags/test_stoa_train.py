@@ -31,6 +31,8 @@ def test_stages_run_in_order(dag):
         "mitigate_bias",
         "check_gates",
         "register_model",
+        "run_simulation",
+        "build_dashboard",
         "notify_team",
     ]
     assert set(dag.task_ids) == set(order)

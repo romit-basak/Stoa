@@ -143,6 +143,20 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  # STOA monitoring & real-time simulation web dashboard at http://localhost:8501
+  dashboard:
+    image: stoa-airflow:latest
+    working_dir: /opt/stoa
+    entrypoint: ["python", "-m", "src.dashboard.serve", "--host", "0.0.0.0", "--port", "8501"]
+    volumes:
+      - .:/opt/stoa
+    ports:
+      - "8501:8501"
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
 volumes:
   postgres-db-volume:
   mlflow-artifacts:

@@ -384,3 +384,30 @@ stages:
     cmd: python -m src.models.flow.notify
     deps: [src/models/flow/notify.py, src/pipeline/alerts.py]
     always_changed: true
+
+  # --- Simulation & STOA Dashboard (stoa_pipeline, stoa_train, stoa_site_build) ---
+
+  run_simulation:
+    cmd: >-
+      python -m src.simulation.marauders_map.predict &&
+      python -m src.simulation.marauders_chronicle.render
+    deps:
+      - src/simulation/marauders_map
+      - src/simulation/marauders_chronicle
+      - data/processed/features/melbourne/counts_hourly.parquet
+      - data/processed/features/melbourne/osm_segment_features.parquet
+    always_changed: true
+
+  build_dashboard:
+    cmd: python -m src.dashboard.build --sim-root data/simulation
+    deps:
+      - src/dashboard/build.py
+      - data/processed/features/melbourne/counts_hourly_meta.json
+      - data/processed/bias/melbourne/slice_errors.csv
+    always_changed: true
+
+  site_build_dashboard:
+    cmd: python -m src.dashboard.build --sim-root data/simulation
+    deps:
+      - src/dashboard/build.py
+    always_changed: true

@@ -124,9 +124,9 @@ case "${1:-}" in
   ssh) start && vm_ssh ;;
   tunnel)
     start
-    echo "Airflow: http://localhost:8080   MLflow: http://localhost:5001   (Ctrl-C to close)"
+    echo "Airflow: http://localhost:8080   MLflow: http://localhost:5001   Dashboard: http://localhost:8501   (Ctrl-C to close)"
     echo "The VM stays up while this tunnel is open and stops itself about 15 minutes after."
-    vm_ssh -- -N -L 8080:localhost:8080 -L 5001:localhost:5001
+    vm_ssh -- -N -L 8080:localhost:8080 -L 5001:localhost:5001 -L 8501:localhost:8501
     ;;
   deploy) start && vm_ssh --command 'sudo bash /srv/stoa/ops/vm/deploy.sh' ;;
   train)

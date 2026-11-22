@@ -6,7 +6,7 @@ FROM apache/airflow:3.3.2-python3.11
 # doesn't ship; without it `import lightgbm` fails and stoa_train crashes at the lgbm candidate.
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends libgomp1 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 USER airflow
 

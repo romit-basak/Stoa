@@ -23,6 +23,8 @@ import argparse
 import csv
 import json
 import math
+import mimetypes
+import os
 import re
 import shutil
 from datetime import UTC, datetime
@@ -596,6 +598,35 @@ def _find_scenario_video(sim_dir: Path, fallback_video: Path | None) -> Path | N
     return None
 
 
+def publish_to_gcs(out_dir: Path, gcs_uri: str) -> list[str]:
+    """Upload built dashboard assets from `out_dir` to a `gs://bucket/prefix` URI."""
+    if not gcs_uri.startswith("gs://"):
+        raise ValueError(f"Expected gs:// URI, got {gcs_uri!r}")
+    bucket_name, _, prefix = gcs_uri[5:].partition("/")
+    prefix = prefix.strip("/")
+
+    from google.cloud import storage
+
+    bucket = storage.Client().bucket(bucket_name)
+    uploaded: list[str] = []
+    for path in sorted(out_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(out_dir).as_posix()
+        blob_name = f"{prefix}/{rel}" if prefix else rel
+        content_type, _ = mimetypes.guess_type(path.name)
+        blob = bucket.blob(blob_name)
+        blob.cache_control = "no-cache, max-age=60"
+        blob.upload_from_filename(
+            str(path),
+            content_type=content_type or "application/octet-stream",
+            timeout=600,
+        )
+        uploaded.append(f"gs://{bucket_name}/{blob_name}")
+    print(f"published {len(uploaded)} dashboard asset(s) to {gcs_uri}")
+    return uploaded
+
+
 def build_dashboard(
     sim_dir: Path | None = None,
     sim_root: Path = DEFAULT_SIM_ROOT,
@@ -603,6 +634,7 @@ def build_dashboard(
     counts_meta_path: Path = DEFAULT_COUNTS_META,
     bias_csv_path: Path = DEFAULT_BIAS_CSV,
     out_dir: Path = DEFAULT_OUT,
+    gcs_dest: str | None = None,
 ) -> dict[str, Path]:
     """Discover scenarios/cities under `sim_root` (or `sim_dir`) and build the STOA dashboard."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -690,6 +722,8 @@ def build_dashboard(
     if copied_videos:
         outputs["video"] = copied_videos[0]
     print(f"wrote {html_path} and {json_path} ({len(scenarios)} scenario(s))")
+    if gcs_dest:
+        publish_to_gcs(out_dir, gcs_dest)
     return outputs
 
 
@@ -708,6 +742,11 @@ def main() -> None:
     parser.add_argument("--counts-meta", type=Path, default=DEFAULT_COUNTS_META)
     parser.add_argument("--bias-csv", type=Path, default=DEFAULT_BIAS_CSV)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--gcs-dest",
+        default=os.environ.get("STOA_DASHBOARD_GCS", ""),
+        help="Optional gs://bucket/prefix URI to publish the built dashboard",
+    )
     args = parser.parse_args()
     build_dashboard(
         sim_dir=args.sim_dir,
@@ -716,6 +755,7 @@ def main() -> None:
         counts_meta_path=args.counts_meta,
         bias_csv_path=args.bias_csv,
         out_dir=args.out,
+        gcs_dest=args.gcs_dest or None,
     )
 
 

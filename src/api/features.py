@@ -110,11 +110,16 @@ class SiteTables:
 def localize(hours: list[pd.Timestamp], tz: str) -> pd.DataFrame:
     """ts_local and ts_utc for naive local hours, as counts_hourly.localize does it.
 
-    A clock hour that doesn't exist (the spring-forward hour) is refused rather than dropped.
+    Refused rather than guessed: a time with a UTC offset (hours are the site's local
+    clock), a time that isn't on the hour, and a clock hour that doesn't exist (the
+    spring-forward hour).
     """
-    naive = pd.Series(pd.to_datetime(hours)).dt.floor("h")
-    if naive.dt.tz is not None:
+    stamps = [pd.Timestamp(h) for h in hours]
+    if any(t.tzinfo is not None for t in stamps):
         raise BadHours("give hours as local clock times without a UTC offset")
+    if any(t != t.floor("h") for t in stamps):
+        raise BadHours("give whole hours (HH:00): predictions are per clock hour")
+    naive = pd.Series(pd.to_datetime(stamps))
     out, dropped = ch.localize(pd.DataFrame({"ts_local_naive": naive}), tz)
     if dropped:
         raise BadHours(

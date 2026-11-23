@@ -67,15 +67,32 @@ def tables(tmp_path):
     )
 
 
-def fake_weather(data_cfg, start="2026-11-20", days=10):
+INTERVAL_VARS = ["precipitation", "rain", "shortwave_radiation"]
+
+
+def fake_weather(
+    data_cfg, start="2026-11-20", days=10, null_tail=0, drop=None, fail=False
+):
+    """A forecast of `days` days from `start` (UTC). Like Open-Meteo's, the last `null_tail`
+    hours can come back empty; `drop` leaves a variable out; `fail` makes the fetch fail."""
+
     def fetch(params):
+        if fail:
+            raise ConnectionError("open-meteo unreachable")
         hours = pd.date_range(start, periods=24 * days, freq="h")
         hourly = {"time": hours.strftime("%Y-%m-%dT%H:%M").tolist()}
         for v in WEATHER_VARS:
-            hourly[v] = list(np.linspace(0, 1, len(hours)))
+            if v == drop:
+                continue
+            vals = list(np.linspace(0, 1, len(hours)))
+            if null_tail and v != "is_day":
+                vals[-null_tail:] = [None] * null_tail
+            hourly[v] = vals
         return {"utc_offset_seconds": 0, "hourly": hourly}
 
-    return ForecastWeather(data_cfg, "melbourne", fetch=fetch)
+    return ForecastWeather(
+        data_cfg, "melbourne", fetch=fetch, interval_vars=INTERVAL_VARS
+    )
 
 
 class HourModel:
@@ -208,3 +225,71 @@ def test_forecast_frame_undoes_the_offset():
 def test_steepness_columns_are_the_rich_row_features():
     assert set(STEEPNESS) <= set(tf.row_features("rich"))
     assert not set(STEEPNESS) & set(tf.row_features("portable"))
+
+
+def post(tables, weather, body):
+    app = create_app(tables, {"rich": loaded()}, weather)
+    with TestClient(app) as c:
+        return c.post("/predict", json=body)
+
+
+def test_hours_with_an_empty_forecast_are_422(tables):
+    # The forecast runs to 2026-11-29 23:00 UTC; its last 5 hours are null, as Open-Meteo's
+    # are. 2026-11-30 08:00 Melbourne is 2026-11-29 21:00 UTC: inside the range, no values.
+    w = fake_weather(tables.data_cfg, null_tail=5)
+    r = post(tables, w, {"segment_ids": ["100-0"], "hours": ["2026-11-30T08:00"]})
+    assert r.status_code == 422 and "no weather forecast" in r.json()["detail"]
+    # 04:00 Melbourne is 17:00 UTC, the last hour whose next-hour row (where rain and
+    # radiation are stamped) still has values.
+    ok = post(tables, w, {"segment_ids": ["100-0"], "hours": ["2026-11-30T04:00"]})
+    assert ok.status_code == 200, ok.text
+    late = post(tables, w, {"segment_ids": ["100-0"], "hours": ["2026-11-30T05:00"]})
+    assert late.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "hours, words",
+    [
+        (["2026-11-24T08:00+11:00", "2026-11-24T09:00+10:00"], "UTC offset"),
+        (["2026-11-24T08:00+11:00"], "UTC offset"),
+        (["2026-11-24T08:45"], "whole hours"),
+    ],
+)
+def test_offsets_and_part_hours_are_422(tables, hours, words):
+    r = post(
+        tables,
+        fake_weather(tables.data_cfg),
+        {"segment_ids": ["100-0"], "hours": hours},
+    )
+    assert r.status_code == 422 and words in r.json()["detail"]
+
+
+@pytest.mark.parametrize("kwargs", [{"fail": True}, {"drop": "cloud_cover"}])
+def test_weather_unavailable_is_503(tables, kwargs):
+    w = fake_weather(tables.data_cfg, **kwargs)
+    r = post(tables, w, {"segment_ids": ["100-0"], "hours": ["2026-11-24T08:00"]})
+    assert r.status_code == 503 and "weather forecast" in r.json()["detail"]
+
+
+def test_an_alias_is_resolved_to_its_version_before_loading(monkeypatch):
+    from types import SimpleNamespace
+
+    import mlflow
+
+    run = SimpleNamespace(
+        data=SimpleNamespace(metrics={"log_mae_cv": 0.86, "other": 1.0})
+    )
+
+    class Client:
+        def get_model_version_by_alias(self, name, alias):
+            assert (name, alias) == ("stoa-flow-rich", "champion")
+            return SimpleNamespace(version=7, run_id="r1")
+
+        def get_run(self, run_id):
+            return run
+
+    monkeypatch.setattr(mlflow, "MlflowClient", Client)
+    uri, name, version, metrics = model_mod.resolve("models:/stoa-flow-rich@champion")
+    assert (uri, name, version) == ("models:/stoa-flow-rich/7", "stoa-flow-rich", "7")
+    assert metrics == {"log_mae_cv": 0.86}
+    assert model_mod.resolve("/models/rich")[:3] == ("/models/rich", None, None)

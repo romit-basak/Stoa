@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from src.api import model as model_mod
 from src.api.features import BadHours, SiteTables, UnknownSegments, build_features
-from src.api.weather import ForecastWeather
+from src.api.weather import ForecastWeather, WeatherUnavailable
 
 log = logging.getLogger("stoa.api")
 
@@ -118,7 +118,11 @@ def create_app(
         site = os.environ.get("STOA_SITE") or None
         state["tables"] = tables or SiteTables.load(site)
         state["weather"] = weather or ForecastWeather(
-            state["tables"].data_cfg, state["tables"].site
+            state["tables"].data_cfg,
+            state["tables"].site,
+            interval_vars=state["tables"].fcfg["counts_hourly"][
+                "weather_interval_vars"
+            ],
         )
         state["models"] = models if models is not None else load_models()
         yield
@@ -180,6 +184,8 @@ def create_app(
             raise HTTPException(404, {"unknown_segment_ids": e.segments[:50]}) from e
         except BadHours as e:
             raise HTTPException(422, str(e)) from e
+        except WeatherUnavailable as e:
+            raise HTTPException(503, str(e)) from e
         out = m.predict(x)
         hour = rows["ts_local"].dt.strftime("%Y-%m-%dT%H:%M")
         preds = [

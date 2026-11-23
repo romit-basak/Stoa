@@ -46,11 +46,16 @@ def expected_columns(variant: str) -> list[str]:
     )
 
 
-def registry_info(uri: str) -> tuple[str | None, str | None, dict[str, float]]:
-    """(name, version, the training run's metrics) for a models:/ URI, else Nones."""
+def resolve(uri: str) -> tuple[str, str | None, str | None, dict[str, float]]:
+    """(URI to load, name, version, the training run's metrics).
+
+    An alias (models:/stoa-flow-rich@champion) is turned into its version number first and
+    that version is loaded, so the label always names the loaded model even if a promotion
+    moves the alias in between. Other URIs load as given, without a name or version.
+    """
     m = re.fullmatch(r"models:/([^/@]+)(?:@([^/]+)|/(\d+))", uri)
     if not m:
-        return None, None, {}
+        return uri, None, None, {}
     from mlflow import MlflowClient
 
     client = MlflowClient()
@@ -62,13 +67,19 @@ def registry_info(uri: str) -> tuple[str | None, str | None, dict[str, float]]:
     )
     metrics = client.get_run(mv.run_id).data.metrics if mv.run_id else {}
     keep = ("log_mae_cv", "coverage80_cv", "log_mae_holdout", "wape_cv")
-    return name, mv.version, {k: v for k, v in metrics.items() if k in keep}
+    return (
+        f"models:/{name}/{mv.version}",
+        name,
+        str(mv.version),
+        {k: v for k, v in metrics.items() if k in keep},
+    )
 
 
 def load(variant: str, uri: str) -> LoadedModel:
     import mlflow.pyfunc
 
-    pyfunc = mlflow.pyfunc.load_model(uri)
+    load_uri, name, version, metrics = resolve(uri)
+    pyfunc = mlflow.pyfunc.load_model(load_uri)
     bundle = pyfunc.unwrap_python_model()
     columns = list(getattr(bundle, "columns", []))
     want = expected_columns(variant)
@@ -78,7 +89,6 @@ def load(variant: str, uri: str) -> LoadedModel:
         raise ValueError(
             f"{uri} doesn't expect the {variant} features: missing {missing}, extra {extra}"
         )
-    name, version, metrics = registry_info(uri)
     return LoadedModel(
         variant, uri, columns, bundle_predictor(bundle), name, version, metrics
     )

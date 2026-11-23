@@ -13,5 +13,6 @@ RUN pip install --no-cache-dir \
 COPY configs/data.yaml configs/data.yaml
 COPY src/__init__.py src/__init__.py
 COPY src/ingest/__init__.py src/ingest/common.py src/ingest/minute_feed.py src/ingest/
+COPY src/pipeline/__init__.py src/pipeline/dvc_push.py src/pipeline/
 
 CMD ["python", "-m", "src.ingest.minute_feed", "--bucket"]

@@ -134,10 +134,9 @@ def add_derived(
     """hourly with the derived columns added (needs location_id, ts_local and the sun).
 
     Shade comes from osm_segment_shade.parquet at the row's sun bin (fully shaded when the sun
-    is down, empty when the site has no shade table); events from `event_columns`.
+    is down, empty when the site has no shade table; `shade_columns`); events from
+    `event_columns`.
     """
-    from src.features import shade as sh
-
     feats = REPO_ROOT / fcfg["processed_dir"] / "features" / site
     seg_of = pd.read_parquet(
         feats / "sensor_osm_features.parquet", columns=["location_id", "segment_id"]
@@ -145,30 +144,51 @@ def add_derived(
     seg = hourly["location_id"].map(seg_of)
     out = hourly.copy()
 
-    shade_path = feats / "osm_segment_shade.parquet"
-    if shade_path.exists():
-        meta = json.loads((feats / "shade_meta.json").read_text())
-        b = sh.bin_of(
-            hourly["sun_elevation_deg"].to_numpy(),
-            hourly["sun_azimuth_deg"].to_numpy(),
-            meta,
-        )
-        table = pd.read_parquet(shade_path)
-        table = table[table["segment_id"].isin(seg.dropna().unique())]
-        key = pd.MultiIndex.from_arrays([seg.to_numpy(), b])
-        for name in ("shade_portable", "shade_rich"):
-            look = table.set_index(["segment_id", "sun_bin"])[name]
-            v = look.reindex(key).to_numpy(dtype="float32")
-            has = bool(table[name].notna().any())
-            v = np.where(np.isnan(v), 0.0 if has else np.nan, v)
-            out[name] = np.where(b < 0, 1.0, v).astype("float32")
-    else:
-        out["shade_portable"] = np.float32(np.nan)
-        out["shade_rich"] = np.float32(np.nan)
+    shade = shade_columns(
+        seg, hourly["sun_elevation_deg"], hourly["sun_azimuth_deg"], feats
+    )
+    for c in shade.columns:
+        out[c] = shade[c].to_numpy()
 
     cols = event_columns(hourly["ts_local"], seg, site, data_cfg, fcfg)
     for c in cols.columns:
         out[c] = cols[c].to_numpy()
+    return out
+
+
+def shade_columns(
+    segment: pd.Series,
+    sun_elevation: pd.Series,
+    sun_azimuth: pd.Series,
+    feats: Path,
+    table: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """shade_portable and shade_rich for rows given by their segment and the sun's position.
+
+    From osm_segment_shade.parquet at the row's sun bin: fully shaded when the sun is down,
+    no shade on a segment the table lacks, empty when the site has no shade table. `table`
+    may be passed in pre-read (the API keeps it in memory).
+    """
+    from src.features import shade as sh
+
+    out = pd.DataFrame(index=segment.index)
+    shade_path = feats / "osm_segment_shade.parquet"
+    if table is None and not shade_path.exists():
+        out["shade_portable"] = np.float32(np.nan)
+        out["shade_rich"] = np.float32(np.nan)
+        return out
+    meta = json.loads((feats / "shade_meta.json").read_text())
+    b = sh.bin_of(sun_elevation.to_numpy(), sun_azimuth.to_numpy(), meta)
+    if table is None:
+        table = pd.read_parquet(shade_path)
+    table = table[table["segment_id"].isin(segment.dropna().unique())]
+    key = pd.MultiIndex.from_arrays([segment.to_numpy(), b])
+    for name in ("shade_portable", "shade_rich"):
+        look = table.set_index(["segment_id", "sun_bin"])[name]
+        v = look.reindex(key).to_numpy(dtype="float32")
+        has = bool(table[name].notna().any())
+        v = np.where(np.isnan(v), 0.0 if has else np.nan, v)
+        out[name] = np.where(b < 0, 1.0, v).astype("float32")
     return out
 
 

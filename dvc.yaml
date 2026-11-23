@@ -143,6 +143,18 @@ stages:
       - src/features/sensor_match.py
       - configs/features.yaml
 
+  segment_steepness:
+    cmd: python -m src.features.segment_steepness
+    deps:
+      - data/processed/features/melbourne/osm_segment_features.parquet
+      - data/processed/features/melbourne/sensor_segment_map.parquet
+      - data/processed/features/melbourne/sensor_steepness.parquet
+      - data/raw/melbourne_portal/footpath-steepness.geojson
+      - data/raw/dem/melbourne_ga_lidar_5m.tif
+      - src/features/segment_steepness.py
+      - src/features/sensor_steepness.py
+      - configs/features.yaml
+
   # --- Hourly table, then its checks ---
 
   join_all:

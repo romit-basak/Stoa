@@ -184,6 +184,11 @@ def stoa_pipeline():
         # Footpath slope and elevation per sensor.
         return f"{STOA} src.features.sensor_steepness"
 
+    @task.bash
+    def segment_steepness():
+        # The same slope and elevation for every segment, for the prediction API (src/api).
+        return f"{STOA} src.features.segment_steepness"
+
     # --- Join, validate, then version ---
 
     @task.bash
@@ -272,6 +277,9 @@ def stoa_pipeline():
     static = pull_static_layers()
     steepness = sensor_steepness()
     [static, counts] >> steepness
+    # Per segment for serving: the segments, the sensor match and the sensors' values.
+    seg_steepness = segment_steepness()
+    [sensors, steepness] >> seg_steepness
 
     joined = join_all()
     [sensors, steepness, counts, pull_weather(), pull_calendars()] >> joined
@@ -299,7 +307,7 @@ def stoa_pipeline():
     covered = minute_coverage()
     [profiles, slices] >> covered
     pushed = dvc_push()
-    [checked, errors, covered] >> pushed
+    [checked, errors, covered, seg_steepness] >> pushed
     pushed >> run_simulation() >> build_dashboard()
 
 

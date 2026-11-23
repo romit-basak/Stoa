@@ -27,6 +27,7 @@ class LoadedModel:
     name: str | None = None
     version: str | None = None
     metrics: dict[str, float] = field(default_factory=dict)
+    run_id: str | None = None
 
     @property
     def label(self) -> str:
@@ -46,8 +47,10 @@ def expected_columns(variant: str) -> list[str]:
     )
 
 
-def resolve(uri: str) -> tuple[str, str | None, str | None, dict[str, float]]:
-    """(URI to load, name, version, the training run's metrics).
+def resolve(
+    uri: str,
+) -> tuple[str, str | None, str | None, dict[str, float], str | None]:
+    """(URI to load, name, version, the training run's metrics, its run id).
 
     An alias (models:/stoa-flow-rich@champion) is turned into its version number first and
     that version is loaded, so the label always names the loaded model even if a promotion
@@ -55,7 +58,7 @@ def resolve(uri: str) -> tuple[str, str | None, str | None, dict[str, float]]:
     """
     m = re.fullmatch(r"models:/([^/@]+)(?:@([^/]+)|/(\d+))", uri)
     if not m:
-        return uri, None, None, {}
+        return uri, None, None, {}, None
     from mlflow import MlflowClient
 
     client = MlflowClient()
@@ -72,13 +75,14 @@ def resolve(uri: str) -> tuple[str, str | None, str | None, dict[str, float]]:
         name,
         str(mv.version),
         {k: v for k, v in metrics.items() if k in keep},
+        mv.run_id,
     )
 
 
 def load(variant: str, uri: str) -> LoadedModel:
     import mlflow.pyfunc
 
-    load_uri, name, version, metrics = resolve(uri)
+    load_uri, name, version, metrics, run_id = resolve(uri)
     pyfunc = mlflow.pyfunc.load_model(load_uri)
     bundle = pyfunc.unwrap_python_model()
     columns = list(getattr(bundle, "columns", []))
@@ -90,7 +94,7 @@ def load(variant: str, uri: str) -> LoadedModel:
             f"{uri} doesn't expect the {variant} features: missing {missing}, extra {extra}"
         )
     return LoadedModel(
-        variant, uri, columns, bundle_predictor(bundle), name, version, metrics
+        variant, uri, columns, bundle_predictor(bundle), name, version, metrics, run_id
     )
 
 

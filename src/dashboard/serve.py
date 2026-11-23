@@ -119,13 +119,12 @@ def main() -> None:
             )
 
     if not (serve_dir / "index.html").exists():
-        if gcs_source:
-            serve_dir.mkdir(parents=True, exist_ok=True)
-            (serve_dir / "index.html").write_text(WAITING_HTML, encoding="utf-8")
-        else:
-            raise SystemExit(
-                f"No index.html in {serve_dir}. Run `python -m src.dashboard.build` first."
-            )
+        # Serve a waiting page until the first build (the pipeline's build_dashboard task, or
+        # `python -m src.dashboard.build`) writes one. Exiting instead made the always-restart
+        # compose service crash-loop on the VM until a pipeline run had built the dashboard.
+        print(f"no index.html in {serve_dir} yet: serving the waiting page", flush=True)
+        serve_dir.mkdir(parents=True, exist_ok=True)
+        (serve_dir / "index.html").write_text(WAITING_HTML, encoding="utf-8")
 
     StoaDashboardHandler.gcs_source = gcs_source
     StoaDashboardHandler.serve_root = serve_dir

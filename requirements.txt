@@ -268,6 +268,10 @@ idna==3.20
     #   httpx
     #   requests
     #   yarl
+imageio==2.38.2
+    # via stoa (pyproject.toml)
+imageio-ffmpeg==0.8.1
+    # via stoa (pyproject.toml)
 importlib-metadata==9.1.0
     # via mlflow-skinny
 iniconfig==2.3.1
@@ -341,6 +345,7 @@ numpy==2.4.6
     #   fairlearn
     #   geopandas
     #   great-expectations
+    #   imageio
     #   lightgbm
     #   matplotlib
     #   numba
@@ -408,7 +413,9 @@ pathspec==1.1.1
     #   dvc
     #   scmrepo
 pillow==13.0.0
-    # via matplotlib
+    # via
+    #   imageio
+    #   matplotlib
 platformdirs==4.13.5
     # via dvc
 pluggy==1.7.0

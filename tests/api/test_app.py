@@ -289,7 +289,10 @@ def test_an_alias_is_resolved_to_its_version_before_loading(monkeypatch):
             return run
 
     monkeypatch.setattr(mlflow, "MlflowClient", Client)
-    uri, name, version, metrics = model_mod.resolve("models:/stoa-flow-rich@champion")
+    uri, name, version, metrics, run_id = model_mod.resolve(
+        "models:/stoa-flow-rich@champion"
+    )
+    assert run_id == "r1"
     assert (uri, name, version) == ("models:/stoa-flow-rich/7", "stoa-flow-rich", "7")
     assert metrics == {"log_mae_cv": 0.86}
     assert model_mod.resolve("/models/rich")[:3] == ("/models/rich", None, None)

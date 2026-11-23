@@ -58,6 +58,8 @@ def test_has_every_stage(dag):
         "osm_shade",
         "validate",
         "dvc_push",
+        "run_simulation",
+        "build_dashboard",
     }
 
 
@@ -110,6 +112,8 @@ def test_wiring(dag):
         "minute_coverage",
         "segment_steepness",
     }
+    assert upstream("run_simulation") == {"dvc_push"}
+    assert upstream("build_dashboard") == {"run_simulation"}
 
 
 def test_every_task_retries(dag):

@@ -87,6 +87,11 @@ def stoa_site_build():
     def site_dvc_push():
         return f"{STOA} src.pipeline.dvc_push"
 
+    @task.bash(trigger_rule="none_failed")
+    def site_build_dashboard():
+        # Rebuild the multi-city STOA dashboard so any new site scenario appears automatically.
+        return f"{STOA} src.dashboard.build --sim-root data/simulation"
+
     extract = site_osm_extract()
     features = site_osm_segment_features()
     built = site_osm_graph()
@@ -102,7 +107,7 @@ def stoa_site_build():
         site_pull_calendars(),
         site_pull_extras(),
     ]
-    [checked, shaded, *pulls] >> site_dvc_push()
+    [checked, shaded, *pulls] >> site_dvc_push() >> site_build_dashboard()
 
 
 stoa_site_build()

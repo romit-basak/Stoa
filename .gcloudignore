@@ -1,0 +1,14 @@
+# Keep Cloud Build uploads small and fast for ops/gcp/*.sh
+.git/
+.venv/
+.secrets/
+.env
+data/
+logs/
+notebooks/
+docs/
+tests/
+__pycache__/
+*.pyc
+.DS_Store
+dump/

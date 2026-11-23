@@ -1,7 +1,7 @@
 [project]
 name = "stoa"
 version = "0.1.0"
-description = "Pedestrian flow prediction and scenario planning (IE7374)"
+description = "STOA — Pedestrian flow prediction, simulation, and monitoring (IE7374)"
 requires-python = ">=3.11"
 dependencies = [
     "dvc[gs]>=3.50",  # data versioning; gs = Google Cloud Storage remote
@@ -11,6 +11,7 @@ dependencies = [
     # Data validation. <2: GX 2.0 changes the API; >=1.9 has the Condition objects we use.
     "great-expectations>=1.9,<2",
     "holidays==0.105",  # pinned: holiday rules change between releases
+    "imageio>=2.34",  # MP4 encoding for STOA simulation rendering (BSD-2)
     "lightgbm>=4.5",  # flow-model candidate (MIT)
     "matplotlib>=3.8",  # bias figures and the flow model's comparison charts (PSF/BSD-style)
     # Experiment tracking client (Apache-2.0); same version as the server in ops/mlflow.

@@ -97,6 +97,17 @@ def stoa_train():
         return f"{STOA} src.models.flow.registry --promote"
 
     @task.bash
+    def run_simulation():
+        return (
+            f"{STOA} src.simulation.marauders_map.predict && "
+            f"{STOA} src.simulation.marauders_chronicle.render"
+        )
+
+    @task.bash
+    def build_dashboard():
+        return f"{STOA} src.dashboard.build --sim-root data/simulation"
+
+    @task.bash
     def notify_team():
         return f"{STOA} src.models.flow.notify"
 
@@ -106,6 +117,8 @@ def stoa_train():
         >> mitigate_bias()
         >> check_gates()
         >> register_model()
+        >> run_simulation()
+        >> build_dashboard()
         >> notify_team()
     )
 
